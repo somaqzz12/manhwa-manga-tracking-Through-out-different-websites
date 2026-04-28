@@ -105,6 +105,9 @@ if not APP_DEBUG and not os.getenv("SECRET_KEY"):
     raise RuntimeError("SECRET_KEY must be set in production")
 
 
+_DEFAULT_GITHUB_URL = "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites"
+
+
 @app.context_processor
 def inject_template_globals():
     return {
@@ -112,6 +115,8 @@ def inject_template_globals():
         "contact_email": os.getenv("CONTACT_EMAIL", "").strip(),
         "site_description": "Track manga and manhwa chapter releases, reading progress, and updates in one dashboard.",
         "min_password_length": MIN_PASSWORD_LENGTH,
+        "github_url": (os.getenv("GITHUB_URL") or _DEFAULT_GITHUB_URL).strip(),
+        "extension_coming_soon": True,
     }
 
 
@@ -1440,11 +1445,9 @@ def index():
             except Exception:
                 unread = 0.0
         item["unread_count"] = unread
-        item["continue_url"] = (
-            item.get("latest_seen_url")
-            if unread > 0 and item.get("latest_seen_url")
-            else item.get("read_source_url") or item.get("url")
-        )
+        # Continue = resume where you left off (last-read chapter URL from progress),
+        # not the site's newest chapter (latest_seen_url), which skips the story ahead.
+        item["continue_url"] = item.get("read_source_url") or item.get("url")
         bookmarks.append(item)
 
     return render_template(
@@ -1701,6 +1704,7 @@ def edit_bookmark(bookmark_id: int):
         old_url = (row["url"] or "").strip()
         new_url = url.strip()
         norm_new = normalize_bookmark_url(new_url)
+        url_changed = new_url.rstrip("/") != old_url.rstrip("/")
         with get_conn() as conn:
             others = conn.execute(
                 "SELECT url FROM bookmarks WHERE user_id = ? AND id != ?",
@@ -1709,7 +1713,7 @@ def edit_bookmark(bookmark_id: int):
             if any(normalize_bookmark_url(o["url"]) == norm_new for o in others):
                 flash("That series URL is already in your library.", "error")
                 return render_template("edit_bookmark.html", bookmark=dict(row))
-            if new_url.rstrip("/") != old_url.rstrip("/"):
+            if url_changed:
                 conn.execute(
                     "UPDATE bookmarks SET title = ?, url = ?, series_key = NULL WHERE id = ? AND user_id = ?",
                     (title, new_url, bookmark_id, user_id),
@@ -1719,7 +1723,18 @@ def edit_bookmark(bookmark_id: int):
                     "UPDATE bookmarks SET title = ? WHERE id = ? AND user_id = ?",
                     (title, bookmark_id, user_id),
                 )
-        flash("Series updated.", "success")
+        if url_changed:
+            try:
+                check_single(bookmark_id, user_id)
+                flash("Series updated — latest chapter data refreshed for the new URL.", "success")
+            except Exception:
+                log.exception("check_single after edit_bookmark URL change failed")
+                flash(
+                    "Series updated. Automatic check failed — use Check now on the dashboard to fetch chapter data.",
+                    "warning",
+                )
+        else:
+            flash("Series updated.", "success")
         return redirect(url_for("index"))
     return render_template("edit_bookmark.html", bookmark=dict(row))
 
