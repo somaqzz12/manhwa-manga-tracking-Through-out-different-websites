@@ -17,6 +17,12 @@ try:
     import psycopg2.extras
 except Exception:
     psycopg2 = None
+try:
+    import psycopg
+    from psycopg.rows import dict_row as psycopg_dict_row
+except Exception:
+    psycopg = None
+    psycopg_dict_row = None
 
 try:
     from selenium import webdriver
@@ -79,9 +85,15 @@ def _adapt_query_for_postgres(query: str) -> str:
 
 class PostgresConn:
     def __init__(self) -> None:
-        if psycopg2 is None:
-            raise RuntimeError("psycopg2 is not installed but DATABASE_URL is set")
-        self.conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+        if psycopg2 is not None:
+            self.conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+            self.driver = "psycopg2"
+            return
+        if psycopg is not None and psycopg_dict_row is not None:
+            self.conn = psycopg.connect(DATABASE_URL, row_factory=psycopg_dict_row)
+            self.driver = "psycopg3"
+            return
+        raise RuntimeError("No PostgreSQL driver installed. Install psycopg2-binary or psycopg[binary].")
 
     def execute(self, query: str, params=()):
         cur = self.conn.cursor()
