@@ -146,7 +146,7 @@
       <h1>Manga/Manhwa Update Tracker</h1>
     </div>
     <div class="small">
-      Signed in as <strong>{{ current_user["email"] }}</strong>
+      Signed in as <strong>{{ current_user["username"] or current_user["email"] }}</strong>
       <form class="inline" action="/logout" method="post"><button class="btn-muted" type="submit">Logout</button></form>
     </div>
   </div>

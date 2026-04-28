@@ -69,12 +69,18 @@ def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT,
                 email TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )
             """
         )
+        user_cols = conn.execute("PRAGMA table_info(users)").fetchall()
+        user_col_names = {c["name"] for c in user_cols}
+        if "username" not in user_col_names:
+            conn.execute("ALTER TABLE users ADD COLUMN username TEXT")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username)")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS bookmarks (
@@ -129,6 +135,9 @@ def init_db() -> None:
         conn.execute(
             "INSERT OR IGNORE INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
             (DEFAULT_USER_EMAIL, generate_password_hash("local-only"), now),
+        )
+        conn.execute(
+            "UPDATE users SET username = COALESCE(username, substr(email, 1, instr(email, '@') - 1)) WHERE username IS NULL"
         )
         default_user = conn.execute("SELECT id FROM users WHERE email = ?", (DEFAULT_USER_EMAIL,)).fetchone()
         default_user_id = default_user["id"]
@@ -208,7 +217,7 @@ def get_current_user():
     if not user_id:
         return None
     with get_conn() as conn:
-        return conn.execute("SELECT id, email, created_at FROM users WHERE id = ?", (user_id,)).fetchone()
+        return conn.execute("SELECT id, username, email, created_at FROM users WHERE id = ?", (user_id,)).fetchone()
 
 
 def login_required():
@@ -278,6 +287,11 @@ def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
 
 def resolve_series_listing_url(url: str) -> str:
     """Best-effort canonical series URL resolution for sites with chapter-style slugs."""
+    parsed_slug = extract_series_slug(url)
+    low = (url or "").lower()
+    if parsed_slug and ("/manga/" in low or "/comics/" in low) and "chapter" not in low and not re.search(r"-\d+(?:\.\d+)?/?$", low):
+        # Fast path: already looks like canonical series listing URL.
+        return url.rstrip("/")
     try:
         res = requests.get(url, timeout=HTTP_TIMEOUT_SECONDS, headers={"User-Agent": USER_AGENT}, allow_redirects=True)
         res.raise_for_status()
@@ -570,8 +584,10 @@ def check_single(bookmark_id: int, user_id: int) -> None:
 
         effective_url = resolve_series_listing_url(row["url"])
         label, num, latest_url, err = scrape_latest_update(effective_url)
-        scraped_cover = scrape_series_cover(effective_url, row["title"] or "")
-        cover_url = scraped_cover or row["cover_url"]
+        cover_url = row["cover_url"]
+        if not cover_url:
+            scraped_cover = scrape_series_cover(effective_url, row["title"] or "")
+            cover_url = scraped_cover or row["cover_url"]
         now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
         if err:
@@ -639,28 +655,32 @@ def auth_page():
     if request.method == "POST":
         try:
             action = request.form.get("action", "login")
-            email = (request.form.get("email") or "").strip().lower()
+            username = (request.form.get("username") or "").strip().lower()
             password = request.form.get("password") or ""
-            if not email or not password:
-                error = "Email and password are required."
+            if not username or not password:
+                error = "Username and password are required."
             elif action == "register":
                 with get_conn() as conn:
-                    exists = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
-                    if exists:
-                        error = "Email already exists."
+                    exists_username = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+                    if exists_username:
+                        error = "Username already exists."
                     else:
                         now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                        synthetic_email = f"{username}@local.user"
                         cursor = conn.execute(
-                            "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-                            (email, generate_password_hash(password), now),
+                            "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                            (username, synthetic_email, generate_password_hash(password), now),
                         )
                         session["user_id"] = int(cursor.lastrowid)
                         return redirect(url_for("index"))
             else:
                 with get_conn() as conn:
-                    user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+                    user = conn.execute(
+                        "SELECT * FROM users WHERE username = ?",
+                        (username,),
+                    ).fetchone()
                 if user is None or not check_password_hash(user["password_hash"], password):
-                    error = "Invalid credentials."
+                    error = "Invalid username or password."
                 else:
                     session["user_id"] = int(user["id"])
                     return redirect(url_for("index"))
