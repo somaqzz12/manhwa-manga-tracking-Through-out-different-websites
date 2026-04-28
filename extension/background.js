@@ -8,13 +8,22 @@ async function getApiBase() {
 
 async function postJson(path, payload) {
   const apiBase = await getApiBase();
+  // credentials: "include" forwards the Manga Tracker session cookie when the
+  // server runs with REQUIRE_API_AUTH=1; without it the API rejects extension
+  // requests as unauthenticated even when the user is logged into the dashboard.
   const res = await fetch(`${apiBase}${path}`, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error(
+        "Not signed in. Open the dashboard, sign in, then try tracking again."
+      );
+    }
     throw new Error(data.error || `Request failed: ${res.status}`);
   }
   return data;

@@ -13,6 +13,8 @@ import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from bs4 import BeautifulSoup
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for, Response
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import check_password_hash, generate_password_hash
 try:
@@ -45,12 +47,36 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger(__name__)
 
+# Session cookies: HttpOnly + SameSite=Lax limits XSS and cross-site POST CSRF;
+# Secure defaults on when FLASK_DEBUG is off (HTTPS). Override with SESSION_COOKIE_SECURE=0 only if needed.
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "0" if os.getenv("FLASK_DEBUG", "1") == "1" else "1") == "1"
 app.config["WTF_CSRF_TIME_LIMIT"] = None
 app.config["WTF_CSRF_SSL_STRICT"] = os.getenv("FLASK_DEBUG", "1") != "1"
 csrf = CSRFProtect(app)
+
+_RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    storage_uri=_RATELIMIT_STORAGE_URI,
+    default_limits=[],
+    headers_enabled=True,
+)
+
+
+def _auth_username_key() -> str:
+    # Per-username throttle (in addition to per-IP) to slow distributed credential stuffing.
+    username = (request.form.get("username") or "").strip().lower()
+    return f"auth-user:{username}" if username else f"auth-ip:{get_remote_address()}"
+
+
+@app.errorhandler(429)
+def _ratelimited(_err):
+    if request.path.startswith("/api/"):
+        return jsonify({"ok": False, "error": "rate limit exceeded"}), 429
+    return render_template("auth.html", mode=(request.args.get("mode") or "login"), error="Too many attempts. Please wait a minute and try again."), 429
 
 HTTP_TIMEOUT_SECONDS = int(os.getenv("HTTP_TIMEOUT_SECONDS", "15"))
 MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
@@ -68,6 +94,13 @@ _SCHEDULER = None
 _SCHEDULER_LOCK = threading.Lock()
 REQUIRE_API_AUTH = os.getenv("REQUIRE_API_AUTH", "0") == "1"
 CORS_ALLOW_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "").strip()
+READ_PROGRESS_MAX_PER_USER = int(os.getenv("READ_PROGRESS_MAX_PER_USER", "20000"))
+BOOKMARKS_PAGE_SIZE = max(1, int(os.getenv("BOOKMARKS_PAGE_SIZE", "60")))
+IMPORT_MAX_BYTES = int(os.getenv("IMPORT_MAX_BYTES", str(5 * 1024 * 1024)))
+IMPORT_MAX_ITEMS = int(os.getenv("IMPORT_MAX_ITEMS", "20000"))
+AUTH_RATE_LIMIT_PER_IP = os.getenv("AUTH_RATE_LIMIT_PER_IP", "10/minute;60/hour")
+AUTH_RATE_LIMIT_PER_USER = os.getenv("AUTH_RATE_LIMIT_PER_USER", "8/minute;30/hour")
 if not APP_DEBUG and not os.getenv("SECRET_KEY"):
     raise RuntimeError("SECRET_KEY must be set in production")
 
@@ -76,7 +109,9 @@ if not APP_DEBUG and not os.getenv("SECRET_KEY"):
 def inject_template_globals():
     return {
         "bug_report_href": os.getenv("BUG_REPORT_URL", DEFAULT_BUG_REPORT_URL),
+        "contact_email": os.getenv("CONTACT_EMAIL", "").strip(),
         "site_description": "Track manga and manhwa chapter releases, reading progress, and updates in one dashboard.",
+        "min_password_length": MIN_PASSWORD_LENGTH,
     }
 
 
@@ -100,6 +135,25 @@ if not APP_DEBUG and not IS_POSTGRES and not ALLOW_SQLITE_IN_PRODUCTION:
         "Production requires DATABASE_URL (PostgreSQL) to prevent deploy-time data loss. "
         "Set ALLOW_SQLITE_IN_PRODUCTION=1 only if you accept ephemeral storage risk."
     )
+
+if not APP_DEBUG and os.getenv("RATELIMIT_STORAGE_URI") is None:
+    log.warning(
+        "RATELIMIT_STORAGE_URI is not set; Flask-Limiter defaults to in-memory storage per process. "
+        "With multiple workers (e.g. gunicorn) each process keeps its own counters, so limits look "
+        "lenient or inconsistent. Set RATELIMIT_STORAGE_URI to a shared store such as "
+        'redis://... on Railway, Render, etc.'
+    )
+if CORS_ALLOW_ORIGINS:
+    if any(o.strip() in {"*", "https://*", "http://*"} or o.rstrip("/").endswith("/*") for o in CORS_ALLOW_ORIGINS):
+        log.warning(
+            "CORS_ALLOW_ORIGINS looks very broad. With Access-Control-Allow-Credentials enabled, "
+            "only list exact origins that must send cookies (your extension or known web clients)."
+        )
+    else:
+        log.info(
+            "CORS credentials enabled for %d explicit origin(s); keep this list minimal and trusted.",
+            len(CORS_ALLOW_ORIGINS),
+        )
 
 
 def _adapt_query_for_postgres(query: str) -> str:
@@ -156,7 +210,10 @@ def add_cors_headers(response):
     if allow_origin:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Vary"] = "Origin"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        # Required so the browser surfaces the response when extension/dashboard
+        # requests use credentials: "include" to forward the session cookie.
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Admin-Token"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
 
@@ -480,6 +537,23 @@ def is_valid_http_url(raw_url: str) -> bool:
         return False
 
 
+def normalize_bookmark_url(raw_url: str) -> str:
+    """Normalize URL for duplicate checks (trim, strip trailing slash, case-fold)."""
+    return (raw_url or "").strip().rstrip("/").lower()
+
+
+def _bookmark_title_search_clause(needle: str) -> tuple[str, list]:
+    """Return (SQL fragment, params) to filter bookmarks by title substring (case-insensitive)."""
+    n = (needle or "").strip()
+    if not n:
+        return "", []
+    n = n[:200]
+    n_lower = n.lower()
+    if IS_POSTGRES:
+        return " AND position(lower(?) in lower(b.title::text)) > 0", [n_lower]
+    return " AND instr(lower(b.title), lower(?)) > 0", [n_lower]
+
+
 def resolve_scrape_chapter_fields(
     label: Optional[str], num: Optional[float], latest_url: Optional[str]
 ) -> Optional[tuple[float, str, Optional[str]]]:
@@ -529,6 +603,28 @@ def login_required():
 
 def api_auth_required() -> bool:
     return not REQUIRE_API_AUTH or login_required()
+
+
+def admin_api_authorized() -> bool:
+    """Gate destructive or scrape-proxy endpoints behind an explicit admin signal.
+
+    Allows the request when any of these is true:
+    - the caller is logged in (browser session), or
+    - an ADMIN_API_TOKEN is configured and matches the X-Admin-Token header, or
+    - the app is running with FLASK_DEBUG=1 (local development convenience).
+
+    This intentionally does NOT key off REQUIRE_API_AUTH so that misconfigured
+    self-hosted deploys cannot accidentally expose these as an open proxy.
+    """
+    if APP_DEBUG:
+        return True
+    if login_required():
+        return True
+    if ADMIN_API_TOKEN:
+        provided = (request.headers.get("X-Admin-Token") or "").strip()
+        if provided and provided == ADMIN_API_TOKEN:
+            return True
+    return False
 
 
 def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
@@ -1073,6 +1169,52 @@ def maybe_prune_reading_progress(user_id: int, bookmark_id: int) -> None:
             conn.execute("DELETE FROM reading_progress WHERE id = ?", (r["id"],))
 
 
+def maybe_prune_reading_progress_for_user(user_id: int) -> int:
+    """Trim a user's total reading_progress rows down to READ_PROGRESS_MAX_PER_USER.
+
+    A noisy importer or a runaway extension on one user shouldn't bloat the shared
+    database for everyone else. Returns the number of rows deleted.
+    """
+    max_keep = READ_PROGRESS_MAX_PER_USER
+    if max_keep <= 0:
+        return 0
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM reading_progress WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+        total = int(row["c"] or 0) if row else 0
+        excess = total - max_keep
+        if excess <= 0:
+            return 0
+        old_rows = conn.execute(
+            "SELECT id FROM reading_progress WHERE user_id = ? ORDER BY id ASC LIMIT ?",
+            (user_id, excess),
+        ).fetchall()
+        for r in old_rows:
+            conn.execute("DELETE FROM reading_progress WHERE id = ?", (r["id"],))
+    return excess
+
+
+def prune_reading_progress_all_users() -> None:
+    """Background sweep so any user above the per-user cap is trimmed periodically."""
+    if READ_PROGRESS_MAX_PER_USER <= 0:
+        return
+    try:
+        ensure_db_ready()
+        with get_conn() as conn:
+            users = conn.execute(
+                "SELECT user_id, COUNT(*) AS c FROM reading_progress WHERE user_id IS NOT NULL GROUP BY user_id"
+            ).fetchall()
+        for u in users:
+            if int(u["c"] or 0) > READ_PROGRESS_MAX_PER_USER:
+                deleted = maybe_prune_reading_progress_for_user(int(u["user_id"]))
+                if deleted:
+                    log.info("pruned %d reading_progress rows for user %s", deleted, u["user_id"])
+    except Exception:
+        log.exception("prune_reading_progress_all_users failed")
+
+
 def check_all(user_id: int) -> None:
     with get_conn() as conn:
         rows = conn.execute("SELECT id FROM bookmarks WHERE user_id = ?", (user_id,)).fetchall()
@@ -1098,6 +1240,16 @@ def check_all_users() -> None:
 
 
 @app.route("/auth", methods=["GET", "POST"])
+@limiter.limit(
+    AUTH_RATE_LIMIT_PER_IP,
+    methods=["POST"],
+    key_func=get_remote_address,
+)
+@limiter.limit(
+    AUTH_RATE_LIMIT_PER_USER,
+    methods=["POST"],
+    key_func=_auth_username_key,
+)
 def auth_page():
     mode = (request.args.get("mode") or "login").strip().lower()
     error = None
@@ -1133,6 +1285,9 @@ def auth_page():
                             new_user_id = int(inserted["id"])
                         else:
                             new_user_id = int(insert_cur.lastrowid)
+                        # Drop any pre-auth session state so the post-auth cookie cannot
+                        # carry attacker-controlled values from a fixated session.
+                        session.clear()
                         session["user_id"] = new_user_id
                         conn.execute(
                             "INSERT OR IGNORE INTO bookmarks (user_id, title, url) VALUES (?, ?, ?)",
@@ -1148,6 +1303,7 @@ def auth_page():
                 if user is None or not check_password_hash(user["password_hash"], password):
                     error = "Invalid username or password."
                 else:
+                    session.clear()
                     session["user_id"] = int(user["id"])
                     return redirect(url_for("index"))
         except Exception:
@@ -1184,9 +1340,55 @@ def index():
         # Session can become stale after deploys or DB resets.
         session.pop("user_id", None)
         return redirect(url_for("auth_page"))
+
+    page_size = BOOKMARKS_PAGE_SIZE
+    try:
+        page = max(1, int(request.args.get("page", "1")))
+    except ValueError:
+        page = 1
+
+    search_q = (request.args.get("q") or "").strip()[:200]
+    title_clause, title_params = _bookmark_title_search_clause(search_q)
+
     with get_conn() as conn:
-        rows = conn.execute(
+        # Library-wide aggregates (computed across all pages so the summary stays accurate).
+        agg_rows = conn.execute(
             """
+            SELECT b.latest_seen_num AS latest_num,
+                   rp.chapter_num AS read_num
+            FROM bookmarks b
+            LEFT JOIN (
+                SELECT x.bookmark_id, x.chapter_num
+                FROM reading_progress x
+                INNER JOIN (
+                    SELECT bookmark_id, MAX(id) AS max_id
+                    FROM reading_progress
+                    WHERE user_id = ?
+                    GROUP BY bookmark_id
+                ) y ON y.bookmark_id = x.bookmark_id AND y.max_id = x.id
+                WHERE x.user_id = ?
+            ) rp ON rp.bookmark_id = b.id
+            WHERE b.user_id = ?
+            """,
+            (user_id, user_id, user_id),
+        ).fetchall()
+
+        if title_clause:
+            count_row = conn.execute(
+                f"SELECT COUNT(*) AS c FROM bookmarks b WHERE b.user_id = ?{title_clause}",
+                (user_id, *title_params),
+            ).fetchone()
+            total_count = int(count_row["c"] or 0) if count_row else 0
+        else:
+            total_count = len(agg_rows)
+
+        total_pages = max(1, (total_count + page_size - 1) // page_size) if total_count else 1
+        if page > total_pages:
+            page = total_pages
+        offset = (page - 1) * page_size
+
+        rows = conn.execute(
+            f"""
             SELECT b.*,
                    rp.chapter_num AS read_chapter_num,
                    rp.chapter_label AS read_chapter_label,
@@ -1204,12 +1406,29 @@ def index():
                 WHERE x.user_id = ?
             ) rp ON rp.bookmark_id = b.id
             WHERE b.user_id = ?
+            {title_clause}
             ORDER BY b.id DESC
-            """
-        , (user_id, user_id, user_id)).fetchall()
-    bookmarks = []
+            LIMIT ? OFFSET ?
+            """,
+            (user_id, user_id, user_id, *title_params, page_size, offset),
+        ).fetchall()
+
     total_unread = 0.0
     behind_count = 0
+    for agg in agg_rows:
+        latest_num = agg["latest_num"]
+        read_num = agg["read_num"]
+        if latest_num is None or read_num is None:
+            continue
+        try:
+            diff = float(latest_num) - float(read_num)
+        except (TypeError, ValueError):
+            continue
+        if diff > 0:
+            total_unread += diff
+            behind_count += 1
+
+    bookmarks = []
     for row in rows:
         item = dict(row)
         latest_num = item.get("latest_seen_num")
@@ -1220,9 +1439,6 @@ def index():
                 unread = max(0.0, float(latest_num) - float(read_num))
             except Exception:
                 unread = 0.0
-        if unread > 0:
-            total_unread += unread
-            behind_count += 1
         item["unread_count"] = unread
         item["continue_url"] = (
             item.get("latest_seen_url")
@@ -1230,12 +1446,18 @@ def index():
             else item.get("read_source_url") or item.get("url")
         )
         bookmarks.append(item)
+
     return render_template(
         "index.html",
         bookmarks=bookmarks,
         current_user=current_user,
         total_unread=int(total_unread) if total_unread.is_integer() else round(total_unread, 1),
         behind_count=behind_count,
+        page=page,
+        total_pages=total_pages,
+        total_count=total_count,
+        page_size=page_size,
+        search_q=search_q,
     )
 
 
@@ -1266,28 +1488,75 @@ def import_data():
     if not login_required():
         return redirect(url_for("auth_page"))
     file = request.files.get("backup_file")
-    if file is None:
-        flash("No backup file selected.", "warning")
+    if file is None or not (file.filename or "").strip():
+        flash("No backup file selected. Choose a Manga Tracker backup JSON to import.", "warning")
         return redirect(url_for("index"))
+
+    raw = file.read(IMPORT_MAX_BYTES + 1)
+    if len(raw) == 0:
+        flash("Import failed: the file is empty.", "error")
+        return redirect(url_for("index"))
+    if len(raw) > IMPORT_MAX_BYTES:
+        max_mb = IMPORT_MAX_BYTES / (1024 * 1024)
+        flash(f"Import failed: file is larger than {max_mb:.1f} MB. Trim it or split it before importing.", "error")
+        return redirect(url_for("index"))
+
     try:
-        payload = json.loads(file.read().decode("utf-8"))
-    except Exception:
-        flash("Import failed: file is not valid JSON.", "error")
+        payload = json.loads(raw.decode("utf-8"))
+    except UnicodeDecodeError:
+        flash("Import failed: file is not UTF-8 text. Export a fresh backup and try again.", "error")
         return redirect(url_for("index"))
-    bookmarks = payload.get("bookmarks") or []
-    progress = payload.get("reading_progress") or []
+    except json.JSONDecodeError:
+        flash("Import failed: file is not valid JSON. Did you select the right file?", "error")
+        return redirect(url_for("index"))
+
+    if not isinstance(payload, dict):
+        flash("Import failed: backup file is missing the expected structure.", "error")
+        return redirect(url_for("index"))
+
+    bookmarks = payload.get("bookmarks")
+    progress = payload.get("reading_progress")
+    if bookmarks is None and progress is None:
+        flash("Import failed: backup has no \"bookmarks\" or \"reading_progress\" sections.", "error")
+        return redirect(url_for("index"))
+
+    if bookmarks is not None and not isinstance(bookmarks, list):
+        flash("Import failed: \"bookmarks\" must be a list.", "error")
+        return redirect(url_for("index"))
+    if progress is not None and not isinstance(progress, list):
+        flash("Import failed: \"reading_progress\" must be a list.", "error")
+        return redirect(url_for("index"))
+
+    bookmarks = bookmarks or []
+    progress = progress or []
+
+    if len(bookmarks) + len(progress) > IMPORT_MAX_ITEMS:
+        flash(
+            f"Import failed: backup has {len(bookmarks) + len(progress)} entries which exceeds the {IMPORT_MAX_ITEMS} item limit.",
+            "error",
+        )
+        return redirect(url_for("index"))
+
     user_id = get_actor_user_id()
     id_map: dict[int, int] = {}
+    inserted_bookmarks = 0
     skipped_invalid_bookmarks = 0
+    skipped_malformed_bookmarks = 0
+    inserted_progress = 0
     skipped_progress = 0
+    skipped_malformed_progress = 0
     with get_conn() as conn:
         for b in bookmarks:
+            if not isinstance(b, dict):
+                skipped_malformed_bookmarks += 1
+                continue
             old_id = int(b.get("id") or 0)
             raw_url = (b.get("url") or "").strip()
-            if not is_valid_http_url(raw_url):
+            title = (b.get("title") or "").strip()
+            if not title or not is_valid_http_url(raw_url):
                 skipped_invalid_bookmarks += 1
                 continue
-            conn.execute(
+            cur = conn.execute(
                 """
                 INSERT OR IGNORE INTO bookmarks
                 (user_id, title, url, latest_seen, latest_seen_num, latest_seen_url, cover_url, new_update, last_checked, last_error, series_key)
@@ -1295,7 +1564,7 @@ def import_data():
                 """,
                 (
                     user_id,
-                    b.get("title"),
+                    title,
                     raw_url,
                     b.get("latest_seen"),
                     b.get("latest_seen_num"),
@@ -1307,6 +1576,8 @@ def import_data():
                     b.get("series_key"),
                 ),
             )
+            if getattr(cur, "rowcount", 0) == 1:
+                inserted_bookmarks += 1
             new_row = conn.execute(
                 "SELECT id FROM bookmarks WHERE user_id = ? AND url = ?",
                 (user_id, raw_url),
@@ -1314,11 +1585,14 @@ def import_data():
             if old_id and new_row:
                 id_map[old_id] = int(new_row["id"])
         for p in progress:
+            if not isinstance(p, dict):
+                skipped_malformed_progress += 1
+                continue
             mapped_bookmark_id = id_map.get(int(p.get("bookmark_id") or 0))
             if mapped_bookmark_id is None:
                 skipped_progress += 1
                 continue
-            conn.execute(
+            cur = conn.execute(
                 """
                 INSERT OR IGNORE INTO reading_progress
                 (user_id, bookmark_id, chapter_num, chapter_label, source_url, seen_at)
@@ -1333,12 +1607,31 @@ def import_data():
                     p.get("seen_at") or datetime.utcnow().isoformat(timespec="seconds") + "Z",
                 ),
             )
-    parts = ["Import finished."]
+            if getattr(cur, "rowcount", 0) == 1:
+                inserted_progress += 1
+
+    pruned = maybe_prune_reading_progress_for_user(user_id)
+
+    parts = [
+        f"Import finished. Added {inserted_bookmarks} series and {inserted_progress} reading progress rows."
+    ]
+    skipped_total = (
+        skipped_invalid_bookmarks
+        + skipped_malformed_bookmarks
+        + skipped_progress
+        + skipped_malformed_progress
+    )
     if skipped_invalid_bookmarks:
-        parts.append(f"Skipped {skipped_invalid_bookmarks} bookmarks (invalid URL).")
+        parts.append(f"Skipped {skipped_invalid_bookmarks} series (missing title or invalid URL).")
+    if skipped_malformed_bookmarks:
+        parts.append(f"Skipped {skipped_malformed_bookmarks} malformed series entries.")
     if skipped_progress:
-        parts.append(f"Skipped {skipped_progress} progress rows (no matching bookmark id).")
-    flash(" ".join(parts), "warning" if (skipped_invalid_bookmarks or skipped_progress) else "success")
+        parts.append(f"Skipped {skipped_progress} progress rows (no matching series).")
+    if skipped_malformed_progress:
+        parts.append(f"Skipped {skipped_malformed_progress} malformed progress entries.")
+    if pruned:
+        parts.append(f"Trimmed {pruned} oldest progress rows to stay under the per-user cap.")
+    flash(" ".join(parts), "warning" if skipped_total else "success")
     return redirect(url_for("index"))
 
 
@@ -1407,7 +1700,15 @@ def edit_bookmark(bookmark_id: int):
             return render_template("edit_bookmark.html", bookmark=dict(row))
         old_url = (row["url"] or "").strip()
         new_url = url.strip()
+        norm_new = normalize_bookmark_url(new_url)
         with get_conn() as conn:
+            others = conn.execute(
+                "SELECT url FROM bookmarks WHERE user_id = ? AND id != ?",
+                (user_id, bookmark_id),
+            ).fetchall()
+            if any(normalize_bookmark_url(o["url"]) == norm_new for o in others):
+                flash("That series URL is already in your library.", "error")
+                return render_template("edit_bookmark.html", bookmark=dict(row))
             if new_url.rstrip("/") != old_url.rstrip("/"):
                 conn.execute(
                     "UPDATE bookmarks SET title = ?, url = ?, series_key = NULL WHERE id = ? AND user_id = ?",
@@ -1555,8 +1856,9 @@ def save_progress():
 @csrf.exempt
 @app.route("/api/debug/scrape", methods=["POST"])
 def debug_scrape():
-    if not api_auth_required():
-        return jsonify({"ok": False, "error": "authentication required"}), 401
+    if not admin_api_authorized():
+        # Return 404 in production so the route is not discoverable as an open proxy.
+        return jsonify({"ok": False, "error": "not found"}), 404
     payload = request.get_json(silent=True) or {}
     raw_url = (payload.get("url") or "").strip()
     if not raw_url:
@@ -1604,8 +1906,8 @@ def debug_scrape():
 @csrf.exempt
 @app.route("/api/maintenance/merge-duplicates", methods=["POST"])
 def merge_duplicates():
-    if not api_auth_required():
-        return jsonify({"ok": False, "error": "authentication required"}), 401
+    if not admin_api_authorized():
+        return jsonify({"ok": False, "error": "not found"}), 404
     user_id = get_actor_user_id()
     merged_groups = 0
     deleted_bookmarks = 0
@@ -1702,6 +2004,16 @@ def setup_scheduler() -> Optional[BackgroundScheduler]:
             max_instances=1,
             coalesce=True,
         )
+        if READ_PROGRESS_MAX_PER_USER > 0:
+            prune_interval = max(int(os.getenv("PROGRESS_PRUNE_INTERVAL_HOURS", "6")), 1)
+            scheduler.add_job(
+                prune_reading_progress_all_users,
+                "interval",
+                hours=prune_interval,
+                id="progress-prune",
+                max_instances=1,
+                coalesce=True,
+            )
         scheduler.start()
         _SCHEDULER = scheduler
     if INITIAL_AUTO_CHECK:

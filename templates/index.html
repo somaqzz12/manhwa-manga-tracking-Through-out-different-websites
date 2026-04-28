@@ -206,8 +206,24 @@
     .flash.success { background: rgba(22, 163, 74, 0.2); border: 1px solid rgba(34, 197, 94, 0.45); color: #bbf7d0; }
     .flash.warning { background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(250, 204, 21, 0.4); color: #fde68a; }
     .flash.error { background: rgba(239, 68, 68, 0.18); border: 1px solid rgba(248, 113, 113, 0.45); color: #fecaca; }
+    .pagination { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 14px; }
+    .page-meta { font-size: 13px; color: var(--text-soft); }
+    .page-meta-sep { margin: 0 6px; opacity: 0.6; }
+    .page-links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-link.is-disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
     .filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 0; }
     .filter-bar input { flex: 1; min-width: 200px; margin-right: 0; }
+    form.filter-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+      margin: 0;
+    }
+    form.filter-form input[type="search"] { flex: 1; min-width: 200px; margin: 0; margin-bottom: 0; }
+    .filter-hint { font-size: 12px; color: var(--text-soft); margin: 0 0 8px; line-height: 1.45; }
+    .cover-privacy { font-size: 12px; color: var(--text-soft); margin: 0; line-height: 1.45; }
     .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap; }
     .small { font-size: 13px; color: #cbd5e1; }
     .brand-wrap { display: flex; align-items: center; gap: 10px; }
@@ -271,8 +287,17 @@
     {% endif %}
   </div>
   <div class="panel filter-bar">
-    <label class="sr-only" for="series-filter">Filter series by title</label>
-    <input id="series-filter" type="search" placeholder="Filter series by title…" autocomplete="off" aria-label="Filter series by title">
+    <p class="filter-hint">Search runs on the <strong>whole library</strong> (across pages). The box below filters <strong>this page only</strong> after results load.</p>
+    <form class="filter-form" method="get" action="{{ url_for('index') }}" role="search">
+      <label class="sr-only" for="series-search">Search all series by title</label>
+      <input id="series-search" name="q" type="search" value="{{ search_q }}" placeholder="Search all series by title…" autocomplete="off" aria-label="Search all series by title" maxlength="200">
+      <button class="btn-muted" type="submit">Search</button>
+      {% if search_q %}
+        <a class="btn-muted btn-link" href="{{ url_for('index') }}">Clear search</a>
+      {% endif %}
+    </form>
+    <label class="sr-only" for="series-filter">Filter this page by title</label>
+    <input id="series-filter" type="search" placeholder="Filter this page only…" autocomplete="off" aria-label="Filter this page by title">
   </div>
   <div class="panel">
     <form action="/add" method="post" data-loading-form="true">
@@ -302,6 +327,9 @@
         <button class="btn-muted" type="submit" data-loading-text="Importing...">Import Backup</button>
       </form>
     </div>
+  </div>
+  <div class="panel">
+    <p class="cover-privacy">Cover images load from the sites you track; those hosts may see your IP. <code>referrerpolicy=&quot;origin&quot;</code> on covers limits referrer leakage, not IP visibility.</p>
   </div>
   <div class="grid" id="series-grid">
     {% for b in bookmarks %}
@@ -384,9 +412,9 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button class="btn-muted icon-btn" type="submit" data-loading-text="..." title="Mark seen" aria-label="Mark seen">✓</button>
               </form>
-              <form class="inline" action="/delete/{{ b["id"] }}" method="post" data-loading-form="true" data-confirm="Delete this series? This cannot be undone.">
+              <form class="inline" action="/delete/{{ b["id"] }}" method="post" data-loading-form="true" data-confirm="Delete &quot;{{ b['title'] }}&quot;? This will remove the series and its reading progress and cannot be undone.">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button class="btn-danger icon-btn" type="submit" data-loading-text="..." title="Delete" aria-label="Delete">🗑</button>
+                <button class="btn-danger icon-btn" type="submit" data-loading-text="..." title="Delete {{ b['title'] }}" aria-label="Delete {{ b['title'] }}">🗑</button>
               </form>
             </div>
           </div>
@@ -394,9 +422,48 @@
         {% if b["last_error"] %}<div class="error" role="alert">Error: {{ b["last_error"] }}</div>{% endif %}
       </article>
     {% else %}
-      <div class="panel">No bookmarks yet.</div>
+      <div class="panel">
+        {% if search_q %}
+          No series match “{{ search_q }}”. Try another term or <a href="{{ url_for('index') }}">clear the search</a>.
+        {% else %}
+          No bookmarks yet.
+        {% endif %}
+      </div>
     {% endfor %}
   </div>
+  {% if total_pages and total_pages > 1 %}
+    <nav class="panel pagination" aria-label="Pagination">
+      <span class="page-meta">
+        Page {{ page }} of {{ total_pages }}
+        <span class="page-meta-sep">·</span>
+        {% if search_q %}
+          {{ total_count }} match{% if total_count != 1 %}es{% endif %}
+        {% else %}
+          {{ total_count }} series
+        {% endif %}
+      </span>
+      <div class="page-links">
+        {% if page > 1 %}
+          {% if search_q %}
+            <a class="btn-muted btn-link" href="{{ url_for('index', page=page - 1, q=search_q) }}" rel="prev" aria-label="Previous page">← Previous</a>
+          {% else %}
+            <a class="btn-muted btn-link" href="{{ url_for('index', page=page - 1) }}" rel="prev" aria-label="Previous page">← Previous</a>
+          {% endif %}
+        {% else %}
+          <span class="btn-muted btn-link is-disabled" aria-disabled="true">← Previous</span>
+        {% endif %}
+        {% if page < total_pages %}
+          {% if search_q %}
+            <a class="btn-muted btn-link" href="{{ url_for('index', page=page + 1, q=search_q) }}" rel="next" aria-label="Next page">Next →</a>
+          {% else %}
+            <a class="btn-muted btn-link" href="{{ url_for('index', page=page + 1) }}" rel="next" aria-label="Next page">Next →</a>
+          {% endif %}
+        {% else %}
+          <span class="btn-muted btn-link is-disabled" aria-disabled="true">Next →</span>
+        {% endif %}
+      </div>
+    </nav>
+  {% endif %}
   <script>
     document.querySelectorAll("form[data-loading-form='true']").forEach((form) => {
       form.addEventListener("submit", (e) => {

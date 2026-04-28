@@ -93,6 +93,7 @@
       box-shadow: 0 0 15px rgba(59, 130, 246, 0.45);
     }
     .error { color: #f87171; margin-bottom: 8px; }
+    .hint { color: #94a3b8; font-size: 12px; margin: 0 0 10px; }
     button.is-loading {
       opacity: 0.8;
       cursor: wait;
@@ -128,8 +129,19 @@
     <form method="post" id="authForm">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="{{ 'register' if mode == 'register' else 'login' }}">
-      <input type="text" name="username" placeholder="Username" aria-label="Username" autocomplete="username" required>
-      <input type="password" name="password" placeholder="Password" aria-label="Password" autocomplete="{{ 'new-password' if mode == 'register' else 'current-password' }}" required>
+      <input type="text" name="username" placeholder="Username" aria-label="Username" autocomplete="username" maxlength="64" required>
+      <input
+        type="password"
+        name="password"
+        placeholder="Password"
+        aria-label="Password"
+        autocomplete="{{ 'new-password' if mode == 'register' else 'current-password' }}"
+        {% if mode == 'register' %}minlength="{{ min_password_length }}"{% endif %}
+        maxlength="256"
+        required>
+      {% if mode == 'register' %}
+        <p class="hint">Use at least {{ min_password_length }} characters.</p>
+      {% endif %}
       <button id="authSubmit" type="submit" data-loading-text="{{ 'Creating...' if mode == 'register' else 'Signing in...' }}">{{ 'Create account' if mode == 'register' else 'Sign in' }}</button>
     </form>
   </div>

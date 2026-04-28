@@ -76,6 +76,8 @@
     }
     .foot { margin-top: 24px; font-size: 12px; color: #94a3b8; }
     .foot a { color: #93c5fd; }
+    .foot .dot { margin: 0 6px; opacity: 0.6; }
+    .foot.privacy { margin-top: 14px; max-width: 460px; margin-left: auto; margin-right: auto; line-height: 1.55; }
   </style>
 </head>
 <body>
@@ -87,7 +89,16 @@
       <a href="/auth" class="btn primary" aria-label="Get started with Manga Tracker">Get Started</a>
     </div>
     <p class="foot">Early version — report bugs anytime.</p>
-    <p class="foot"><a href="{{ bug_report_href }}" rel="noopener noreferrer">Report an issue</a></p>
+    <p class="foot">
+      <a href="{{ bug_report_href }}" rel="noopener noreferrer">Report an issue</a>
+      {% if contact_email %}
+        <span class="dot">·</span>
+        <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>
+      {% endif %}
+    </p>
+    <p class="foot privacy">
+      Heads up: cover images load from the original series sites, so those hosts may see your IP when the dashboard renders.
+    </p>
   </div>
 </body>
 </html>
