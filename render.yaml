@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: manga-tracker
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: FLASK_DEBUG
+        value: "0"
+      - key: REQUIRE_API_AUTH
+        value: "1"
+      - key: ALLOW_SQLITE_IN_PRODUCTION
+        value: "0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: manga-tracker-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+
+databases:
+  - name: manga-tracker-db
+    plan: free
