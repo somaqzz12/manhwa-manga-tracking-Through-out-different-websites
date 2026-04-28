@@ -29,6 +29,22 @@ async function storeDebug(payload) {
   return trimmed;
 }
 
+async function trackPayload(payload) {
+  const ensure = await postJson("/api/series/ensure", {
+    title: payload.title,
+    url: payload.seriesUrl,
+    series_key: payload.seriesKey,
+  });
+  const progress = await postJson("/api/progress", {
+    series_url: payload.seriesUrl,
+    series_key: payload.seriesKey,
+    chapter_url: payload.chapterUrl,
+    chapter_label: payload.chapterLabel,
+    chapter_num: payload.chapterNum,
+  });
+  return { ensure, progress };
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     try {
@@ -43,25 +59,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return;
       }
       if (msg?.type === "GET_SETTINGS") {
-        const stored = await chrome.storage.local.get(["autoprompt", "debugMode", "apiBase"]);
+        const stored = await chrome.storage.local.get(["apiBase"]);
         sendResponse({
           ok: true,
           data: {
-            autoprompt: stored.autoprompt !== false,
-            debugMode: stored.debugMode === true,
             apiBase: stored.apiBase || DEFAULT_API_BASE,
           },
         });
-        return;
-      }
-      if (msg?.type === "SET_AUTOPROMPT") {
-        await chrome.storage.local.set({ autoprompt: !!msg.payload?.autoprompt });
-        sendResponse({ ok: true });
-        return;
-      }
-      if (msg?.type === "SET_DEBUG_MODE") {
-        await chrome.storage.local.set({ debugMode: !!msg.payload?.debugMode });
-        sendResponse({ ok: true });
         return;
       }
       if (msg?.type === "SET_API_BASE") {
@@ -70,18 +74,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         sendResponse({ ok: true, apiBase: raw });
         return;
       }
-      if (msg?.type === "TRACK_DEBUG") {
-        const events = await storeDebug(msg.payload || {});
-        sendResponse({ ok: true, count: events.length });
-        return;
-      }
-      if (msg?.type === "GET_DEBUG_EVENTS") {
-        const stored = await chrome.storage.local.get(["debugEvents"]);
-        sendResponse({ ok: true, data: Array.isArray(stored.debugEvents) ? stored.debugEvents : [] });
-        return;
-      }
-      if (msg?.type === "MERGE_DUPLICATES") {
-        const data = await postJson("/api/maintenance/merge-duplicates", {});
+      if (msg?.type === "TRACK_TAB_NOW") {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab?.id) {
+          sendResponse({ ok: false, error: "No active tab found." });
+          return;
+        }
+        const pageRes = await chrome.tabs.sendMessage(tab.id, { type: "GET_PAGE_TRACK_DATA" });
+        if (!pageRes?.ok || !pageRes?.data) {
+          sendResponse({ ok: false, error: "This page is not recognized as a chapter page." });
+          return;
+        }
+        const data = await trackPayload(pageRes.data);
         sendResponse({ ok: true, data });
         return;
       }

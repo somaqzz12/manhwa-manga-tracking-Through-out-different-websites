@@ -261,58 +261,28 @@ async function sendMessage(msg) {
   });
 }
 
-async function getDebugMode() {
-  const settingsRes = await sendMessage({ type: "GET_SETTINGS" });
-  return settingsRes?.ok ? !!settingsRes.data.debugMode : false;
-}
-
-async function reportDebug(event, details) {
-  const debugMode = await getDebugMode();
-  if (!debugMode) return;
-  await sendMessage({
-    type: "TRACK_DEBUG",
-    payload: {
-      event,
-      details,
-      at: new Date().toISOString(),
-    },
-  });
-}
-
-async function maybeTrack() {
-  const settingsRes = await sendMessage({ type: "GET_SETTINGS" });
-  const autoprompt = settingsRes?.ok ? settingsRes.data.autoprompt : true;
+function getTrackDataFromPage() {
   const data = detectPageData();
-  if (!data || !data.seriesUrl || data.seriesUrl.startsWith("chrome://")) {
-    await reportDebug("skip-page", { reason: "unsupported-or-missing-data", url: window.location.href });
-    return;
-  }
+  if (!data || !data.seriesUrl || data.seriesUrl.startsWith("chrome://")) return null;
+  return data;
+}
+
+async function saveTrackData(data) {
+  if (!data) return { ok: false, error: "No trackable data on this page." };
   const promptKey = `mangaTrackerPrompt:${data.seriesUrl}:${data.chapterUrl}`;
-  if (sessionStorage.getItem(promptKey) === "1") return;
+  if (sessionStorage.getItem(promptKey) === "1") return { ok: true, skipped: true };
 
   const knownKey = `mangaTrackerKnownSeries:${data.seriesKey}`;
-  const knownSeries = localStorage.getItem(knownKey) === "1";
-
-  if (autoprompt && !knownSeries) {
-    const shouldAdd = window.confirm(
-      `Track this series?\n\n${data.title}\n${data.seriesUrl}`
-    );
-    if (!shouldAdd) return;
-  }
   sessionStorage.setItem(promptKey, "1");
 
   const ensure = await sendMessage({
     type: "ENSURE_SERIES",
     payload: { title: data.title, url: data.seriesUrl, series_key: data.seriesKey },
   });
-  await reportDebug("ensure-series", {
-    payload: { title: data.title, url: data.seriesUrl, series_key: data.seriesKey },
-    response: ensure,
-  });
-  if (!ensure?.ok) return;
+  if (!ensure?.ok) return { ok: false, error: ensure?.error || "Series ensure failed." };
   localStorage.setItem(knownKey, "1");
 
-  const progress = await sendMessage({
+  const progressRes = await sendMessage({
     type: "SAVE_PROGRESS",
     payload: {
       series_url: data.seriesUrl,
@@ -322,15 +292,14 @@ async function maybeTrack() {
       chapter_num: data.chapterNum,
     },
   });
-  await reportDebug("save-progress", {
-    parsed: {
-      normalized_series_url: data.seriesUrl,
-      series_key: data.seriesKey,
-      chapter_num: data.chapterNum,
-      chapter_url: data.chapterUrl,
-    },
-    response: progress,
-  });
+  if (!progressRes?.ok) return { ok: false, error: progressRes?.error || "Progress save failed." };
+  return { ok: true, data };
+}
+
+async function maybeTrack() {
+  const data = getTrackDataFromPage();
+  if (!data) return;
+  await saveTrackData(data);
 }
 
 if (document.readyState === "complete" || document.readyState === "interactive") {
@@ -338,3 +307,19 @@ if (document.readyState === "complete" || document.readyState === "interactive")
 } else {
   window.addEventListener("DOMContentLoaded", maybeTrack, { once: true });
 }
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  (async () => {
+    if (msg?.type === "GET_PAGE_TRACK_DATA") {
+      sendResponse({ ok: true, data: getTrackDataFromPage() });
+      return;
+    }
+    if (msg?.type === "TRACK_NOW") {
+      const result = await saveTrackData(getTrackDataFromPage());
+      sendResponse(result);
+      return;
+    }
+    sendResponse({ ok: false, error: "Unknown content message" });
+  })();
+  return true;
+});
