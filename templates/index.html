@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{ site_description }}">
   <title>Manga Update Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' text-anchor='middle' fill='white' font-size='14' font-family='system-ui,sans-serif' font-weight='700'%3EMT%3C/text%3E%3C/svg%3E">
   <style>
     :root {
       --bg-0: #05070d;
@@ -199,6 +201,13 @@
     a { color: #93c5fd; text-decoration-color: rgba(147, 197, 253, 0.55); }
     a:hover { color: #bfdbfe; }
     .empty { color: #9ca3af; }
+    .flash-msgs { margin-bottom: 14px; }
+    .flash { padding: 10px 12px; border-radius: 12px; margin-bottom: 8px; font-size: 14px; font-weight: 600; }
+    .flash.success { background: rgba(22, 163, 74, 0.2); border: 1px solid rgba(34, 197, 94, 0.45); color: #bbf7d0; }
+    .flash.warning { background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(250, 204, 21, 0.4); color: #fde68a; }
+    .flash.error { background: rgba(239, 68, 68, 0.18); border: 1px solid rgba(248, 113, 113, 0.45); color: #fecaca; }
+    .filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 0; }
+    .filter-bar input { flex: 1; min-width: 200px; margin-right: 0; }
     .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap; }
     .small { font-size: 13px; color: #cbd5e1; }
     .brand-wrap { display: flex; align-items: center; gap: 10px; }
@@ -238,9 +247,21 @@
     </div>
     <div class="small" aria-live="polite">
       Signed in as <strong>{{ current_user["username"] or current_user["email"] }}</strong>
-      <form class="inline" action="/logout" method="post"><button class="btn-muted" type="submit" data-loading-text="Logging out..." aria-label="Log out">Logout</button></form>
+      <form class="inline" action="/logout" method="post" data-loading-form="true">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn-muted" type="submit" data-loading-text="Logging out..." aria-label="Log out">Logout</button>
+      </form>
     </div>
   </div>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-msgs" role="region" aria-label="Notifications">
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
   <div class="panel">
     <strong>Smart Sync:</strong>
     {% if behind_count > 0 %}
@@ -249,8 +270,13 @@
       You are fully caught up. Nice.
     {% endif %}
   </div>
+  <div class="panel filter-bar">
+    <label class="sr-only" for="series-filter">Filter series by title</label>
+    <input id="series-filter" type="search" placeholder="Filter series by title…" autocomplete="off" aria-label="Filter series by title">
+  </div>
   <div class="panel">
     <form action="/add" method="post" data-loading-form="true">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="search-shell">
         <label class="sr-only" for="series-title">Series title</label>
         <input id="series-title" name="title" placeholder="Series title" aria-label="Series title" required>
@@ -262,6 +288,7 @@
   </div>
   <div class="panel">
     <form action="/check-all" method="post" data-loading-form="true">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn-primary" type="submit" data-loading-text="Checking all...">Check All Now</button>
     </form>
   </div>
@@ -269,18 +296,20 @@
     <div class="row">
       <a class="btn-primary" href="/export" aria-label="Export backup JSON">Export Backup JSON</a>
       <form action="/import" method="post" enctype="multipart/form-data" class="inline" data-loading-form="true">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label class="sr-only" for="backup-file">Backup file</label>
         <input id="backup-file" type="file" name="backup_file" accept="application/json" aria-label="Backup JSON file" required>
         <button class="btn-muted" type="submit" data-loading-text="Importing...">Import Backup</button>
       </form>
     </div>
   </div>
-  <div class="grid">
+  <div class="grid" id="series-grid">
     {% for b in bookmarks %}
-      <article class="series-card">
+      {% set show_continue = b.unread_count > 0 or b.read_chapter_num is not none or ((b.read_chapter_label or '')|trim) or ((b.continue_url or '') != (b.url or '')) %}
+      <article class="series-card" data-series-title="{{ b['title']|lower }}">
         <div class="series-main">
           {% if b["cover_url"] %}
-            <img class="cover" src="{{ b["cover_url"] }}" alt="{{ b["title"] }} cover" width="118" height="177" loading="lazy" referrerpolicy="no-referrer">
+            <img class="cover" src="{{ b["cover_url"] }}" alt="{{ b["title"] }} cover" width="118" height="177" loading="lazy" referrerpolicy="origin">
           {% else %}
             <div class="cover-fallback">No Cover</div>
           {% endif %}
@@ -339,14 +368,26 @@
             </div>
 
             <div class="actions">
-              <a href="{{ b['continue_url'] }}" target="_blank" rel="noreferrer" aria-label="Continue reading {{ b['title'] }}" class="btn-link btn-primary">Continue</a>
+              {% if show_continue %}
+                <a href="{{ b['continue_url'] }}" target="_blank" rel="noreferrer" aria-label="Continue reading {{ b['title'] }}" class="btn-link btn-primary">Continue</a>
+              {% endif %}
               <a href="{{ b["url"] }}" target="_blank" rel="noreferrer" aria-label="Open series page for {{ b['title'] }}">Open series</a>
+              <a href="{{ url_for('edit_bookmark', bookmark_id=b['id']) }}" aria-label="Edit {{ b['title'] }}">Edit</a>
               {% if b["unread_count"] > 0 %}
                 <span class="badge new">{{ b["unread_count"] }} new</span>
               {% endif %}
-              <form class="inline" action="/check/{{ b["id"] }}" method="post" data-loading-form="true"><button class="btn-muted icon-btn" type="submit" data-loading-text="..." title="Check now" aria-label="Check now">↻</button></form>
-              <form class="inline" action="/mark-seen/{{ b["id"] }}" method="post" data-loading-form="true"><button class="btn-muted icon-btn" type="submit" data-loading-text="..." title="Mark seen" aria-label="Mark seen">✓</button></form>
-              <form class="inline" action="/delete/{{ b["id"] }}" method="post" data-loading-form="true"><button class="btn-danger icon-btn" type="submit" data-loading-text="..." title="Delete" aria-label="Delete">🗑</button></form>
+              <form class="inline" action="/check/{{ b["id"] }}" method="post" data-loading-form="true">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn-muted icon-btn" type="submit" data-loading-text="..." title="Check now" aria-label="Check now">↻</button>
+              </form>
+              <form class="inline" action="/mark-seen/{{ b["id"] }}" method="post" data-loading-form="true">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn-muted icon-btn" type="submit" data-loading-text="..." title="Mark seen" aria-label="Mark seen">✓</button>
+              </form>
+              <form class="inline" action="/delete/{{ b["id"] }}" method="post" data-loading-form="true" data-confirm="Delete this series? This cannot be undone.">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn-danger icon-btn" type="submit" data-loading-text="..." title="Delete" aria-label="Delete">🗑</button>
+              </form>
             </div>
           </div>
         </div>
@@ -358,7 +399,12 @@
   </div>
   <script>
     document.querySelectorAll("form[data-loading-form='true']").forEach((form) => {
-      form.addEventListener("submit", () => {
+      form.addEventListener("submit", (e) => {
+        const msg = form.getAttribute("data-confirm");
+        if (msg && !window.confirm(msg)) {
+          e.preventDefault();
+          return;
+        }
         const btn = form.querySelector("button[type='submit']");
         if (!btn) return;
         const text = btn.getAttribute("data-loading-text");
@@ -368,6 +414,16 @@
         btn.classList.add("is-loading");
       });
     });
+    const filterInput = document.getElementById("series-filter");
+    if (filterInput) {
+      filterInput.addEventListener("input", () => {
+        const q = filterInput.value.trim().toLowerCase();
+        document.querySelectorAll(".series-card").forEach((card) => {
+          const t = card.getAttribute("data-series-title") || "";
+          card.style.display = !q || t.includes(q) ? "" : "none";
+        });
+      });
+    }
   </script>
 </body>
 </html>

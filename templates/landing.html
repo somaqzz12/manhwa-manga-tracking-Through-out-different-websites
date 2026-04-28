@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="{{ site_description }}">
   <title>Manga Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' text-anchor='middle' fill='white' font-size='14' font-family='system-ui,sans-serif' font-weight='700'%3EMT%3C/text%3E%3C/svg%3E">
   <style>
     :root {
       --bg-0: #05070d;
@@ -46,6 +48,7 @@
       border-radius: 12px;
       display: grid;
       place-items: center;
+      font-size: 14px;
       font-weight: 700;
       background: linear-gradient(160deg, #60a5fa 0%, #2563eb 48%, #4f46e5 100%);
       box-shadow: 0 10px 20px rgba(37, 99, 235, 0.32);
@@ -71,12 +74,8 @@
       color: white;
       box-shadow: 0 0 15px rgba(59, 130, 246, 0.45);
     }
-    .secondary {
-      background: rgba(30, 41, 59, 0.68);
-      color: white;
-      border: 1px solid rgba(148, 163, 184, 0.3);
-    }
     .foot { margin-top: 24px; font-size: 12px; color: #94a3b8; }
+    .foot a { color: #93c5fd; }
   </style>
 </head>
 <body>
@@ -86,10 +85,9 @@
     <p>Track manga and manhwa updates automatically in one clean dashboard.</p>
     <div class="actions">
       <a href="/auth" class="btn primary" aria-label="Get started with Manga Tracker">Get Started</a>
-      <a href="/dashboard" class="btn secondary" aria-label="Open Manga Tracker dashboard">Open Dashboard</a>
     </div>
-    <p class="foot">Early version - report bugs anytime.</p>
-    <p class="foot"><a href="mailto:you@example.com" style="color:#93c5fd;">Report a bug</a></p>
+    <p class="foot">Early version — report bugs anytime.</p>
+    <p class="foot"><a href="{{ bug_report_href }}" rel="noopener noreferrer">Report an issue</a></p>
   </div>
 </body>
 </html>

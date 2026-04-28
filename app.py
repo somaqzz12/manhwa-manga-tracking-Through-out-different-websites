@@ -2,6 +2,7 @@ import os
 import re
 import sqlite3
 import json
+import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -11,7 +12,8 @@ from urllib.parse import urljoin, urlparse
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from bs4 import BeautifulSoup
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for, Response
+from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for, Response
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import check_password_hash, generate_password_hash
 try:
     import psycopg2
@@ -40,18 +42,43 @@ URL_CHAPTER_STEP_PATTERN = re.compile(r"^(chapter|ch|episode|ep)$", re.IGNORECAS
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me")
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+log = logging.getLogger(__name__)
+
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "0" if os.getenv("FLASK_DEBUG", "1") == "1" else "1") == "1"
+app.config["WTF_CSRF_TIME_LIMIT"] = None
+app.config["WTF_CSRF_SSL_STRICT"] = os.getenv("FLASK_DEBUG", "1") != "1"
+csrf = CSRFProtect(app)
+
 HTTP_TIMEOUT_SECONDS = int(os.getenv("HTTP_TIMEOUT_SECONDS", "15"))
 MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
 DEFAULT_USER_EMAIL = os.getenv("DEFAULT_USER_EMAIL", "local@tracker")
+MIN_PASSWORD_LENGTH = max(1, int(os.getenv("MIN_PASSWORD_LENGTH", "8")))
+READ_PROGRESS_MAX_PER_BOOKMARK = int(os.getenv("READ_PROGRESS_MAX_PER_BOOKMARK", "400"))
+INITIAL_AUTO_CHECK = os.getenv("INITIAL_AUTO_CHECK", "0") == "1"
+DEFAULT_BUG_REPORT_URL = "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites/issues"
 APP_DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
 DB_READY = False
 DB_INIT_LOCK = threading.Lock()
 CHECK_SINGLE_LOCKS: dict[int, threading.Lock] = {}
 CHECK_SINGLE_LOCKS_GUARD = threading.Lock()
+_SCHEDULER = None
+_SCHEDULER_LOCK = threading.Lock()
 REQUIRE_API_AUTH = os.getenv("REQUIRE_API_AUTH", "0") == "1"
 CORS_ALLOW_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
 if not APP_DEBUG and not os.getenv("SECRET_KEY"):
     raise RuntimeError("SECRET_KEY must be set in production")
+
+
+@app.context_processor
+def inject_template_globals():
+    return {
+        "bug_report_href": os.getenv("BUG_REPORT_URL", DEFAULT_BUG_REPORT_URL),
+        "site_description": "Track manga and manhwa chapter releases, reading progress, and updates in one dashboard.",
+    }
+
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": USER_AGENT})
@@ -1022,6 +1049,28 @@ def upsert_progress(user_id: int, bookmark_id: int, chapter_num: Optional[float]
             """,
             (user_id, bookmark_id, chapter_num, chapter_label, source_url, now),
         )
+    maybe_prune_reading_progress(user_id, bookmark_id)
+
+
+def maybe_prune_reading_progress(user_id: int, bookmark_id: int) -> None:
+    max_keep = READ_PROGRESS_MAX_PER_BOOKMARK
+    if max_keep <= 0:
+        return
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM reading_progress WHERE user_id = ? AND bookmark_id = ?",
+            (user_id, bookmark_id),
+        ).fetchone()
+        total = int(row["c"] or 0) if row else 0
+        excess = total - max_keep
+        if excess <= 0:
+            return
+        old_rows = conn.execute(
+            "SELECT id FROM reading_progress WHERE user_id = ? AND bookmark_id = ? ORDER BY id ASC LIMIT ?",
+            (user_id, bookmark_id, excess),
+        ).fetchall()
+        for r in old_rows:
+            conn.execute("DELETE FROM reading_progress WHERE id = ?", (r["id"],))
 
 
 def check_all(user_id: int) -> None:
@@ -1037,8 +1086,7 @@ def check_all(user_id: int) -> None:
             try:
                 f.result()
             except Exception:
-                # Keep the batch moving even if one site fails.
-                pass
+                log.exception("check_single failed in batch check")
 
 
 def check_all_users() -> None:
@@ -1060,6 +1108,8 @@ def auth_page():
             password = request.form.get("password") or ""
             if not username or not password:
                 error = "Username and password are required."
+            elif action == "register" and len(password) < MIN_PASSWORD_LENGTH:
+                error = f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
             elif action == "register":
                 with get_conn() as conn:
                     exists_username = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
@@ -1217,20 +1267,25 @@ def import_data():
         return redirect(url_for("auth_page"))
     file = request.files.get("backup_file")
     if file is None:
+        flash("No backup file selected.", "warning")
         return redirect(url_for("index"))
     try:
         payload = json.loads(file.read().decode("utf-8"))
     except Exception:
+        flash("Import failed: file is not valid JSON.", "error")
         return redirect(url_for("index"))
     bookmarks = payload.get("bookmarks") or []
     progress = payload.get("reading_progress") or []
     user_id = get_actor_user_id()
     id_map: dict[int, int] = {}
+    skipped_invalid_bookmarks = 0
+    skipped_progress = 0
     with get_conn() as conn:
         for b in bookmarks:
             old_id = int(b.get("id") or 0)
             raw_url = (b.get("url") or "").strip()
             if not is_valid_http_url(raw_url):
+                skipped_invalid_bookmarks += 1
                 continue
             conn.execute(
                 """
@@ -1261,6 +1316,7 @@ def import_data():
         for p in progress:
             mapped_bookmark_id = id_map.get(int(p.get("bookmark_id") or 0))
             if mapped_bookmark_id is None:
+                skipped_progress += 1
                 continue
             conn.execute(
                 """
@@ -1277,6 +1333,12 @@ def import_data():
                     p.get("seen_at") or datetime.utcnow().isoformat(timespec="seconds") + "Z",
                 ),
             )
+    parts = ["Import finished."]
+    if skipped_invalid_bookmarks:
+        parts.append(f"Skipped {skipped_invalid_bookmarks} bookmarks (invalid URL).")
+    if skipped_progress:
+        parts.append(f"Skipped {skipped_progress} progress rows (no matching bookmark id).")
+    flash(" ".join(parts), "warning" if (skipped_invalid_bookmarks or skipped_progress) else "success")
     return redirect(url_for("index"))
 
 
@@ -1324,6 +1386,43 @@ def mark_seen(bookmark_id: int):
     return redirect(url_for("index"))
 
 
+@app.route("/bookmark/<int:bookmark_id>/edit", methods=["GET", "POST"])
+def edit_bookmark(bookmark_id: int):
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, title, url FROM bookmarks WHERE id = ? AND user_id = ?",
+            (bookmark_id, user_id),
+        ).fetchone()
+    if not row:
+        flash("Series not found.", "error")
+        return redirect(url_for("index"))
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        url = request.form.get("url", "").strip()
+        if not title or not is_valid_http_url(url):
+            flash("Title and a valid http(s) URL are required.", "error")
+            return render_template("edit_bookmark.html", bookmark=dict(row))
+        old_url = (row["url"] or "").strip()
+        new_url = url.strip()
+        with get_conn() as conn:
+            if new_url.rstrip("/") != old_url.rstrip("/"):
+                conn.execute(
+                    "UPDATE bookmarks SET title = ?, url = ?, series_key = NULL WHERE id = ? AND user_id = ?",
+                    (title, new_url, bookmark_id, user_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE bookmarks SET title = ? WHERE id = ? AND user_id = ?",
+                    (title, bookmark_id, user_id),
+                )
+        flash("Series updated.", "success")
+        return redirect(url_for("index"))
+    return render_template("edit_bookmark.html", bookmark=dict(row))
+
+
 @app.route("/delete/<int:bookmark_id>", methods=["POST"])
 def delete_bookmark(bookmark_id: int):
     if not login_required():
@@ -1334,6 +1433,7 @@ def delete_bookmark(bookmark_id: int):
     return redirect(url_for("index"))
 
 
+@csrf.exempt
 @app.route("/api/series/ensure", methods=["POST"])
 def ensure_series():
     if not api_auth_required():
@@ -1385,6 +1485,7 @@ def ensure_series():
     return jsonify({"ok": True, "created": created, "series": dict(row)})
 
 
+@csrf.exempt
 @app.route("/api/progress", methods=["POST"])
 def save_progress():
     if not api_auth_required():
@@ -1451,6 +1552,7 @@ def save_progress():
     return jsonify({"ok": True, "bookmark_id": bookmark_id, "chapter_num": parsed_num})
 
 
+@csrf.exempt
 @app.route("/api/debug/scrape", methods=["POST"])
 def debug_scrape():
     if not api_auth_required():
@@ -1499,6 +1601,7 @@ def debug_scrape():
     )
 
 
+@csrf.exempt
 @app.route("/api/maintenance/merge-duplicates", methods=["POST"])
 def merge_duplicates():
     if not api_auth_required():
@@ -1583,26 +1686,48 @@ def merge_duplicates():
 
 
 def setup_scheduler() -> Optional[BackgroundScheduler]:
+    global _SCHEDULER
+    with _SCHEDULER_LOCK:
+        if _SCHEDULER is not None:
+            return _SCHEDULER
+        if os.getenv("DISABLE_AUTO_CHECK") == "1":
+            return None
+        interval = int(os.getenv("CHECK_INTERVAL_MINUTES", "30"))
+        scheduler = BackgroundScheduler(daemon=True)
+        scheduler.add_job(
+            check_all_users,
+            "interval",
+            minutes=max(interval, 1),
+            id="auto-check",
+            max_instances=1,
+            coalesce=True,
+        )
+        scheduler.start()
+        _SCHEDULER = scheduler
+    if INITIAL_AUTO_CHECK:
+        try:
+            check_all_users()
+        except Exception:
+            log.exception("initial check_all_users failed")
+    return _SCHEDULER
+
+
+def _should_autostart_scheduler() -> bool:
     if os.getenv("DISABLE_AUTO_CHECK") == "1":
-        return None
-    interval = int(os.getenv("CHECK_INTERVAL_MINUTES", "30"))
-    scheduler = BackgroundScheduler(daemon=True)
-    scheduler.add_job(
-        check_all_users,
-        "interval",
-        minutes=max(interval, 1),
-        id="auto-check",
-        max_instances=1,
-        coalesce=True,
-    )
-    scheduler.start()
-    # Run once at startup so users don't wait for the first interval.
-    check_all_users()
-    return scheduler
+        return False
+    if APP_DEBUG and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return False
+    return True
+
+
+if _should_autostart_scheduler():
+    try:
+        ensure_db_ready()
+        setup_scheduler()
+    except Exception:
+        log.exception("scheduler autostart failed")
 
 
 if __name__ == "__main__":
     ensure_db_ready()
-    if not APP_DEBUG or os.getenv("WERKZEUG_RUN_MAIN") == "true":
-        setup_scheduler()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=APP_DEBUG)

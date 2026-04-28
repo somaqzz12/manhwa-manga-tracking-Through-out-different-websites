@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{ site_description }}">
   <title>Sign In - Manga Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' text-anchor='middle' fill='white' font-size='14' font-family='system-ui,sans-serif' font-weight='700'%3EMT%3C/text%3E%3C/svg%3E">
   <style>
     :root {
       --bg-0: #05070d;
@@ -124,9 +126,10 @@
     </div>
     {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
     <form method="post" id="authForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="{{ 'register' if mode == 'register' else 'login' }}">
-      <input type="text" name="username" placeholder="Username" aria-label="Username" required>
-      <input type="password" name="password" placeholder="Password" aria-label="Password" required>
+      <input type="text" name="username" placeholder="Username" aria-label="Username" autocomplete="username" required>
+      <input type="password" name="password" placeholder="Password" aria-label="Password" autocomplete="{{ 'new-password' if mode == 'register' else 'current-password' }}" required>
       <button id="authSubmit" type="submit" data-loading-text="{{ 'Creating...' if mode == 'register' else 'Signing in...' }}">{{ 'Create account' if mode == 'register' else 'Sign in' }}</button>
     </form>
   </div>
