@@ -272,11 +272,12 @@ async function saveTrackData(data) {
   const promptKey = `mangaTrackerPrompt:${data.seriesUrl}:${data.chapterUrl}`;
   if (sessionStorage.getItem(promptKey) === "1") return { ok: true, skipped: true };
 
-  const knownKey = `mangaTrackerKnownSeries:${data.seriesKey}`;
-  const knownSeries = localStorage.getItem(knownKey) === "1";
-  if (!knownSeries) {
+  const seenSeriesPromptKey = `mangaTrackerSeriesPrompted:${data.seriesKey}`;
+  const seenSeriesPrompt = sessionStorage.getItem(seenSeriesPromptKey) === "1";
+  if (!seenSeriesPrompt) {
     const shouldTrack = window.confirm(`Track this series?\n\n${data.title}\n${data.seriesUrl}`);
     if (!shouldTrack) return { ok: false, error: "User skipped tracking." };
+    sessionStorage.setItem(seenSeriesPromptKey, "1");
   }
   sessionStorage.setItem(promptKey, "1");
 
@@ -285,7 +286,6 @@ async function saveTrackData(data) {
     payload: { title: data.title, url: data.seriesUrl, series_key: data.seriesKey },
   });
   if (!ensure?.ok) return { ok: false, error: ensure?.error || "Series ensure failed." };
-  localStorage.setItem(knownKey, "1");
 
   const progressRes = await sendMessage({
     type: "SAVE_PROGRESS",
@@ -307,11 +307,27 @@ async function maybeTrack() {
   await saveTrackData(data);
 }
 
-if (document.readyState === "complete" || document.readyState === "interactive") {
-  maybeTrack();
-} else {
-  window.addEventListener("DOMContentLoaded", maybeTrack, { once: true });
+let __lastUrl = "";
+let __lastAttemptAt = 0;
+async function maybeTrackOnRouteChange() {
+  const now = Date.now();
+  const href = window.location.href;
+  if (href === __lastUrl && now - __lastAttemptAt < 1500) return;
+  __lastUrl = href;
+  __lastAttemptAt = now;
+  await maybeTrack();
 }
+
+if (document.readyState === "complete" || document.readyState === "interactive") {
+  maybeTrackOnRouteChange();
+} else {
+  window.addEventListener("DOMContentLoaded", maybeTrackOnRouteChange, { once: true });
+}
+
+// Support SPA chapter navigation where URL changes without full page reload.
+setInterval(() => {
+  maybeTrackOnRouteChange();
+}, 1200);
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
