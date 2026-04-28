@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manga Tracker</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      background:
+        radial-gradient(320px 220px at 82% 0%, rgba(56, 189, 248, 0.14), transparent 70%),
+        radial-gradient(240px 180px at 14% 6%, rgba(99, 102, 241, 0.16), transparent 70%),
+        linear-gradient(160deg, #050816 0%, #090f23 50%, #03050d 100%);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 20px;
+    }
+    .box {
+      max-width: 560px;
+      width: 100%;
+      background: rgba(9, 13, 25, 0.72);
+      border: 1px solid rgba(100, 116, 139, 0.28);
+      border-radius: 16px;
+      padding: 26px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 18px 36px rgba(2, 6, 23, 0.45);
+    }
+    .logo {
+      width: 44px;
+      height: 44px;
+      margin: 0 auto 10px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      background: linear-gradient(160deg, #60a5fa 0%, #2563eb 48%, #4f46e5 100%);
+      box-shadow: 0 10px 20px rgba(37, 99, 235, 0.32);
+    }
+    h1 { font-size: 36px; margin: 0 0 10px; }
+    p { color: #94a3b8; margin: 0; }
+    .actions { margin-top: 20px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+    .btn {
+      display: inline-block;
+      text-decoration: none;
+      padding: 12px 20px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .primary { background: #2563eb; color: white; }
+    .secondary { background: #1f2937; color: white; }
+    .foot { margin-top: 24px; font-size: 12px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="logo">MT</div>
+    <h1>Manga Tracker</h1>
+    <p>Track manga and manhwa updates automatically in one clean dashboard.</p>
+    <div class="actions">
+      <a href="/auth" class="btn primary">Get Started</a>
+      <a href="/dashboard" class="btn secondary">Open Dashboard</a>
+    </div>
+    <p class="foot">Early version - report bugs anytime.</p>
+    <p class="foot"><a href="mailto:you@example.com" style="color:#93c5fd;">Report a bug</a></p>
+  </div>
+</body>
+</html>
