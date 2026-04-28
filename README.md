@@ -1,19 +1,8 @@
 # Manga/Manhwa Update Tracker
 
-## Why you got `ERR_CONNECTION_REFUSED`
+Track manga/manhwa progress across many reader sites with a Flask backend + Chrome extension.
 
-Most likely cause: nothing is running on `127.0.0.1:5000` right now (Flask app not started or crashed on startup).
-
-## Fastest checks
-
-1. Start the app and confirm you see: `Running on http://127.0.0.1:5000`
-2. If it exits, reinstall dependencies:
-   - `pip install -r requirements.txt`
-3. Check if another process owns the port:
-   - PowerShell: `netstat -ano | findstr :5000`
-4. If occupied, stop that PID or run this app on a different port.
-
-## Run
+## Local Run
 
 ```bash
 pip install -r requirements.txt
@@ -22,29 +11,41 @@ python app.py
 
 Open `http://127.0.0.1:5000`.
 
-## Selenium fallback (added)
+## Production Run
 
-- Enabled by default: `USE_SELENIUM_FALLBACK=1`
-- Behavior: try BeautifulSoup first, then Selenium for JS-heavy sites when the first attempt fails.
-- Disable in PowerShell:
-  - `$env:USE_SELENIUM_FALLBACK='0'`
+Use Gunicorn:
 
-## Chrome extension (auto tracking)
+```bash
+gunicorn -w 2 -b 0.0.0.0:$PORT app:app
+```
 
-Folder: `manga-tracker/extension`
+Recommended environment variables:
 
-What it does:
-- Detects current page as a potential chapter page.
-- Prompts: "Track this series?"
-- Adds the series to dashboard through local API.
-- Saves read progress immediately.
+- `SECRET_KEY` (required in production)
+- `FLASK_DEBUG=0`
+- `PORT` (set by host, defaults to `5000`)
+- `USE_SELENIUM_FALLBACK=0` (usually disable for hosted free tiers)
+- `MAX_CHECK_WORKERS=6`
+- `HTTP_TIMEOUT_SECONDS=15`
 
-Load it:
+## Deploy (Render quick start)
+
+1. Create a new **Web Service** from your GitHub repo.
+2. Build command: `pip install -r requirements.txt`
+3. Start command: `gunicorn -w 2 -b 0.0.0.0:$PORT app:app`
+4. Set env vars (`SECRET_KEY`, etc.).
+5. Deploy and copy your live URL (e.g. `https://your-app.onrender.com`).
+
+## Extension Setup
+
 1. Open `chrome://extensions`
 2. Enable Developer mode
-3. Click "Load unpacked"
-4. Select `manga-tracker/extension`
+3. Click **Load unpacked**
+4. Select the `extension` folder
+5. Open extension popup and set **Backend URL** to your deployed API (or local `http://127.0.0.1:5000`)
 
-Notes:
-- Browser extensions cannot reliably read `HttpOnly` cookies from manga sites, so "use cookies directly" is limited by browser security.
-- This extension tracks behavior from page URL/title instead, which is the stable way for this use case.
+## Notes
+
+- Extension tracks chapter pages via URL/title/DOM signals.
+- Selenium is fallback-only when enabled.
+- Account + export/import backup are available in dashboard UI.

@@ -1,7 +1,14 @@
-const API_BASE = "http://127.0.0.1:5000";
+const DEFAULT_API_BASE = "http://127.0.0.1:5000";
+
+async function getApiBase() {
+  const stored = await chrome.storage.local.get(["apiBase"]);
+  const raw = (stored.apiBase || DEFAULT_API_BASE).trim();
+  return raw.replace(/\/$/, "");
+}
 
 async function postJson(path, payload) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const apiBase = await getApiBase();
+  const res = await fetch(`${apiBase}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -36,12 +43,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return;
       }
       if (msg?.type === "GET_SETTINGS") {
-        const stored = await chrome.storage.local.get(["autoprompt", "debugMode"]);
+        const stored = await chrome.storage.local.get(["autoprompt", "debugMode", "apiBase"]);
         sendResponse({
           ok: true,
           data: {
             autoprompt: stored.autoprompt !== false,
             debugMode: stored.debugMode === true,
+            apiBase: stored.apiBase || DEFAULT_API_BASE,
           },
         });
         return;
@@ -54,6 +62,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       if (msg?.type === "SET_DEBUG_MODE") {
         await chrome.storage.local.set({ debugMode: !!msg.payload?.debugMode });
         sendResponse({ ok: true });
+        return;
+      }
+      if (msg?.type === "SET_API_BASE") {
+        const raw = (msg.payload?.apiBase || DEFAULT_API_BASE).trim().replace(/\/$/, "");
+        await chrome.storage.local.set({ apiBase: raw });
+        sendResponse({ ok: true, apiBase: raw });
         return;
       }
       if (msg?.type === "TRACK_DEBUG") {

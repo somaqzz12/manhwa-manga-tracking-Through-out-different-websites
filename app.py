@@ -31,6 +31,25 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me")
 HTTP_TIMEOUT_SECONDS = int(os.getenv("HTTP_TIMEOUT_SECONDS", "15"))
 MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
 DEFAULT_USER_EMAIL = os.getenv("DEFAULT_USER_EMAIL", "local@tracker")
+APP_DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
+
+
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get("Origin", "")
+    if origin.startswith("chrome-extension://") or origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1"):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        return Response(status=204)
+    return None
 
 
 def get_conn() -> sqlite3.Connection:
@@ -649,6 +668,11 @@ def logout():
     return redirect(url_for("auth_page"))
 
 
+@app.route("/healthz")
+def healthz():
+    return jsonify({"ok": True, "status": "healthy"})
+
+
 @app.route("/")
 def index():
     if not login_required():
@@ -1084,8 +1108,7 @@ def setup_scheduler() -> Optional[BackgroundScheduler]:
 
 
 if __name__ == "__main__":
-    debug_mode = True
     init_db()
-    if not debug_mode or os.getenv("WERKZEUG_RUN_MAIN") == "true":
+    if not APP_DEBUG or os.getenv("WERKZEUG_RUN_MAIN") == "true":
         setup_scheduler()
-    app.run(host="127.0.0.1", port=5000, debug=debug_mode)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=APP_DEBUG)
