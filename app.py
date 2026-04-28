@@ -1072,6 +1072,7 @@ def setup_scheduler() -> Optional[BackgroundScheduler]:
         check_all,
         "interval",
         minutes=max(interval, 1),
+        args=[get_default_user_id()],
         id="auto-check",
         max_instances=1,
         coalesce=True,

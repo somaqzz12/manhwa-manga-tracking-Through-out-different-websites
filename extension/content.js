@@ -105,18 +105,15 @@ function pageLooksLikeReader() {
 
 function pageHasReaderControls() {
   const bodyText = (document.body?.innerText || "").toLowerCase();
-  const selectChapterText = bodyText.includes("select chapter");
-  const prevNextText = bodyText.includes(" prev ") && bodyText.includes(" next ");
-  const navButtons = document.querySelectorAll("a, button");
-  let prevNextLinks = 0;
-  for (const node of navButtons) {
-    const t = (node.textContent || "").trim().toLowerCase();
-    if (t === "prev" || t === "next") {
-      prevNextLinks += 1;
-      if (prevNextLinks >= 2) return true;
-    }
+  if (bodyText.includes("select chapter")) return true;
+
+  // Avoid global "prev/next" checks; they are common on unrelated pages.
+  const containers = document.querySelectorAll("nav, .chapter-nav, .reader-nav, .pagination, .controls");
+  for (const container of containers) {
+    const txt = (container.textContent || "").toLowerCase();
+    if (txt.includes("prev") && txt.includes("next")) return true;
   }
-  return selectChapterText || prevNextText;
+  return false;
 }
 
 function pathLooksLikeSeriesChapterSlug(path) {
@@ -150,6 +147,14 @@ function isLikelyListingPage(path, bodyText) {
   }
   const chapterMentions = (t.match(/chapter\s+\d+/g) || []).length;
   return hitCount >= 2 || chapterMentions >= 8;
+}
+
+function isBlockedHost(host) {
+  const blocked = [
+    "google.", "youtube.", "github.", "stackoverflow.", "reddit.", "x.com", "twitter.", "facebook.", "instagram.",
+    "linkedin.", "wikipedia.", "amazon.", "microsoft.", "apple.", "netflix.", "twitch.", "discord.", "chat.openai.com",
+  ];
+  return blocked.some((d) => host.includes(d));
 }
 
 function cleanSeriesTitle(rawTitle) {
@@ -193,7 +198,7 @@ function looksLikeMangaSite(url, title) {
     const path = u.pathname.toLowerCase();
     const t = (title || "").toLowerCase();
 
-    if (host.includes("youtube.com") || host.includes("google.com") || host.includes("github.com")) {
+    if (isBlockedHost(host)) {
       return false;
     }
 
@@ -216,9 +221,9 @@ function looksLikeMangaSite(url, title) {
     if (pathHasChapter && readerLikeDom) return true;
     // Some sites use series-slug-with-number chapter paths instead of /chapter/NN.
     if (pathHasSlugChapter && hostHasHint && (readerLikeDom || readerControls || titleHasChapter)) return true;
-    // Reader controls are often a reliable fallback for chapter pages.
+    // Reader controls are a fallback only with explicit chapter signal.
     if (hostHasHint && readerControls && (pathHasChapter || pathHasSlugChapter || titleHasChapter)) return true;
-    // Host looks like manga site and strong chapter signal.
+    // Strong chapter signal with host hints.
     if (hostHasHint && (pathHasChapter || titleHasChapter) && (readerLikeDom || readerControls)) return true;
     return false;
   } catch {

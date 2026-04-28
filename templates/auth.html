@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign In - Manga Tracker</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      background: radial-gradient(circle at top right, #131d3f 0%, #06080f 45%, #03050a 100%);
+      color: #e5e7eb;
+    }
+    .card {
+      width: min(420px, 92vw);
+      background: rgba(9, 13, 25, 0.82);
+      border: 1px solid rgba(107, 114, 128, 0.24);
+      border-radius: 14px;
+      box-shadow: 0 10px 24px rgba(2, 6, 23, 0.35);
+      padding: 20px;
+    }
+    h1 { margin-top: 0; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+    .tab {
+      padding: 8px 10px;
+      border-radius: 8px;
+      text-decoration: none;
+      color: #cbd5e1;
+      background: #1f2937;
+    }
+    .tab.active { background: #2563eb; color: #fff; }
+    input {
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #374151;
+      background: #0b1220;
+      color: #f8fafc;
+      box-sizing: border-box;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      border: 0;
+      border-radius: 8px;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .error { color: #f87171; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Manga Tracker</h1>
+    <div class="tabs">
+      <a class="tab {% if mode == 'login' %}active{% endif %}" href="/auth?mode=login">Login</a>
+      <a class="tab {% if mode == 'register' %}active{% endif %}" href="/auth?mode=register">Register</a>
+    </div>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="post">
+      <input type="hidden" name="action" value="{{ 'register' if mode == 'register' else 'login' }}">
+      <input type="email" name="email" placeholder="Email" required>
+      <input type="password" name="password" placeholder="Password" required>
+      <button type="submit">{{ 'Create account' if mode == 'register' else 'Sign in' }}</button>
+    </form>
+  </div>
+</body>
+</html>
