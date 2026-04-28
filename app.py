@@ -38,6 +38,8 @@ MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
 DEFAULT_USER_EMAIL = os.getenv("DEFAULT_USER_EMAIL", "local@tracker")
 APP_DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
 DB_READY = False
+REQUIRE_API_AUTH = os.getenv("REQUIRE_API_AUTH", "0") == "1"
+CORS_ALLOW_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
 if not APP_DEBUG and not os.getenv("SECRET_KEY"):
     raise RuntimeError("SECRET_KEY must be set in production")
 
@@ -95,7 +97,14 @@ class PostgresConn:
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get("Origin", "")
-    if origin.startswith("chrome-extension://") or origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1"):
+    allow_origin = False
+    if CORS_ALLOW_ORIGINS:
+        allow_origin = origin in CORS_ALLOW_ORIGINS
+    elif origin.startswith("chrome-extension://"):
+        allow_origin = True
+    elif APP_DEBUG and (origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1")):
+        allow_origin = True
+    if allow_origin:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Vary"] = "Origin"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
@@ -122,6 +131,65 @@ def get_conn():
     return conn
 
 
+def _sqlite_bookmarks_has_global_unique_url(conn) -> bool:
+    indexes = conn.execute("PRAGMA index_list(bookmarks)").fetchall()
+    for idx in indexes:
+        # sqlite3.Row behaves like mapping; PostgreSQL does not use this branch.
+        unique = int(idx["unique"]) if "unique" in idx.keys() else 0
+        if unique != 1:
+            continue
+        idx_name = idx["name"]
+        safe_name = str(idx_name).replace('"', '""')
+        cols = conn.execute(f'PRAGMA index_info("{safe_name}")').fetchall()
+        col_names = [c["name"] for c in cols if c["name"]]
+        if col_names == ["url"]:
+            return True
+    return False
+
+
+def _migrate_sqlite_bookmarks_to_user_unique(conn) -> None:
+    # Legacy schema had global UNIQUE(url), which blocks the same series across users.
+    if not _sqlite_bookmarks_has_global_unique_url(conn):
+        return
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS bookmarks_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            title TEXT NOT NULL,
+            url TEXT NOT NULL,
+            latest_seen TEXT,
+            latest_seen_num REAL,
+            new_update INTEGER NOT NULL DEFAULT 0,
+            last_checked TEXT,
+            last_error TEXT,
+            series_key TEXT,
+            latest_seen_url TEXT,
+            cover_url TEXT,
+            latest_confidence REAL,
+            latest_parser_version TEXT,
+            latest_error_flags TEXT,
+            UNIQUE(user_id, url)
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO bookmarks_new
+        (id, user_id, title, url, latest_seen, latest_seen_num, new_update, last_checked, last_error, series_key, latest_seen_url, cover_url, latest_confidence, latest_parser_version, latest_error_flags)
+        SELECT id, user_id, title, url, latest_seen, latest_seen_num, new_update, last_checked, last_error, series_key, latest_seen_url, cover_url, latest_confidence, latest_parser_version, latest_error_flags
+        FROM bookmarks
+        """
+    )
+    conn.execute("DROP TABLE bookmarks")
+    conn.execute("ALTER TABLE bookmarks_new RENAME TO bookmarks")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_series_key ON bookmarks(series_key)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_url_unique ON bookmarks(user_id, url)")
+    conn.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db() -> None:
     if IS_POSTGRES:
         with get_conn() as conn:
@@ -142,7 +210,7 @@ def init_db() -> None:
                     id BIGSERIAL PRIMARY KEY,
                     user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
                     title TEXT NOT NULL,
-                    url TEXT NOT NULL UNIQUE,
+                    url TEXT NOT NULL,
                     latest_seen TEXT,
                     latest_seen_num DOUBLE PRECISION,
                     new_update INTEGER NOT NULL DEFAULT 0,
@@ -174,6 +242,10 @@ def init_db() -> None:
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_series_key ON bookmarks(series_key)")
+            conn.execute("ALTER TABLE bookmarks DROP CONSTRAINT IF EXISTS bookmarks_url_key")
+            conn.execute("DROP INDEX IF EXISTS bookmarks_url_key")
+            conn.execute("DROP INDEX IF EXISTS idx_bookmarks_url_unique")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_url_unique ON bookmarks(user_id, url)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_url ON bookmarks(user_id, url)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_user_id ON reading_progress(user_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_bookmark ON reading_progress(bookmark_id)")
@@ -215,7 +287,7 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
                 title TEXT NOT NULL,
-                url TEXT NOT NULL UNIQUE,
+                url TEXT NOT NULL,
                 latest_seen TEXT,
                 latest_seen_num REAL,
                 new_update INTEGER NOT NULL DEFAULT 0,
@@ -224,6 +296,7 @@ def init_db() -> None:
             )
             """
         )
+        _migrate_sqlite_bookmarks_to_user_unique(conn)
         cols = conn.execute("PRAGMA table_info(bookmarks)").fetchall()
         col_names = {c["name"] for c in cols}
         if "user_id" not in col_names:
@@ -243,6 +316,7 @@ def init_db() -> None:
         if "latest_error_flags" not in col_names:
             conn.execute("ALTER TABLE bookmarks ADD COLUMN latest_error_flags TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_url ON bookmarks(user_id, url)")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_url_unique ON bookmarks(user_id, url)")
 
         conn.execute(
             """
@@ -358,6 +432,10 @@ def get_current_user():
 
 def login_required():
     return session.get("user_id") is not None
+
+
+def api_auth_required() -> bool:
+    return not REQUIRE_API_AUTH or login_required()
 
 
 def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
@@ -899,7 +977,7 @@ def auth_page():
                 else:
                     session["user_id"] = int(user["id"])
                     return redirect(url_for("index"))
-        except sqlite3.Error:
+        except Exception:
             error = "Temporary database issue. Please try again in a few seconds."
 
     return render_template("auth.html", mode=mode, error=error)
@@ -934,7 +1012,7 @@ def index():
         session.pop("user_id", None)
         return redirect(url_for("auth_page"))
     with get_conn() as conn:
-        bookmarks = conn.execute(
+        rows = conn.execute(
             """
             SELECT b.*,
                    rp.chapter_num AS read_chapter_num,
@@ -956,7 +1034,36 @@ def index():
             ORDER BY b.id DESC
             """
         , (user_id, user_id, user_id)).fetchall()
-    return render_template("index.html", bookmarks=bookmarks, current_user=current_user)
+    bookmarks = []
+    total_unread = 0.0
+    behind_count = 0
+    for row in rows:
+        item = dict(row)
+        latest_num = item.get("latest_seen_num")
+        read_num = item.get("read_chapter_num")
+        unread = 0.0
+        if latest_num is not None and read_num is not None:
+            try:
+                unread = max(0.0, float(latest_num) - float(read_num))
+            except Exception:
+                unread = 0.0
+        if unread > 0:
+            total_unread += unread
+            behind_count += 1
+        item["unread_count"] = unread
+        item["continue_url"] = (
+            item.get("latest_seen_url")
+            if unread > 0 and item.get("latest_seen_url")
+            else item.get("read_source_url") or item.get("url")
+        )
+        bookmarks.append(item)
+    return render_template(
+        "index.html",
+        bookmarks=bookmarks,
+        current_user=current_user,
+        total_unread=int(total_unread) if total_unread.is_integer() else round(total_unread, 1),
+        behind_count=behind_count,
+    )
 
 
 @app.route("/export", methods=["GET"])
@@ -1104,6 +1211,8 @@ def delete_bookmark(bookmark_id: int):
 
 @app.route("/api/series/ensure", methods=["POST"])
 def ensure_series():
+    if not api_auth_required():
+        return jsonify({"ok": False, "error": "authentication required"}), 401
     payload = request.get_json(silent=True) or {}
     title = (payload.get("title") or "").strip()
     url = (payload.get("url") or "").strip()
@@ -1153,6 +1262,8 @@ def ensure_series():
 
 @app.route("/api/progress", methods=["POST"])
 def save_progress():
+    if not api_auth_required():
+        return jsonify({"ok": False, "error": "authentication required"}), 401
     payload = request.get_json(silent=True) or {}
     series_url = (payload.get("series_url") or "").strip()
     series_key = (payload.get("series_key") or "").strip().lower()
@@ -1263,6 +1374,8 @@ def debug_scrape():
 
 @app.route("/api/maintenance/merge-duplicates", methods=["POST"])
 def merge_duplicates():
+    if not api_auth_required():
+        return jsonify({"ok": False, "error": "authentication required"}), 401
     user_id = get_actor_user_id()
     merged_groups = 0
     deleted_bookmarks = 0
@@ -1312,8 +1425,8 @@ def merge_duplicates():
 
                 conn.execute(
                     """
-                    INSERT OR IGNORE INTO reading_progress (bookmark_id, chapter_num, chapter_label, source_url, seen_at)
-                    SELECT ?, chapter_num, chapter_label, source_url, seen_at
+                    INSERT OR IGNORE INTO reading_progress (user_id, bookmark_id, chapter_num, chapter_label, source_url, seen_at)
+                    SELECT user_id, ?, chapter_num, chapter_label, source_url, seen_at
                     FROM reading_progress
                     WHERE bookmark_id = ?
                     """,

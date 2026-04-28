@@ -48,6 +48,17 @@
       box-shadow: 0 18px 36px rgba(2, 6, 23, 0.35);
     }
     .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+      white-space: nowrap;
+    }
     input {
       padding: 10px;
       margin-right: 0;
@@ -73,6 +84,27 @@
       transition: transform 0.15s ease, opacity 0.15s ease;
     }
     button:hover { transform: translateY(-1px); opacity: 0.95; }
+    button:focus-visible, a:focus-visible, input:focus-visible {
+      outline: 2px solid #60a5fa;
+      outline-offset: 2px;
+    }
+    button.is-loading {
+      opacity: 0.75;
+      cursor: wait;
+      position: relative;
+    }
+    button.is-loading::after {
+      content: "";
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(255, 255, 255, 0.45);
+      border-top-color: #fff;
+      border-radius: 50%;
+      display: inline-block;
+      margin-left: 8px;
+      vertical-align: -2px;
+      animation: spin 0.8s linear infinite;
+    }
     .btn-primary {
       background: linear-gradient(180deg, var(--accent-1) 0%, var(--accent-2) 100%);
       color: white;
@@ -138,6 +170,9 @@
       button { padding: 8px 10px; }
       .panel { padding: 10px; border-radius: 12px; }
     }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -146,34 +181,45 @@
       <div class="brand-logo">MT</div>
       <h1>Manga/Manhwa Update Tracker</h1>
     </div>
-    <div class="small">
+    <div class="small" aria-live="polite">
       Signed in as <strong>{{ current_user["username"] or current_user["email"] }}</strong>
-      <form class="inline" action="/logout" method="post"><button class="btn-muted" type="submit">Logout</button></form>
+      <form class="inline" action="/logout" method="post"><button class="btn-muted" type="submit" data-loading-text="Logging out..." aria-label="Log out">Logout</button></form>
     </div>
+  </div>
+  <div class="panel">
+    <strong>Smart Sync:</strong>
+    {% if behind_count > 0 %}
+      You are <strong>{{ total_unread }}</strong> chapters behind across <strong>{{ behind_count }}</strong> series.
+    {% else %}
+      You are fully caught up. Nice.
+    {% endif %}
   </div>
   <div class="panel">
     <strong>Add a series:</strong> Paste a manga/manhwa URL and click Add.
   </div>
   <div class="panel">
-    <form action="/add" method="post">
+    <form action="/add" method="post" data-loading-form="true">
       <div class="row">
-        <input name="title" placeholder="Series title" required>
-        <input name="url" placeholder="Series/bookmark URL" required>
-        <button class="btn-primary" type="submit">Add</button>
+        <label class="sr-only" for="series-title">Series title</label>
+        <input id="series-title" name="title" placeholder="Series title" aria-label="Series title" required>
+        <label class="sr-only" for="series-url">Series URL</label>
+        <input id="series-url" name="url" placeholder="Series/bookmark URL" aria-label="Series URL" required>
+        <button class="btn-primary" type="submit" data-loading-text="Adding...">Add</button>
       </div>
     </form>
   </div>
   <div class="panel">
-    <form action="/check-all" method="post">
-      <button class="btn-primary" type="submit">Check All Now</button>
+    <form action="/check-all" method="post" data-loading-form="true">
+      <button class="btn-primary" type="submit" data-loading-text="Checking all...">Check All Now</button>
     </form>
   </div>
   <div class="panel">
     <div class="row">
-      <a class="btn-primary" href="/export">Export Backup JSON</a>
-      <form action="/import" method="post" enctype="multipart/form-data" class="inline">
-        <input type="file" name="backup_file" accept="application/json" required>
-        <button class="btn-muted" type="submit">Import Backup</button>
+      <a class="btn-primary" href="/export" aria-label="Export backup JSON">Export Backup JSON</a>
+      <form action="/import" method="post" enctype="multipart/form-data" class="inline" data-loading-form="true">
+        <label class="sr-only" for="backup-file">Backup file</label>
+        <input id="backup-file" type="file" name="backup_file" accept="application/json" aria-label="Backup JSON file" required>
+        <button class="btn-muted" type="submit" data-loading-text="Importing...">Import Backup</button>
       </form>
     </div>
   </div>
@@ -182,7 +228,7 @@
       <article class="series-card">
         <div class="series-main">
           {% if b["cover_url"] %}
-            <img class="cover" src="{{ b["cover_url"] }}" alt="{{ b["title"] }} cover" loading="lazy" referrerpolicy="no-referrer">
+            <img class="cover" src="{{ b["cover_url"] }}" alt="{{ b["title"] }} cover" width="84" height="112" loading="lazy" referrerpolicy="no-referrer">
           {% else %}
             <div class="cover-fallback">No Cover</div>
           {% endif %}
@@ -240,18 +286,35 @@
             </div>
 
             <div class="actions">
-              <a href="{{ b["url"] }}" target="_blank" rel="noreferrer">Open series</a>
-              <form class="inline" action="/check/{{ b["id"] }}" method="post"><button class="btn-muted" type="submit">Check</button></form>
-              <form class="inline" action="/mark-seen/{{ b["id"] }}" method="post"><button class="btn-muted" type="submit">Mark Seen</button></form>
-              <form class="inline" action="/delete/{{ b["id"] }}" method="post"><button class="btn-danger" type="submit">Delete</button></form>
+              <a href="{{ b['continue_url'] }}" target="_blank" rel="noreferrer" aria-label="Continue reading {{ b['title'] }}"><button class="btn-primary" type="button">Continue</button></a>
+              <a href="{{ b["url"] }}" target="_blank" rel="noreferrer" aria-label="Open series page for {{ b['title'] }}">Open series</a>
+              {% if b["unread_count"] > 0 %}
+                <span class="badge new">{{ b["unread_count"] }} new</span>
+              {% endif %}
+              <form class="inline" action="/check/{{ b["id"] }}" method="post" data-loading-form="true"><button class="btn-muted" type="submit" data-loading-text="Checking...">Check</button></form>
+              <form class="inline" action="/mark-seen/{{ b["id"] }}" method="post" data-loading-form="true"><button class="btn-muted" type="submit" data-loading-text="Saving...">Mark Seen</button></form>
+              <form class="inline" action="/delete/{{ b["id"] }}" method="post" data-loading-form="true"><button class="btn-danger" type="submit" data-loading-text="Deleting...">Delete</button></form>
             </div>
           </div>
         </div>
-        {% if b["last_error"] %}<div class="error">{{ b["last_error"] }}</div>{% endif %}
+        {% if b["last_error"] %}<div class="error" role="alert">Error: {{ b["last_error"] }}</div>{% endif %}
       </article>
     {% else %}
       <div class="panel">No bookmarks yet.</div>
     {% endfor %}
   </div>
+  <script>
+    document.querySelectorAll("form[data-loading-form='true']").forEach((form) => {
+      form.addEventListener("submit", () => {
+        const btn = form.querySelector("button[type='submit']");
+        if (!btn) return;
+        const text = btn.getAttribute("data-loading-text");
+        if (text) btn.dataset.originalText = btn.textContent;
+        if (text) btn.textContent = text;
+        btn.disabled = true;
+        btn.classList.add("is-loading");
+      });
+    });
+  </script>
 </body>
 </html>

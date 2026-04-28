@@ -53,6 +53,10 @@
       cursor: pointer;
       font-weight: 600;
     }
+    .btn:focus-visible {
+      outline: 2px solid #60a5fa;
+      outline-offset: 2px;
+    }
     .primary { background: #2563eb; color: white; }
     .secondary { background: #1f2937; color: white; }
     .foot { margin-top: 24px; font-size: 12px; color: #94a3b8; }
@@ -64,8 +68,8 @@
     <h1>Manga Tracker</h1>
     <p>Track manga and manhwa updates automatically in one clean dashboard.</p>
     <div class="actions">
-      <a href="/auth" class="btn primary">Get Started</a>
-      <a href="/dashboard" class="btn secondary">Open Dashboard</a>
+      <a href="/auth" class="btn primary" aria-label="Get started with Manga Tracker">Get Started</a>
+      <a href="/dashboard" class="btn secondary" aria-label="Open Manga Tracker dashboard">Open Dashboard</a>
     </div>
     <p class="foot">Early version - report bugs anytime.</p>
     <p class="foot"><a href="mailto:you@example.com" style="color:#93c5fd;">Report a bug</a></p>
