@@ -85,10 +85,18 @@
     a { color: #93c5fd; text-decoration-color: rgba(147, 197, 253, 0.55); }
     a:hover { color: #bfdbfe; }
     .empty { color: #9ca3af; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap; }
+    .small { font-size: 13px; color: #cbd5e1; }
   </style>
 </head>
 <body>
-  <h1>Manga/Manhwa Update Tracker</h1>
+  <div class="topbar">
+    <h1>Manga/Manhwa Update Tracker</h1>
+    <div class="small">
+      Signed in as <strong>{{ current_user["email"] }}</strong>
+      <form class="inline" action="/logout" method="post"><button class="btn-muted" type="submit">Logout</button></form>
+    </div>
+  </div>
   <div class="panel">
     <form action="/add" method="post">
       <div class="row">
@@ -102,6 +110,15 @@
     <form action="/check-all" method="post">
       <button class="btn-primary" type="submit">Check All Now</button>
     </form>
+  </div>
+  <div class="panel">
+    <div class="row">
+      <a class="btn-primary" href="/export">Export Backup JSON</a>
+      <form action="/import" method="post" enctype="multipart/form-data" class="inline">
+        <input type="file" name="backup_file" accept="application/json" required>
+        <button class="btn-muted" type="submit">Import Backup</button>
+      </form>
+    </div>
   </div>
   <div class="grid">
     {% for b in bookmarks %}

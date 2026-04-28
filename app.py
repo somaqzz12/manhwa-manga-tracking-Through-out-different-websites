@@ -1,6 +1,7 @@
 import os
 import re
 import sqlite3
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Optional
@@ -9,7 +10,8 @@ from urllib.parse import urljoin
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from bs4 import BeautifulSoup
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for, Response
+from werkzeug.security import check_password_hash, generate_password_hash
 
 try:
     from selenium import webdriver
@@ -25,8 +27,10 @@ URL_CHAPTER_PATTERN = re.compile(r"(?:^|[^a-z])(c|chapter|ch|episode|ep)[-_ ]?(\
 URL_CHAPTER_STEP_PATTERN = re.compile(r"^(chapter|ch|episode|ep)$", re.IGNORECASE)
 
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me")
 HTTP_TIMEOUT_SECONDS = int(os.getenv("HTTP_TIMEOUT_SECONDS", "15"))
 MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
+DEFAULT_USER_EMAIL = os.getenv("DEFAULT_USER_EMAIL", "local@tracker")
 
 
 def get_conn() -> sqlite3.Connection:
@@ -39,8 +43,19 @@ def init_db() -> None:
     with get_conn() as conn:
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS bookmarks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
                 title TEXT NOT NULL,
                 url TEXT NOT NULL UNIQUE,
                 latest_seen TEXT,
@@ -53,6 +68,9 @@ def init_db() -> None:
         )
         cols = conn.execute("PRAGMA table_info(bookmarks)").fetchall()
         col_names = {c["name"] for c in cols}
+        if "user_id" not in col_names:
+            conn.execute("ALTER TABLE bookmarks ADD COLUMN user_id INTEGER")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id)")
         if "series_key" not in col_names:
             conn.execute("ALTER TABLE bookmarks ADD COLUMN series_key TEXT")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_series_key ON bookmarks(series_key)")
@@ -65,6 +83,7 @@ def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS reading_progress (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
                 bookmark_id INTEGER NOT NULL,
                 chapter_num REAL,
                 chapter_label TEXT,
@@ -74,6 +93,25 @@ def init_db() -> None:
                 FOREIGN KEY(bookmark_id) REFERENCES bookmarks(id) ON DELETE CASCADE
             )
             """
+        )
+        progress_cols = conn.execute("PRAGMA table_info(reading_progress)").fetchall()
+        progress_names = {c["name"] for c in progress_cols}
+        if "user_id" not in progress_names:
+            conn.execute("ALTER TABLE reading_progress ADD COLUMN user_id INTEGER")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_user_id ON reading_progress(user_id)")
+
+        # Ensure a default local user exists so extension flow keeps working.
+        now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        conn.execute(
+            "INSERT OR IGNORE INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
+            (DEFAULT_USER_EMAIL, generate_password_hash("local-only"), now),
+        )
+        default_user = conn.execute("SELECT id FROM users WHERE email = ?", (DEFAULT_USER_EMAIL,)).fetchone()
+        default_user_id = default_user["id"]
+        conn.execute("UPDATE bookmarks SET user_id = ? WHERE user_id IS NULL", (default_user_id,))
+        conn.execute(
+            "UPDATE reading_progress SET user_id = ? WHERE user_id IS NULL",
+            (default_user_id,),
         )
 
 
@@ -126,6 +164,31 @@ def parse_chapter_from_url(url: str) -> Optional[float]:
         return float(match.group(2))
     except ValueError:
         return None
+
+
+def get_default_user_id() -> int:
+    with get_conn() as conn:
+        row = conn.execute("SELECT id FROM users WHERE email = ?", (DEFAULT_USER_EMAIL,)).fetchone()
+    return int(row["id"])
+
+
+def get_actor_user_id() -> int:
+    user_id = session.get("user_id")
+    if user_id:
+        return int(user_id)
+    return get_default_user_id()
+
+
+def get_current_user():
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+    with get_conn() as conn:
+        return conn.execute("SELECT id, email, created_at FROM users WHERE id = ?", (user_id,)).fetchone()
+
+
+def login_required():
+    return session.get("user_id") is not None
 
 
 def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
@@ -475,9 +538,9 @@ def scrape_latest_update(url: str) -> tuple[Optional[str], Optional[float], Opti
     return None, None, None, err
 
 
-def check_single(bookmark_id: int) -> None:
+def check_single(bookmark_id: int, user_id: int) -> None:
     with get_conn() as conn:
-        row = conn.execute("SELECT * FROM bookmarks WHERE id = ?", (bookmark_id,)).fetchone()
+        row = conn.execute("SELECT * FROM bookmarks WHERE id = ? AND user_id = ?", (bookmark_id, user_id)).fetchone()
         if not row:
             return
 
@@ -514,29 +577,29 @@ def check_single(bookmark_id: int) -> None:
         )
 
 
-def upsert_progress(bookmark_id: int, chapter_num: Optional[float], chapter_label: str, source_url: str) -> None:
+def upsert_progress(user_id: int, bookmark_id: int, chapter_num: Optional[float], chapter_label: str, source_url: str) -> None:
     if chapter_num is None:
         chapter_num = parse_chapter_number(chapter_label) or parse_chapter_from_url(source_url)
     now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
     with get_conn() as conn:
         conn.execute(
             """
-            INSERT OR IGNORE INTO reading_progress (bookmark_id, chapter_num, chapter_label, source_url, seen_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO reading_progress (user_id, bookmark_id, chapter_num, chapter_label, source_url, seen_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (bookmark_id, chapter_num, chapter_label, source_url, now),
+            (user_id, bookmark_id, chapter_num, chapter_label, source_url, now),
         )
 
 
-def check_all() -> None:
+def check_all(user_id: int) -> None:
     with get_conn() as conn:
-        rows = conn.execute("SELECT id FROM bookmarks").fetchall()
+        rows = conn.execute("SELECT id FROM bookmarks WHERE user_id = ?", (user_id,)).fetchall()
     ids = [row["id"] for row in rows]
     if not ids:
         return
     # Parallel checks significantly reduce total refresh latency.
     with ThreadPoolExecutor(max_workers=min(MAX_CHECK_WORKERS, len(ids))) as pool:
-        futures = [pool.submit(check_single, bid) for bid in ids]
+        futures = [pool.submit(check_single, bid, user_id) for bid in ids]
         for f in as_completed(futures):
             try:
                 f.result()
@@ -545,8 +608,53 @@ def check_all() -> None:
                 pass
 
 
+@app.route("/auth", methods=["GET", "POST"])
+def auth_page():
+    mode = (request.args.get("mode") or "login").strip().lower()
+    error = None
+    if request.method == "POST":
+        action = request.form.get("action", "login")
+        email = (request.form.get("email") or "").strip().lower()
+        password = request.form.get("password") or ""
+        if not email or not password:
+            error = "Email and password are required."
+        elif action == "register":
+            with get_conn() as conn:
+                exists = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+                if exists:
+                    error = "Email already exists."
+                else:
+                    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                    cursor = conn.execute(
+                        "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
+                        (email, generate_password_hash(password), now),
+                    )
+                    session["user_id"] = int(cursor.lastrowid)
+                    return redirect(url_for("index"))
+        else:
+            with get_conn() as conn:
+                user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+            if user is None or not check_password_hash(user["password_hash"], password):
+                error = "Invalid credentials."
+            else:
+                session["user_id"] = int(user["id"])
+                return redirect(url_for("index"))
+
+    return render_template("auth.html", mode=mode, error=error)
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.pop("user_id", None)
+    return redirect(url_for("auth_page"))
+
+
 @app.route("/")
 def index():
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
+    current_user = get_current_user()
     with get_conn() as conn:
         bookmarks = conn.execute(
             """
@@ -561,17 +669,111 @@ def index():
                 INNER JOIN (
                     SELECT bookmark_id, MAX(id) AS max_id
                     FROM reading_progress
+                    WHERE user_id = ?
                     GROUP BY bookmark_id
                 ) y ON y.bookmark_id = x.bookmark_id AND y.max_id = x.id
+                WHERE x.user_id = ?
             ) rp ON rp.bookmark_id = b.id
+            WHERE b.user_id = ?
             ORDER BY b.id DESC
             """
-        ).fetchall()
-    return render_template("index.html", bookmarks=bookmarks)
+        , (user_id, user_id, user_id)).fetchall()
+    return render_template("index.html", bookmarks=bookmarks, current_user=current_user)
+
+
+@app.route("/export", methods=["GET"])
+def export_data():
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
+    with get_conn() as conn:
+        bookmarks = conn.execute("SELECT * FROM bookmarks WHERE user_id = ? ORDER BY id ASC", (user_id,)).fetchall()
+        progress = conn.execute("SELECT * FROM reading_progress WHERE user_id = ? ORDER BY id ASC", (user_id,)).fetchall()
+    payload = {
+        "version": 1,
+        "exported_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "bookmarks": [dict(b) for b in bookmarks],
+        "reading_progress": [dict(p) for p in progress],
+    }
+    body = json.dumps(payload, ensure_ascii=True, indent=2)
+    return Response(
+        body,
+        mimetype="application/json",
+        headers={"Content-Disposition": 'attachment; filename="manga-tracker-backup.json"'},
+    )
+
+
+@app.route("/import", methods=["POST"])
+def import_data():
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    file = request.files.get("backup_file")
+    if file is None:
+        return redirect(url_for("index"))
+    try:
+        payload = json.loads(file.read().decode("utf-8"))
+    except Exception:
+        return redirect(url_for("index"))
+    bookmarks = payload.get("bookmarks") or []
+    progress = payload.get("reading_progress") or []
+    user_id = get_actor_user_id()
+    id_map: dict[int, int] = {}
+    with get_conn() as conn:
+        for b in bookmarks:
+            old_id = int(b.get("id") or 0)
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO bookmarks
+                (user_id, title, url, latest_seen, latest_seen_num, latest_seen_url, cover_url, new_update, last_checked, last_error, series_key)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    b.get("title"),
+                    b.get("url"),
+                    b.get("latest_seen"),
+                    b.get("latest_seen_num"),
+                    b.get("latest_seen_url"),
+                    b.get("cover_url"),
+                    b.get("new_update", 0),
+                    b.get("last_checked"),
+                    b.get("last_error"),
+                    b.get("series_key"),
+                ),
+            )
+            new_row = conn.execute(
+                "SELECT id FROM bookmarks WHERE user_id = ? AND url = ?",
+                (user_id, b.get("url")),
+            ).fetchone()
+            if old_id and new_row:
+                id_map[old_id] = int(new_row["id"])
+        for p in progress:
+            mapped_bookmark_id = id_map.get(int(p.get("bookmark_id") or 0))
+            if mapped_bookmark_id is None:
+                continue
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO reading_progress
+                (user_id, bookmark_id, chapter_num, chapter_label, source_url, seen_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    mapped_bookmark_id,
+                    p.get("chapter_num"),
+                    p.get("chapter_label"),
+                    p.get("source_url"),
+                    p.get("seen_at") or datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                ),
+            )
+    return redirect(url_for("index"))
 
 
 @app.route("/add", methods=["POST"])
 def add_bookmark():
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
     title = request.form.get("title", "").strip()
     url = request.form.get("url", "").strip()
     if not title or not url:
@@ -579,33 +781,46 @@ def add_bookmark():
 
     cover_url = scrape_series_cover(url, title)
     with get_conn() as conn:
-        conn.execute("INSERT OR IGNORE INTO bookmarks (title, url, cover_url) VALUES (?, ?, ?)", (title, url, cover_url))
+        conn.execute(
+            "INSERT OR IGNORE INTO bookmarks (user_id, title, url, cover_url) VALUES (?, ?, ?, ?)",
+            (user_id, title, url, cover_url),
+        )
     return redirect(url_for("index"))
 
 
 @app.route("/check/<int:bookmark_id>", methods=["POST"])
 def check_bookmark(bookmark_id: int):
-    check_single(bookmark_id)
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    check_single(bookmark_id, get_actor_user_id())
     return redirect(url_for("index"))
 
 
 @app.route("/check-all", methods=["POST"])
 def check_all_route():
-    check_all()
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    check_all(get_actor_user_id())
     return redirect(url_for("index"))
 
 
 @app.route("/mark-seen/<int:bookmark_id>", methods=["POST"])
 def mark_seen(bookmark_id: int):
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
     with get_conn() as conn:
-        conn.execute("UPDATE bookmarks SET new_update = 0 WHERE id = ?", (bookmark_id,))
+        conn.execute("UPDATE bookmarks SET new_update = 0 WHERE id = ? AND user_id = ?", (bookmark_id, user_id))
     return redirect(url_for("index"))
 
 
 @app.route("/delete/<int:bookmark_id>", methods=["POST"])
 def delete_bookmark(bookmark_id: int):
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
     with get_conn() as conn:
-        conn.execute("DELETE FROM bookmarks WHERE id = ?", (bookmark_id,))
+        conn.execute("DELETE FROM bookmarks WHERE id = ? AND user_id = ?", (bookmark_id, user_id))
     return redirect(url_for("index"))
 
 
@@ -618,19 +833,20 @@ def ensure_series():
     if not title or not url:
         return jsonify({"ok": False, "error": "title and url required"}), 400
 
+    user_id = get_actor_user_id()
     canonical_url = resolve_series_listing_url(url)
     cover_url = scrape_series_cover(canonical_url, title)
     with get_conn() as conn:
         existing = None
         if series_key:
             existing = conn.execute(
-                "SELECT id, title, url, series_key FROM bookmarks WHERE series_key = ?",
-                (series_key,),
+                "SELECT id, title, url, series_key FROM bookmarks WHERE user_id = ? AND series_key = ?",
+                (user_id, series_key),
             ).fetchone()
         if existing is None:
             existing = conn.execute(
-                "SELECT id, title, url, series_key FROM bookmarks WHERE url = ?",
-                (canonical_url,),
+                "SELECT id, title, url, series_key FROM bookmarks WHERE user_id = ? AND url = ?",
+                (user_id, canonical_url),
             ).fetchone()
 
         if existing is not None:
@@ -644,14 +860,16 @@ def ensure_series():
                 ).fetchone()
         else:
             cursor = conn.execute(
-                "INSERT OR IGNORE INTO bookmarks (title, url, series_key, cover_url) VALUES (?, ?, ?, ?)",
-                (title, canonical_url, series_key or None, cover_url),
+                "INSERT OR IGNORE INTO bookmarks (user_id, title, url, series_key, cover_url) VALUES (?, ?, ?, ?, ?)",
+                (user_id, title, canonical_url, series_key or None, cover_url),
             )
             created = cursor.rowcount == 1
             row = conn.execute(
-                "SELECT id, title, url, series_key, cover_url FROM bookmarks WHERE url = ?",
-                (canonical_url,),
+                "SELECT id, title, url, series_key, cover_url FROM bookmarks WHERE user_id = ? AND url = ?",
+                (user_id, canonical_url),
             ).fetchone()
+            if row is None:
+                return jsonify({"ok": False, "error": "series URL already exists under another local account"}), 409
     return jsonify({"ok": True, "created": created, "series": dict(row)})
 
 
@@ -667,12 +885,19 @@ def save_progress():
     if not series_url and not series_key:
         return jsonify({"ok": False, "error": "series_url or series_key required"}), 400
 
+    user_id = get_actor_user_id()
     with get_conn() as conn:
         row = None
         if series_key:
-            row = conn.execute("SELECT id FROM bookmarks WHERE series_key = ?", (series_key,)).fetchone()
+            row = conn.execute(
+                "SELECT id FROM bookmarks WHERE user_id = ? AND series_key = ?",
+                (user_id, series_key),
+            ).fetchone()
         if row is None and series_url:
-            row = conn.execute("SELECT id FROM bookmarks WHERE url = ?", (series_url,)).fetchone()
+            row = conn.execute(
+                "SELECT id FROM bookmarks WHERE user_id = ? AND url = ?",
+                (user_id, series_url),
+            ).fetchone()
         if not row:
             return jsonify({"ok": False, "error": "series not found (ensure step failed or key mismatch)"}), 404
         bookmark_id = row["id"]
@@ -686,7 +911,7 @@ def save_progress():
     if not chapter_label:
         chapter_label = chapter_url or "Chapter"
 
-    upsert_progress(bookmark_id, parsed_num, chapter_label, chapter_url)
+    upsert_progress(user_id, bookmark_id, parsed_num, chapter_label, chapter_url)
     with get_conn() as conn:
         current = conn.execute(
             "SELECT latest_seen_num FROM bookmarks WHERE id = ?",
@@ -760,6 +985,7 @@ def debug_scrape():
 
 @app.route("/api/maintenance/merge-duplicates", methods=["POST"])
 def merge_duplicates():
+    user_id = get_actor_user_id()
     merged_groups = 0
     deleted_bookmarks = 0
 
@@ -768,11 +994,11 @@ def merge_duplicates():
             """
             SELECT series_key, GROUP_CONCAT(id) AS ids
             FROM bookmarks
-            WHERE series_key IS NOT NULL AND TRIM(series_key) <> ''
+            WHERE user_id = ? AND series_key IS NOT NULL AND TRIM(series_key) <> ''
             GROUP BY series_key
             HAVING COUNT(*) > 1
             """
-        ).fetchall()
+        , (user_id,)).fetchall()
 
         for group in groups:
             ids = [int(x) for x in (group["ids"] or "").split(",") if x]
@@ -852,7 +1078,7 @@ def setup_scheduler() -> Optional[BackgroundScheduler]:
     )
     scheduler.start()
     # Run once at startup so users don't wait for the first interval.
-    check_all()
+    check_all(get_default_user_id())
     return scheduler
 
 
