@@ -10,7 +10,10 @@
       font-family: Inter, Segoe UI, Arial, sans-serif;
       margin: 0;
       padding: 28px;
-      background: radial-gradient(circle at top right, #131d3f 0%, #06080f 45%, #03050a 100%);
+      background:
+        radial-gradient(380px 260px at 84% -2%, rgba(56, 189, 248, 0.14), transparent 72%),
+        radial-gradient(320px 220px at 12% 0%, rgba(99, 102, 241, 0.16), transparent 70%),
+        linear-gradient(160deg, #050816 0%, #090f23 50%, #03050d 100%);
       color: #e5e7eb;
       min-height: 100vh;
     }
@@ -23,20 +26,20 @@
     }
     .panel {
       background: rgba(9, 13, 25, 0.76);
-      border: 1px solid rgba(107, 114, 128, 0.24);
+      border: 1px solid rgba(100, 116, 139, 0.28);
       backdrop-filter: blur(8px);
-      border-radius: 14px;
+      border-radius: 16px;
       padding: 14px;
       margin-bottom: 14px;
-      box-shadow: 0 10px 24px rgba(2, 6, 23, 0.35);
+      box-shadow: 0 18px 36px rgba(2, 6, 23, 0.35);
     }
     .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     input {
       padding: 10px;
       margin-right: 0;
-      border: 1px solid #3b4154;
-      border-radius: 10px;
-      background: #0b1220;
+      border: 1px solid #344156;
+      border-radius: 12px;
+      background: rgba(9, 18, 36, 0.85);
       color: #f3f4f6;
       min-width: 220px;
       outline: none;
@@ -50,22 +53,26 @@
     button {
       padding: 9px 12px;
       border: 0;
-      border-radius: 10px;
+      border-radius: 12px;
       cursor: pointer;
       font-weight: 600;
       transition: transform 0.15s ease, opacity 0.15s ease;
     }
     button:hover { transform: translateY(-1px); opacity: 0.95; }
-    .btn-primary { background: #3b82f6; color: white; }
-    .btn-muted { background: #374151; color: white; }
-    .btn-danger { background: #dc2626; color: white; }
+    .btn-primary {
+      background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.35);
+    }
+    .btn-muted { background: linear-gradient(180deg, #46566f 0%, #334155 100%); color: white; }
+    .btn-danger { background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%); color: white; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
     .series-card {
       background: linear-gradient(180deg, rgba(13, 20, 38, 0.96) 0%, rgba(7, 12, 26, 0.96) 100%);
-      border: 1px solid rgba(71, 85, 105, 0.3);
-      border-radius: 14px;
+      border: 1px solid rgba(71, 85, 105, 0.35);
+      border-radius: 16px;
       padding: 14px;
-      box-shadow: 0 10px 24px rgba(2, 6, 23, 0.35);
+      box-shadow: 0 14px 30px rgba(2, 6, 23, 0.35);
     }
     .series-head { display: flex; align-items: start; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
     .series-main { display: grid; grid-template-columns: 84px 1fr; gap: 12px; align-items: start; }

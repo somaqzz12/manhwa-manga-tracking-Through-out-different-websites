@@ -10,39 +10,63 @@
       margin: 0;
       padding: 14px;
       color: #e5e7eb;
-      background: radial-gradient(circle at top right, #16213f 0%, #0b1020 45%, #05070f 100%);
+      background:
+        radial-gradient(120px 80px at 85% 8%, rgba(56, 189, 248, 0.16), transparent 70%),
+        radial-gradient(160px 100px at 12% 0%, rgba(99, 102, 241, 0.18), transparent 70%),
+        linear-gradient(165deg, #050816 0%, #090f23 52%, #04070f 100%);
     }
-    .title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-    .sub { color: #94a3b8; font-size: 12px; margin-bottom: 12px; }
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      letter-spacing: 0.01em;
+      color: #f8fafc;
+    }
+    .sub { color: #9fb0ca; font-size: 12px; margin-bottom: 14px; }
     .row { margin-bottom: 10px; }
     input[type="text"] {
       width: 100%;
       padding: 10px;
-      border: 1px solid #344156;
-      border-radius: 10px;
-      background: #0b1327;
+      border: 1px solid #2f3c55;
+      border-radius: 12px;
+      background: rgba(9, 18, 36, 0.85);
       color: #f8fafc;
       box-sizing: border-box;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    input[type="text"]:focus {
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
     }
     button {
       width: 100%;
-      padding: 10px;
+      padding: 11px;
       border: 0;
-      border-radius: 10px;
+      border-radius: 12px;
       cursor: pointer;
       font-weight: 600;
       color: #fff;
-      background: #2563eb;
+      background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.35);
+      transition: transform 0.15s ease, filter 0.15s ease;
     }
-    button.secondary { background: #334155; }
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.05);
+    }
+    button.secondary {
+      background: linear-gradient(180deg, #46566f 0%, #334155 100%);
+      box-shadow: none;
+    }
     .status {
       min-height: 36px;
       font-size: 12px;
       color: #cbd5e1;
       padding: 8px;
-      border-radius: 8px;
-      background: rgba(15, 23, 42, 0.75);
-      border: 1px solid rgba(71, 85, 105, 0.35);
+      border-radius: 10px;
+      background: rgba(10, 19, 36, 0.75);
+      border: 1px solid rgba(71, 85, 105, 0.42);
       white-space: pre-wrap;
     }
   </style>
