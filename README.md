@@ -132,10 +132,16 @@ Google charges a **one-time $5 USD** registration fee per developer account. Aft
    (or host the same text on a simple site / GitHub Pages if you prefer a dedicated domain).
 3. **Build the upload zip** (only production files — no `generate_icons.py`):
 
+   **Easiest on Windows:** open File Explorer, go to the [`extension/`](extension/) folder, and **double-click** [`package-for-store.cmd`](extension/package-for-store.cmd). A console window opens; when it says “Done”, your zip is in `extension/dist/`.
+
+   **Or from a terminal** (must be **inside** `extension/`, not the repo root):
+
    ```powershell
-   cd extension
-   powershell -ExecutionPolicy Bypass -File .\package-for-store.ps1
+   cd c:\Users\YOUR_NAME\manga-tracker\extension
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\package-for-store.ps1
    ```
+
+   If you run the script from the wrong folder you get *manifest.json not found*. If Windows blocks scripts, the `.cmd` file bypasses that.
 
    The artifact is `extension/dist/manga-tracker-companion-v<version>.zip`. Upload that zip as a **new item** (or new version) in the dashboard.
 
