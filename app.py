@@ -1294,10 +1294,6 @@ def auth_page():
                         # carry attacker-controlled values from a fixated session.
                         session.clear()
                         session["user_id"] = new_user_id
-                        conn.execute(
-                            "INSERT OR IGNORE INTO bookmarks (user_id, title, url) VALUES (?, ?, ?)",
-                            (new_user_id, "Solo Leveling", "https://asurascans.com/comics/solo-leveling-ragnarok-560315bb"),
-                        )
                         return redirect(url_for("index"))
             else:
                 with get_conn() as conn:
