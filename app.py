@@ -5,13 +5,18 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from bs4 import BeautifulSoup
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for, Response
 from werkzeug.security import check_password_hash, generate_password_hash
+try:
+    import psycopg2
+    import psycopg2.extras
+except Exception:
+    psycopg2 = None
 
 try:
     from selenium import webdriver
@@ -31,8 +36,60 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me")
 HTTP_TIMEOUT_SECONDS = int(os.getenv("HTTP_TIMEOUT_SECONDS", "15"))
 MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
 DEFAULT_USER_EMAIL = os.getenv("DEFAULT_USER_EMAIL", "local@tracker")
-APP_DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
+APP_DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
 DB_READY = False
+if not APP_DEBUG and not os.getenv("SECRET_KEY"):
+    raise RuntimeError("SECRET_KEY must be set in production")
+
+SESSION = requests.Session()
+SESSION.headers.update({"User-Agent": USER_AGENT})
+
+SITE_PROFILES = {
+    "asurascans.com": {"chapter_selector": "ul li a, .chapters a"},
+    "mangakatana.com": {"chapter_selector": ".chapters a, .chapter-list a"},
+    "arenascan.com": {"chapter_selector": ".wp-manga-chapter a, .listing-chapters_wrap a, a"},
+    "mangadex.org": {"api": True},
+}
+
+DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://"):]
+IS_POSTGRES = bool(DATABASE_URL)
+
+
+def _adapt_query_for_postgres(query: str) -> str:
+    adapted = query.replace("INSERT OR IGNORE INTO", "INSERT INTO")
+    if "?" in adapted:
+        adapted = adapted.replace("?", "%s")
+    if "INSERT OR IGNORE INTO" in query and "ON CONFLICT" not in adapted.upper():
+        q = adapted.rstrip()
+        if q.endswith(";"):
+            q = q[:-1]
+        adapted = q + " ON CONFLICT DO NOTHING"
+    return adapted
+
+
+class PostgresConn:
+    def __init__(self) -> None:
+        if psycopg2 is None:
+            raise RuntimeError("psycopg2 is not installed but DATABASE_URL is set")
+        self.conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+
+    def execute(self, query: str, params=()):
+        cur = self.conn.cursor()
+        cur.execute(_adapt_query_for_postgres(query), params or ())
+        return cur
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, _exc, _tb):
+        if exc_type:
+            self.conn.rollback()
+        else:
+            self.conn.commit()
+        self.conn.close()
+        return False
 
 
 @app.after_request
@@ -57,13 +114,84 @@ def handle_preflight():
     return None
 
 
-def get_conn() -> sqlite3.Connection:
+def get_conn():
+    if IS_POSTGRES:
+        return PostgresConn()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db() -> None:
+    if IS_POSTGRES:
+        with get_conn() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id BIGSERIAL PRIMARY KEY,
+                    username TEXT UNIQUE,
+                    email TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS bookmarks (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+                    title TEXT NOT NULL,
+                    url TEXT NOT NULL UNIQUE,
+                    latest_seen TEXT,
+                    latest_seen_num DOUBLE PRECISION,
+                    new_update INTEGER NOT NULL DEFAULT 0,
+                    last_checked TEXT,
+                    last_error TEXT,
+                    series_key TEXT,
+                    latest_seen_url TEXT,
+                    cover_url TEXT,
+                    latest_confidence DOUBLE PRECISION,
+                    latest_parser_version TEXT,
+                    latest_error_flags TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS reading_progress (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+                    bookmark_id BIGINT REFERENCES bookmarks(id) ON DELETE CASCADE,
+                    chapter_num DOUBLE PRECISION,
+                    chapter_label TEXT,
+                    source_url TEXT,
+                    seen_at TEXT NOT NULL,
+                    UNIQUE(bookmark_id, chapter_num, source_url)
+                )
+                """
+            )
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_series_key ON bookmarks(series_key)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_url ON bookmarks(user_id, url)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_user_id ON reading_progress(user_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_bookmark ON reading_progress(bookmark_id)")
+
+            now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+            conn.execute(
+                "INSERT OR IGNORE INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
+                (DEFAULT_USER_EMAIL, generate_password_hash("local-only"), now),
+            )
+            conn.execute(
+                "UPDATE users SET username = COALESCE(username, split_part(email, '@', 1)) WHERE username IS NULL"
+            )
+            default_user = conn.execute("SELECT id FROM users WHERE email = ?", (DEFAULT_USER_EMAIL,)).fetchone()
+            default_user_id = default_user["id"]
+            conn.execute("UPDATE bookmarks SET user_id = ? WHERE user_id IS NULL", (default_user_id,))
+            conn.execute("UPDATE reading_progress SET user_id = ? WHERE user_id IS NULL", (default_user_id,))
+        return
+
     with get_conn() as conn:
         conn.execute(
             """
@@ -108,6 +236,13 @@ def init_db() -> None:
             conn.execute("ALTER TABLE bookmarks ADD COLUMN latest_seen_url TEXT")
         if "cover_url" not in col_names:
             conn.execute("ALTER TABLE bookmarks ADD COLUMN cover_url TEXT")
+        if "latest_confidence" not in col_names:
+            conn.execute("ALTER TABLE bookmarks ADD COLUMN latest_confidence REAL")
+        if "latest_parser_version" not in col_names:
+            conn.execute("ALTER TABLE bookmarks ADD COLUMN latest_parser_version TEXT")
+        if "latest_error_flags" not in col_names:
+            conn.execute("ALTER TABLE bookmarks ADD COLUMN latest_error_flags TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_url ON bookmarks(user_id, url)")
 
         conn.execute(
             """
@@ -129,6 +264,7 @@ def init_db() -> None:
         if "user_id" not in progress_names:
             conn.execute("ALTER TABLE reading_progress ADD COLUMN user_id INTEGER")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_user_id ON reading_progress(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_bookmark ON reading_progress(bookmark_id)")
 
         # Ensure a default local user exists so extension flow keeps working.
         now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
@@ -226,7 +362,7 @@ def login_required():
 
 def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
     try:
-        res = requests.get(url, timeout=HTTP_TIMEOUT_SECONDS, headers={"User-Agent": USER_AGENT})
+        res = SESSION.get(url, timeout=HTTP_TIMEOUT_SECONDS)
         res.raise_for_status()
     except Exception:
         return None
@@ -293,7 +429,7 @@ def resolve_series_listing_url(url: str) -> str:
         # Fast path: already looks like canonical series listing URL.
         return url.rstrip("/")
     try:
-        res = requests.get(url, timeout=HTTP_TIMEOUT_SECONDS, headers={"User-Agent": USER_AGENT}, allow_redirects=True)
+        res = SESSION.get(url, timeout=HTTP_TIMEOUT_SECONDS, allow_redirects=True)
         res.raise_for_status()
     except Exception:
         return url
@@ -524,21 +660,70 @@ def pick_best_candidate(soup: BeautifulSoup, page_url: str) -> tuple[Optional[st
     return info["label"], info["chapter_num"], info["chapter_url"]
 
 
-def scrape_bs4(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str]]:
+def get_profile_for_url(url: str) -> Optional[dict]:
+    host = urlparse(url).netloc.lower().replace("www.", "")
+    return SITE_PROFILES.get(host)
+
+
+def scrape_with_profile(soup: BeautifulSoup, page_url: str, profile: dict) -> dict:
+    selector = profile.get("chapter_selector")
+    if not selector:
+        return {"label": None, "chapter_num": None, "chapter_url": None, "confidence": 0.0, "parser_version": "profile-missing", "error_flags": ["missing_selector"]}
+
+    page_slug = extract_series_slug(page_url)
+    best = None
+    for node in soup.select(selector):
+        href = (node.get("href") or "").strip() if hasattr(node, "get") else ""
+        if not href:
+            continue
+        absolute = urljoin(page_url, href)
+        label = node.get_text(" ", strip=True)
+        num = parse_chapter_number(label) or parse_chapter_from_url(absolute)
+        if num is None:
+            continue
+        href_slug = extract_series_slug(absolute)
+        if page_slug and href_slug and href_slug != page_slug and page_slug not in absolute.lower():
+            continue
+        score = int(num)
+        if parse_chapter_from_url(absolute) is not None:
+            score += 6
+        if "chapter" in label.lower() or "episode" in label.lower():
+            score += 2
+        candidate = {"label": label, "chapter_num": num, "chapter_url": absolute, "score": score}
+        if best is None or candidate["score"] > best["score"]:
+            best = candidate
+
+    if best is None:
+        return {"label": None, "chapter_num": None, "chapter_url": None, "confidence": 0.0, "parser_version": "profile-selector", "error_flags": ["profile_no_match"]}
+    return {
+        "label": best["label"],
+        "chapter_num": best["chapter_num"],
+        "chapter_url": best["chapter_url"],
+        "confidence": 0.95,
+        "parser_version": "profile-selector",
+        "error_flags": [],
+    }
+
+
+def scrape_bs4(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str], dict]:
     try:
-        res = requests.get(url, timeout=HTTP_TIMEOUT_SECONDS, headers={"User-Agent": USER_AGENT})
+        res = SESSION.get(url, timeout=HTTP_TIMEOUT_SECONDS)
         res.raise_for_status()
     except Exception as exc:
-        return None, None, None, f"Request failed: {exc}"
+        return None, None, None, f"Request failed: {exc}", {}
 
     soup = BeautifulSoup(res.text, "html.parser")
-    label, num, chapter_url = pick_best_candidate(soup, url)
-    return label, num, chapter_url, None
+    profile = get_profile_for_url(url)
+    if profile and not profile.get("api"):
+        info = scrape_with_profile(soup, url, profile)
+    else:
+        info = pick_best_candidate_with_debug(soup, url)
+    return info.get("label"), info.get("chapter_num"), info.get("chapter_url"), None, info
 
 
-def scrape_selenium(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str]]:
+def scrape_selenium(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str], dict]:
     if webdriver is None or Options is None:
-        return None, None, None, "Selenium not available"
+        return None, None, None, "Selenium not available", {}
 
     options = Options()
     options.add_argument("--headless=new")
@@ -553,27 +738,27 @@ def scrape_selenium(url: str) -> tuple[Optional[str], Optional[float], Optional[
         driver.get(url)
         html = driver.page_source
         soup = BeautifulSoup(html, "html.parser")
-        label, num, chapter_url = pick_best_candidate(soup, url)
-        return label, num, chapter_url, None
+        info = pick_best_candidate_with_debug(soup, url)
+        return info.get("label"), info.get("chapter_num"), info.get("chapter_url"), None, info
     except Exception as exc:
-        return None, None, None, f"Selenium failed: {exc}"
+        return None, None, None, f"Selenium failed: {exc}", {}
     finally:
         if driver:
             driver.quit()
 
 
-def scrape_latest_update(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str]]:
-    label, num, latest_url, err = scrape_bs4(url)
+def scrape_latest_update(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str], dict]:
+    label, num, latest_url, err, info = scrape_bs4(url)
     if err is None:
-        return label, num, latest_url, None
+        return label, num, latest_url, None, info
 
     if os.getenv("USE_SELENIUM_FALLBACK", "1") == "1":
-        s_label, s_num, s_latest_url, s_err = scrape_selenium(url)
+        s_label, s_num, s_latest_url, s_err, s_info = scrape_selenium(url)
         if s_err is None:
-            return s_label, s_num, s_latest_url, None
-        return None, None, None, f"{err}; {s_err}"
+            return s_label, s_num, s_latest_url, None, s_info
+        return None, None, None, f"{err}; {s_err}", {}
 
-    return None, None, None, err
+    return None, None, None, err, {}
 
 
 def check_single(bookmark_id: int, user_id: int) -> None:
@@ -583,7 +768,7 @@ def check_single(bookmark_id: int, user_id: int) -> None:
             return
 
         effective_url = resolve_series_listing_url(row["url"])
-        label, num, latest_url, err = scrape_latest_update(effective_url)
+        label, num, latest_url, err, debug_info = scrape_latest_update(effective_url)
         cover_url = row["cover_url"]
         if not cover_url:
             scraped_cover = scrape_series_cover(effective_url, row["title"] or "")
@@ -602,18 +787,36 @@ def check_single(bookmark_id: int, user_id: int) -> None:
         previous_num = row["latest_seen_num"]
         new_update = 0
 
-        if num is not None and previous_num is not None and num > previous_num:
-            new_update = 1
+        if num is not None and previous_num is not None:
+            new_update = 1 if num > previous_num else 0
+        elif label and row["latest_seen"]:
+            new_update = 1 if str(label).strip() != str(row["latest_seen"]).strip() else 0
         if row["latest_seen"] is None:
             new_update = 0
+
+        latest_confidence = debug_info.get("confidence")
+        latest_parser_version = debug_info.get("parser_version")
+        latest_error_flags = ",".join(debug_info.get("error_flags", [])) if debug_info else None
 
         conn.execute(
             """
             UPDATE bookmarks
-            SET url = ?, latest_seen = ?, latest_seen_num = ?, latest_seen_url = ?, cover_url = ?, new_update = ?, last_checked = ?, last_error = NULL
+            SET url = ?, latest_seen = ?, latest_seen_num = ?, latest_seen_url = ?, cover_url = ?, latest_confidence = ?, latest_parser_version = ?, latest_error_flags = ?, new_update = ?, last_checked = ?, last_error = NULL
             WHERE id = ?
             """,
-            (effective_url or row["url"], label, num, latest_url, cover_url, new_update, now, bookmark_id),
+            (
+                effective_url or row["url"],
+                label,
+                num,
+                latest_url,
+                cover_url,
+                latest_confidence,
+                latest_parser_version,
+                latest_error_flags,
+                new_update,
+                now,
+                bookmark_id,
+            ),
         )
 
 
@@ -648,6 +851,13 @@ def check_all(user_id: int) -> None:
                 pass
 
 
+def check_all_users() -> None:
+    with get_conn() as conn:
+        users = conn.execute("SELECT id FROM users").fetchall()
+    for user in users:
+        check_all(int(user["id"]))
+
+
 @app.route("/auth", methods=["GET", "POST"])
 def auth_page():
     mode = (request.args.get("mode") or "login").strip().lower()
@@ -671,7 +881,12 @@ def auth_page():
                             "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
                             (username, synthetic_email, generate_password_hash(password), now),
                         )
-                        session["user_id"] = int(cursor.lastrowid)
+                        new_user_id = int(cursor.lastrowid)
+                        session["user_id"] = new_user_id
+                        conn.execute(
+                            "INSERT OR IGNORE INTO bookmarks (user_id, title, url) VALUES (?, ?, ?)",
+                            (new_user_id, "Solo Leveling", "https://asurascans.com/comics/solo-leveling-ragnarok-560315bb"),
+                        )
                         return redirect(url_for("index"))
             else:
                 with get_conn() as conn:
@@ -702,6 +917,13 @@ def healthz():
 
 
 @app.route("/")
+def home():
+    if not login_required():
+        return render_template("landing.html")
+    return redirect(url_for("index"))
+
+
+@app.route("/dashboard")
 def index():
     if not login_required():
         return redirect(url_for("auth_page"))
@@ -1002,7 +1224,7 @@ def debug_scrape():
 
     resolved_url = resolve_series_listing_url(raw_url)
     try:
-        res = requests.get(resolved_url, timeout=25, headers={"User-Agent": USER_AGENT})
+        res = SESSION.get(resolved_url, timeout=25)
         res.raise_for_status()
     except Exception as exc:
         return jsonify(
@@ -1125,17 +1347,16 @@ def setup_scheduler() -> Optional[BackgroundScheduler]:
     interval = int(os.getenv("CHECK_INTERVAL_MINUTES", "30"))
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.add_job(
-        check_all,
+        check_all_users,
         "interval",
         minutes=max(interval, 1),
-        args=[get_default_user_id()],
         id="auto-check",
         max_instances=1,
         coalesce=True,
     )
     scheduler.start()
     # Run once at startup so users don't wait for the first interval.
-    check_all(get_default_user_id())
+    check_all_users()
     return scheduler
 
 

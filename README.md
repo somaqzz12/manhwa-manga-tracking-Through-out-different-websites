@@ -77,6 +77,7 @@ Recommended env vars:
 
 - `SECRET_KEY` (required)
 - `FLASK_DEBUG=0`
+- `DATABASE_URL` (Render PostgreSQL connection string)
 - `USE_SELENIUM_FALLBACK=0`
 - `MAX_CHECK_WORKERS=6`
 - `HTTP_TIMEOUT_SECONDS=15`

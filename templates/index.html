@@ -100,6 +100,7 @@
     .cover-fallback { width: 84px; height: 112px; border-radius: 8px; border: 1px solid #1f2937; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 11px; background: #0b1220; text-align: center; padding: 6px; }
     .series-title { font-size: 18px; font-weight: 700; line-height: 1.2; margin: 0; }
     .meta { color: #94a3b8; font-size: 12px; margin-top: 4px; }
+    .meta.warn { color: #fbbf24; }
     .info-row { margin-top: 10px; padding: 10px; border-radius: 10px; background: #0b1327; border: 1px solid rgba(71, 85, 105, 0.28); }
     .label { color: #93c5fd; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }
     .value { font-size: 14px; font-weight: 600; }
@@ -151,6 +152,9 @@
     </div>
   </div>
   <div class="panel">
+    <strong>Add a series:</strong> Paste a manga/manhwa URL and click Add.
+  </div>
+  <div class="panel">
     <form action="/add" method="post">
       <div class="row">
         <input name="title" placeholder="Series title" required>
@@ -187,6 +191,15 @@
               <div>
                 <h2 class="series-title">{{ b["title"] }}</h2>
                 <div class="meta">Last checked: {{ b["last_checked"] or "-" }}</div>
+                {% if b["latest_confidence"] is not none %}
+                  <div class="meta{% if b['latest_confidence'] < 0.6 %} warn{% endif %}">
+                    Confidence: {{ b["latest_confidence"] }}
+                    {% if b["latest_parser_version"] %} | {{ b["latest_parser_version"] }}{% endif %}
+                  </div>
+                {% endif %}
+                {% if b["latest_error_flags"] %}
+                  <div class="meta warn">Warnings: {{ b["latest_error_flags"] }}</div>
+                {% endif %}
               </div>
               {% if b["new_update"] %}
                 <span class="badge new">New update</span>
