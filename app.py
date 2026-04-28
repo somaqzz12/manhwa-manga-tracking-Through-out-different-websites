@@ -443,7 +443,8 @@ def resolve_scrape_chapter_fields(
     except (TypeError, ValueError):
         return None
     disp = (label or "").strip()
-    if not disp:
+    parsed_from_label = parse_chapter_number(disp) if disp else None
+    if not disp or parsed_from_label is None:
         disp = f"Ch {int(n)}" if n.is_integer() else f"Ch {n}"
     return (n, disp, latest_url)
 

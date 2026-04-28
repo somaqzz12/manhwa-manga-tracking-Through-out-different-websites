@@ -6,13 +6,14 @@
   <title>Manga Update Tracker</title>
   <style>
     :root {
-      --bg-0: #050816;
-      --bg-1: #090f23;
-      --bg-2: #03050d;
-      --panel: rgba(9, 13, 25, 0.76);
-      --border: rgba(100, 116, 139, 0.28);
-      --text-main: #e5e7eb;
-      --text-soft: #94a3b8;
+      --bg-0: #05070d;
+      --bg-1: #0a0d15;
+      --bg-2: #111827;
+      --panel: rgba(148, 163, 184, 0.08);
+      --panel-strong: rgba(15, 23, 42, 0.62);
+      --border: rgba(148, 163, 184, 0.22);
+      --text-main: #f3f4f6;
+      --text-soft: #a5b4c7;
       --accent-1: #3b82f6;
       --accent-2: #2563eb;
       --danger-1: #ef4444;
@@ -24,8 +25,8 @@
       margin: 0;
       padding: 28px;
       background:
-        radial-gradient(380px 260px at 84% -2%, rgba(56, 189, 248, 0.14), transparent 72%),
-        radial-gradient(320px 220px at 12% 0%, rgba(99, 102, 241, 0.16), transparent 70%),
+        radial-gradient(440px 290px at 85% -2%, rgba(59, 130, 246, 0.18), transparent 72%),
+        radial-gradient(360px 240px at 10% 0%, rgba(79, 70, 229, 0.18), transparent 70%),
         linear-gradient(160deg, var(--bg-0) 0%, var(--bg-1) 50%, var(--bg-2) 100%);
       color: var(--text-main);
       min-height: 100vh;
@@ -41,13 +42,13 @@
     .panel {
       background: var(--panel);
       border: 1px solid var(--border);
-      backdrop-filter: blur(8px);
-      border-radius: 16px;
+      backdrop-filter: blur(12px);
+      border-radius: 18px;
       padding: 14px;
       margin-bottom: 14px;
-      box-shadow: 0 18px 36px rgba(2, 6, 23, 0.35);
+      box-shadow: 0 24px 48px rgba(2, 6, 23, 0.32);
     }
-    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     .sr-only {
       position: absolute;
       width: 1px;
@@ -60,11 +61,11 @@
       white-space: nowrap;
     }
     input {
-      padding: 10px;
+      padding: 12px;
       margin-right: 0;
-      border: 1px solid #344156;
+      border: 1px solid rgba(148, 163, 184, 0.3);
       border-radius: 12px;
-      background: rgba(9, 18, 36, 0.85);
+      background: rgba(15, 23, 42, 0.55);
       color: #f3f4f6;
       min-width: 220px;
       outline: none;
@@ -75,6 +76,17 @@
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
     }
     input[name="url"] { flex: 1; min-width: 320px; }
+    .search-shell {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) 2fr auto;
+      gap: 10px;
+      align-items: center;
+      background: var(--panel-strong);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 10px;
+      box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12), 0 18px 34px rgba(2, 6, 23, 0.32);
+    }
     button {
       padding: 9px 12px;
       border: 0;
@@ -108,35 +120,77 @@
     .btn-primary {
       background: linear-gradient(180deg, var(--accent-1) 0%, var(--accent-2) 100%);
       color: white;
-      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.35);
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.45);
     }
-    .btn-muted { background: linear-gradient(180deg, #46566f 0%, #334155 100%); color: white; }
+    .btn-muted { background: linear-gradient(180deg, #425069 0%, #334155 100%); color: white; }
     .btn-danger { background: linear-gradient(180deg, var(--danger-1) 0%, var(--danger-2) 100%); color: white; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+    .btn-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 9px 12px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
     .series-card {
-      background: linear-gradient(180deg, rgba(13, 20, 38, 0.96) 0%, rgba(7, 12, 26, 0.96) 100%);
-      border: 1px solid rgba(71, 85, 105, 0.35);
-      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(148, 163, 184, 0.1) 0%, rgba(15, 23, 42, 0.58) 100%);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
       padding: 14px;
-      box-shadow: 0 14px 30px rgba(2, 6, 23, 0.35);
+      box-shadow: 0 16px 34px rgba(2, 6, 23, 0.3);
       transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
     }
     .series-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 18px 34px rgba(2, 6, 23, 0.42);
-      border-color: rgba(96, 165, 250, 0.45);
+      transform: translateY(-2px) scale(1.01);
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.45), 0 20px 38px rgba(2, 6, 23, 0.42);
+      border-color: rgba(96, 165, 250, 0.55);
     }
     .series-head { display: flex; align-items: start; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-    .series-main { display: grid; grid-template-columns: 84px 1fr; gap: 12px; align-items: start; }
-    .cover { width: 84px; height: 112px; object-fit: cover; border-radius: 8px; border: 1px solid #1f2937; background: #0b1220; }
-    .cover-fallback { width: 84px; height: 112px; border-radius: 8px; border: 1px solid #1f2937; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 11px; background: #0b1220; text-align: center; padding: 6px; }
+    .series-main { display: grid; grid-template-columns: 118px 1fr; gap: 14px; align-items: start; }
+    .cover {
+      width: 118px;
+      aspect-ratio: 2 / 3;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.34);
+      background: #0b1220;
+      transition: transform 0.2s ease;
+    }
+    .series-card:hover .cover { transform: scale(1.03); }
+    .cover-fallback {
+      width: 118px;
+      aspect-ratio: 2 / 3;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.34);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #6b7280;
+      font-size: 11px;
+      background: #0b1220;
+      text-align: center;
+      padding: 6px;
+    }
     .series-title { font-size: 18px; font-weight: 700; line-height: 1.2; margin: 0; }
     .meta { color: #94a3b8; font-size: 12px; margin-top: 4px; }
     .meta.warn { color: #fbbf24; }
-    .info-row { margin-top: 10px; padding: 10px; border-radius: 10px; background: #0b1327; border: 1px solid rgba(71, 85, 105, 0.28); }
+    .info-row { margin-top: 10px; padding: 10px; border-radius: 12px; background: rgba(2, 6, 23, 0.42); border: 1px solid rgba(148, 163, 184, 0.2); }
     .label { color: #93c5fd; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }
     .value { font-size: 14px; font-weight: 600; }
-    .actions { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .actions { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .icon-btn {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+      line-height: 1;
+    }
     .badge { padding: 4px 8px; border-radius: 999px; font-size: 12px; }
     .new { background: #16a34a; color: white; }
     .none { background: #4b5563; color: white; }
@@ -163,8 +217,9 @@
       body { padding: 14px; }
       .grid { grid-template-columns: 1fr; gap: 10px; }
       .series-card { padding: 10px; border-radius: 12px; }
-      .series-main { grid-template-columns: 70px 1fr; gap: 10px; }
-      .cover, .cover-fallback { width: 70px; height: 94px; }
+      .series-main { grid-template-columns: 96px 1fr; gap: 10px; }
+      .cover, .cover-fallback { width: 96px; }
+      .search-shell { grid-template-columns: 1fr; }
       .series-title { font-size: 16px; }
       .actions { gap: 5px; }
       button { padding: 8px 10px; }
@@ -195,16 +250,13 @@
     {% endif %}
   </div>
   <div class="panel">
-    <strong>Add a series:</strong> Paste a manga/manhwa URL and click Add.
-  </div>
-  <div class="panel">
     <form action="/add" method="post" data-loading-form="true">
-      <div class="row">
+      <div class="search-shell">
         <label class="sr-only" for="series-title">Series title</label>
         <input id="series-title" name="title" placeholder="Series title" aria-label="Series title" required>
         <label class="sr-only" for="series-url">Series URL</label>
         <input id="series-url" name="url" placeholder="Series/bookmark URL" aria-label="Series URL" required>
-        <button class="btn-primary" type="submit" data-loading-text="Adding...">Add</button>
+        <button class="btn-primary" type="submit" data-loading-text="Adding...">Add Series</button>
       </div>
     </form>
   </div>
@@ -228,7 +280,7 @@
       <article class="series-card">
         <div class="series-main">
           {% if b["cover_url"] %}
-            <img class="cover" src="{{ b["cover_url"] }}" alt="{{ b["title"] }} cover" width="84" height="112" loading="lazy" referrerpolicy="no-referrer">
+            <img class="cover" src="{{ b["cover_url"] }}" alt="{{ b["title"] }} cover" width="118" height="177" loading="lazy" referrerpolicy="no-referrer">
           {% else %}
             <div class="cover-fallback">No Cover</div>
           {% endif %}
@@ -243,7 +295,7 @@
                     {% if b["latest_parser_version"] %} | {{ b["latest_parser_version"] }}{% endif %}
                   </div>
                 {% endif %}
-                {% if b["latest_error_flags"] %}
+                {% if b["latest_error_flags"] and b["latest_error_flags"] != "profile_fallback_generic" %}
                   <div class="meta warn">Warnings: {{ b["latest_error_flags"] }}</div>
                 {% endif %}
               </div>
@@ -257,11 +309,12 @@
             <div class="info-row">
               <div class="label">Latest Chapter</div>
               <div class="value">
-                {% if b["latest_seen"] %}
+                {% if b["latest_seen_num"] is not none or b["latest_seen"] %}
+                  {% set latest_text = ("Ch " ~ b["latest_seen_num"]) if b["latest_seen_num"] is not none else b["latest_seen"] %}
                   {% if b["latest_seen_url"] %}
-                    <a href="{{ b["latest_seen_url"] }}" target="_blank" rel="noreferrer">{{ b["latest_seen"] }}</a>
+                    <a href="{{ b["latest_seen_url"] }}" target="_blank" rel="noreferrer">{{ latest_text }}</a>
                   {% else %}
-                    <span>{{ b["latest_seen"] }}</span>
+                    <span>{{ latest_text }}</span>
                   {% endif %}
                 {% else %}
                   <span class="empty">No latest chapter found yet</span>
@@ -286,14 +339,14 @@
             </div>
 
             <div class="actions">
-              <a href="{{ b['continue_url'] }}" target="_blank" rel="noreferrer" aria-label="Continue reading {{ b['title'] }}"><button class="btn-primary" type="button">Continue</button></a>
+              <a href="{{ b['continue_url'] }}" target="_blank" rel="noreferrer" aria-label="Continue reading {{ b['title'] }}" class="btn-link btn-primary">Continue</a>
               <a href="{{ b["url"] }}" target="_blank" rel="noreferrer" aria-label="Open series page for {{ b['title'] }}">Open series</a>
               {% if b["unread_count"] > 0 %}
                 <span class="badge new">{{ b["unread_count"] }} new</span>
               {% endif %}
-              <form class="inline" action="/check/{{ b["id"] }}" method="post" data-loading-form="true"><button class="btn-muted" type="submit" data-loading-text="Checking...">Check</button></form>
-              <form class="inline" action="/mark-seen/{{ b["id"] }}" method="post" data-loading-form="true"><button class="btn-muted" type="submit" data-loading-text="Saving...">Mark Seen</button></form>
-              <form class="inline" action="/delete/{{ b["id"] }}" method="post" data-loading-form="true"><button class="btn-danger" type="submit" data-loading-text="Deleting...">Delete</button></form>
+              <form class="inline" action="/check/{{ b["id"] }}" method="post" data-loading-form="true"><button class="btn-muted icon-btn" type="submit" data-loading-text="..." title="Check now" aria-label="Check now">↻</button></form>
+              <form class="inline" action="/mark-seen/{{ b["id"] }}" method="post" data-loading-form="true"><button class="btn-muted icon-btn" type="submit" data-loading-text="..." title="Mark seen" aria-label="Mark seen">✓</button></form>
+              <form class="inline" action="/delete/{{ b["id"] }}" method="post" data-loading-form="true"><button class="btn-danger icon-btn" type="submit" data-loading-text="..." title="Delete" aria-label="Delete">🗑</button></form>
             </div>
           </div>
         </div>

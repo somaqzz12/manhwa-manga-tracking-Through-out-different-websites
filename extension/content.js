@@ -267,17 +267,135 @@ function getTrackDataFromPage() {
   return data;
 }
 
+function showTrackPrompt(data) {
+  return new Promise((resolve) => {
+    const existing = document.getElementById("manga-tracker-track-modal");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "manga-tracker-track-modal";
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.background = "rgba(2, 6, 23, 0.65)";
+    overlay.style.backdropFilter = "blur(4px)";
+    overlay.style.zIndex = "2147483647";
+    overlay.style.display = "flex";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.padding = "16px";
+
+    const card = document.createElement("div");
+    card.style.width = "min(520px, 96vw)";
+    card.style.background = "linear-gradient(180deg, #0b1228 0%, #0a1020 100%)";
+    card.style.border = "1px solid rgba(148, 163, 184, 0.25)";
+    card.style.borderRadius = "16px";
+    card.style.boxShadow = "0 24px 60px rgba(2, 6, 23, 0.6)";
+    card.style.padding = "18px";
+    card.style.color = "#e5e7eb";
+    card.style.fontFamily = "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+
+    const title = document.createElement("div");
+    title.textContent = "Track this series?";
+    title.style.fontSize = "22px";
+    title.style.fontWeight = "700";
+    title.style.marginBottom = "8px";
+
+    const subtitle = document.createElement("div");
+    subtitle.textContent = data.title || "Untitled series";
+    subtitle.style.fontSize = "18px";
+    subtitle.style.fontWeight = "600";
+    subtitle.style.color = "#93c5fd";
+    subtitle.style.marginBottom = "10px";
+
+    const seriesUrl = document.createElement("div");
+    seriesUrl.textContent = data.seriesUrl;
+    seriesUrl.style.fontSize = "12px";
+    seriesUrl.style.opacity = "0.8";
+    seriesUrl.style.wordBreak = "break-all";
+    seriesUrl.style.marginBottom = "16px";
+
+    const btnRow = document.createElement("div");
+    btnRow.style.display = "flex";
+    btnRow.style.gap = "10px";
+    btnRow.style.justifyContent = "flex-end";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.textContent = "Not now";
+    cancelBtn.style.border = "1px solid rgba(148, 163, 184, 0.4)";
+    cancelBtn.style.background = "#233149";
+    cancelBtn.style.color = "#e2e8f0";
+    cancelBtn.style.padding = "10px 14px";
+    cancelBtn.style.borderRadius = "10px";
+    cancelBtn.style.cursor = "pointer";
+
+    const okBtn = document.createElement("button");
+    okBtn.type = "button";
+    okBtn.textContent = "Track";
+    okBtn.style.border = "none";
+    okBtn.style.background = "linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)";
+    okBtn.style.color = "white";
+    okBtn.style.padding = "10px 16px";
+    okBtn.style.borderRadius = "10px";
+    okBtn.style.fontWeight = "700";
+    okBtn.style.cursor = "pointer";
+
+    const close = (decision) => {
+      document.removeEventListener("keydown", onKeyDown);
+      overlay.remove();
+      resolve(decision);
+    };
+
+    cancelBtn.addEventListener("click", () => close(false));
+    okBtn.addEventListener("click", () => close(true));
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) close(false);
+    });
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") close(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(okBtn);
+    card.appendChild(title);
+    card.appendChild(subtitle);
+    card.appendChild(seriesUrl);
+    card.appendChild(btnRow);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  });
+}
+
 async function saveTrackData(data) {
   if (!data) return { ok: false, error: "No trackable data on this page." };
   const promptKey = `mangaTrackerPrompt:${data.seriesUrl}:${data.chapterUrl}`;
   if (sessionStorage.getItem(promptKey) === "1") return { ok: true, skipped: true };
 
-  const seenSeriesPromptKey = `mangaTrackerSeriesPrompted:${data.seriesKey}`;
-  const seenSeriesPrompt = sessionStorage.getItem(seenSeriesPromptKey) === "1";
+  let seriesPromptStableKey = data.seriesKey || data.seriesUrl;
+  try {
+    seriesPromptStableKey = `${new URL(data.seriesUrl).hostname}:${data.seriesUrl}`;
+  } catch {}
+  const seenSeriesPromptKey = `mangaTrackerSeriesPrompted:${seriesPromptStableKey}`;
+  const snoozePromptKey = `mangaTrackerSeriesPromptSnoozed:${seriesPromptStableKey}`;
+  const snoozedUntil = Number(localStorage.getItem(snoozePromptKey) || "0");
+  if (Date.now() < snoozedUntil) {
+    sessionStorage.setItem(promptKey, "1");
+    return { ok: true, skipped: true };
+  }
+  const seenSeriesPrompt =
+    sessionStorage.getItem(seenSeriesPromptKey) === "1" ||
+    localStorage.getItem(seenSeriesPromptKey) === "1";
   if (!seenSeriesPrompt) {
-    const shouldTrack = window.confirm(`Track this series?\n\n${data.title}\n${data.seriesUrl}`);
-    if (!shouldTrack) return { ok: false, error: "User skipped tracking." };
+    const shouldTrack = await showTrackPrompt(data);
+    if (!shouldTrack) {
+      // Cooldown cancel prompts so users are not interrupted on every chapter.
+      localStorage.setItem(snoozePromptKey, String(Date.now() + 24 * 60 * 60 * 1000));
+      sessionStorage.setItem(promptKey, "1");
+      return { ok: false, error: "User skipped tracking." };
+    }
     sessionStorage.setItem(seenSeriesPromptKey, "1");
+    localStorage.setItem(seenSeriesPromptKey, "1");
   }
   sessionStorage.setItem(promptKey, "1");
 
@@ -309,13 +427,20 @@ async function maybeTrack() {
 
 let __lastUrl = "";
 let __lastAttemptAt = 0;
+let __trackInFlight = false;
 async function maybeTrackOnRouteChange() {
+  if (__trackInFlight) return;
   const now = Date.now();
   const href = window.location.href;
   if (href === __lastUrl && now - __lastAttemptAt < 1500) return;
   __lastUrl = href;
   __lastAttemptAt = now;
-  await maybeTrack();
+  __trackInFlight = true;
+  try {
+    await maybeTrack();
+  } finally {
+    __trackInFlight = false;
+  }
 }
 
 if (document.readyState === "complete" || document.readyState === "interactive") {
