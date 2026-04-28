@@ -427,6 +427,27 @@ def parse_chapter_from_url(url: str) -> Optional[float]:
         return None
 
 
+def resolve_scrape_chapter_fields(
+    label: Optional[str], num: Optional[float], latest_url: Optional[str]
+) -> Optional[tuple[float, str, Optional[str]]]:
+    """Return (chapter_num, display_label, chapter_url) only when a chapter number is known."""
+    n = num
+    if n is None and label:
+        n = parse_chapter_number(label)
+    if n is None and latest_url:
+        n = parse_chapter_from_url(latest_url)
+    if n is None:
+        return None
+    try:
+        n = float(n)
+    except (TypeError, ValueError):
+        return None
+    disp = (label or "").strip()
+    if not disp:
+        disp = f"Ch {int(n)}" if n.is_integer() else f"Ch {n}"
+    return (n, disp, latest_url)
+
+
 def get_default_user_id() -> int:
     with get_conn() as conn:
         row = conn.execute("SELECT id FROM users WHERE email = ?", (DEFAULT_USER_EMAIL,)).fetchone()
@@ -812,6 +833,22 @@ def scrape_bs4(url: str) -> tuple[Optional[str], Optional[float], Optional[str],
     profile = get_profile_for_url(url)
     if profile and not profile.get("api"):
         info = scrape_with_profile(soup, url, profile)
+        flags = set(info.get("error_flags") or [])
+        if info.get("chapter_num") is None and flags.intersection({"profile_no_match", "missing_selector"}):
+            # Site layout may have changed; generic parser often still works.
+            fallback = pick_best_candidate_with_debug(soup, url)
+            if fallback.get("chapter_num") is not None:
+                fb_flags = list(fallback.get("error_flags") or [])
+                fb_flags.append("profile_fallback_generic")
+                fallback = {**fallback, "error_flags": fb_flags}
+                info = fallback
+            else:
+                merged_flags = list(dict.fromkeys((info.get("error_flags") or []) + (fallback.get("error_flags") or [])))
+                info = {
+                    **info,
+                    "error_flags": merged_flags,
+                    "parser_version": info.get("parser_version", "") + "+tried-generic",
+                }
     else:
         info = pick_best_candidate_with_debug(soup, url)
     return info.get("label"), info.get("chapter_num"), info.get("chapter_url"), None, info
@@ -880,6 +917,33 @@ def check_single(bookmark_id: int, user_id: int) -> None:
                 conn.execute("UPDATE bookmarks SET cover_url = ? WHERE id = ?", (cover_url, bookmark_id))
             return
 
+        resolved = resolve_scrape_chapter_fields(label, num, latest_url)
+        latest_confidence = debug_info.get("confidence")
+        latest_parser_version = debug_info.get("parser_version")
+        latest_error_flags = ",".join(debug_info.get("error_flags", [])) if debug_info else None
+
+        if resolved is None:
+            # Scrape succeeded but we could not read a chapter — do not wipe good latest_* data.
+            conn.execute(
+                """
+                UPDATE bookmarks
+                SET url = ?, cover_url = ?, latest_confidence = ?, latest_parser_version = ?, latest_error_flags = ?,
+                    last_checked = ?, last_error = NULL
+                WHERE id = ?
+                """,
+                (
+                    effective_url or row["url"],
+                    cover_url,
+                    latest_confidence,
+                    latest_parser_version,
+                    latest_error_flags,
+                    now,
+                    bookmark_id,
+                ),
+            )
+            return
+
+        num, label, latest_url = resolved
         previous_num = row["latest_seen_num"]
         new_update = 0
 
@@ -889,10 +953,6 @@ def check_single(bookmark_id: int, user_id: int) -> None:
             new_update = 1 if str(label).strip() != str(row["latest_seen"]).strip() else 0
         if row["latest_seen"] is None:
             new_update = 0
-
-        latest_confidence = debug_info.get("confidence")
-        latest_parser_version = debug_info.get("parser_version")
-        latest_error_flags = ",".join(debug_info.get("error_flags", [])) if debug_info else None
 
         conn.execute(
             """
