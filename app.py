@@ -32,6 +32,7 @@ HTTP_TIMEOUT_SECONDS = int(os.getenv("HTTP_TIMEOUT_SECONDS", "15"))
 MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
 DEFAULT_USER_EMAIL = os.getenv("DEFAULT_USER_EMAIL", "local@tracker")
 APP_DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
+DB_READY = False
 
 
 @app.after_request
@@ -47,6 +48,10 @@ def add_cors_headers(response):
 
 @app.before_request
 def handle_preflight():
+    global DB_READY
+    if not DB_READY:
+        init_db()
+        DB_READY = True
     if request.method == "OPTIONS":
         return Response(status=204)
     return None
@@ -679,6 +684,10 @@ def index():
         return redirect(url_for("auth_page"))
     user_id = get_actor_user_id()
     current_user = get_current_user()
+    if current_user is None:
+        # Session can become stale after deploys or DB resets.
+        session.pop("user_id", None)
+        return redirect(url_for("auth_page"))
     with get_conn() as conn:
         bookmarks = conn.execute(
             """

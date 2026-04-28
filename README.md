@@ -1,51 +1,82 @@
-# Manga/Manhwa Update Tracker
+# Manga/Manhwa Tracker
 
-Track manga/manhwa progress across many reader sites with a Flask backend + Chrome extension.
+Track what you read across different manga/manhwa websites, detect new chapters, and keep your progress synced in one dashboard.
 
-## Local Run
+## What users get
+
+- Auto-detect chapter pages while browsing.
+- One-click series tracking.
+- Last seen chapter + latest chapter links in dashboard.
+- New update badges when a newer chapter is found.
+- Account login and backup export/import support.
+
+## For end users (Chrome)
+
+### 1) Open your tracker dashboard
+
+Use your hosted app URL (example: `https://your-app.onrender.com`).
+
+### 2) Install the extension
+
+1. Open `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked**
+4. Select the `extension` folder
+
+### 3) Connect extension to your hosted backend
+
+1. Click extension icon
+2. In **Backend URL**, paste your hosted URL
+3. Click **Save backend URL**
+4. Click **Open dashboard** to verify connection
+
+### 4) Start tracking
+
+1. Visit a chapter page on a supported site
+2. Accept the “Track this series?” prompt
+3. Open dashboard and confirm series appears
+
+## Account and data safety
+
+- Users can create accounts and sign in from the dashboard.
+- Use **Export Backup JSON** to download your data.
+- Use **Import Backup** to restore/migrate data to another account or machine.
+
+## Supported behavior
+
+- Works best on chapter/reader pages (not generic homepages).
+- Uses URL + title + DOM signals to detect chapters.
+- Uses fast HTML scraping first; Selenium fallback is optional.
+
+## If something is not working
+
+- Confirm backend URL in extension popup is correct.
+- Confirm hosted backend is healthy at `/healthz`.
+- Enable extension Debug mode and share the debug output.
+- If one site fails, share:
+  - series URL
+  - chapter URL
+  - expected chapter number
+
+## For developers / self-hosting
+
+### Local run
 
 ```bash
 pip install -r requirements.txt
 python app.py
 ```
 
-Open `http://127.0.0.1:5000`.
-
-## Production Run
-
-Use Gunicorn:
+### Production run
 
 ```bash
 gunicorn -w 2 -b 0.0.0.0:$PORT app:app
 ```
 
-Recommended environment variables:
+Recommended env vars:
 
-- `SECRET_KEY` (required in production)
+- `SECRET_KEY` (required)
 - `FLASK_DEBUG=0`
-- `PORT` (set by host, defaults to `5000`)
-- `USE_SELENIUM_FALLBACK=0` (usually disable for hosted free tiers)
+- `USE_SELENIUM_FALLBACK=0`
 - `MAX_CHECK_WORKERS=6`
 - `HTTP_TIMEOUT_SECONDS=15`
-
-## Deploy (Render quick start)
-
-1. Create a new **Web Service** from your GitHub repo.
-2. Build command: `pip install -r requirements.txt`
-3. Start command: `gunicorn -w 2 -b 0.0.0.0:$PORT app:app`
-4. Set env vars (`SECRET_KEY`, etc.).
-5. Deploy and copy your live URL (e.g. `https://your-app.onrender.com`).
-
-## Extension Setup
-
-1. Open `chrome://extensions`
-2. Enable Developer mode
-3. Click **Load unpacked**
-4. Select the `extension` folder
-5. Open extension popup and set **Backend URL** to your deployed API (or local `http://127.0.0.1:5000`)
-
-## Notes
-
-- Extension tracks chapter pages via URL/title/DOM signals.
-- Selenium is fallback-only when enabled.
-- Account + export/import backup are available in dashboard UI.
