@@ -2062,6 +2062,88 @@ def save_progress():
 
 
 @csrf.exempt
+@app.route("/api/unread-count", methods=["GET"])
+def api_unread_count():
+    """Return the total unread chapter count for the actor user.
+
+    Mirrors the dashboard aggregate (latest_seen_num minus the most recent
+    reading_progress.chapter_num per bookmark, floored at zero) so the
+    extension's badge can show the same number the user sees on the site.
+    """
+    if not api_auth_required():
+        return jsonify({"ok": False, "error": "authentication required"}), 401
+    user_id = get_actor_user_id()
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT b.id AS bookmark_id,
+                   b.title AS title,
+                   b.series_key AS series_key,
+                   b.latest_seen_num AS latest_num,
+                   b.new_update AS new_update,
+                   rp.chapter_num AS read_num
+            FROM bookmarks b
+            LEFT JOIN (
+                SELECT x.bookmark_id, x.chapter_num
+                FROM reading_progress x
+                INNER JOIN (
+                    SELECT bookmark_id, MAX(id) AS max_id
+                    FROM reading_progress
+                    WHERE user_id = ?
+                    GROUP BY bookmark_id
+                ) y ON y.bookmark_id = x.bookmark_id AND y.max_id = x.id
+                WHERE x.user_id = ?
+            ) rp ON rp.bookmark_id = b.id
+            WHERE b.user_id = ?
+            """,
+            (user_id, user_id, user_id),
+        ).fetchall()
+
+    total_unread = 0.0
+    behind_count = 0
+    series = []
+    tracked_keys = []
+    for row in rows:
+        latest_num = row["latest_num"]
+        read_num = row["read_num"]
+        sk = row["series_key"]
+        if sk:
+            tracked_keys.append(sk)
+        unread = 0.0
+        if latest_num is not None and read_num is not None:
+            try:
+                unread = max(0.0, float(latest_num) - float(read_num))
+            except (TypeError, ValueError):
+                unread = 0.0
+        elif latest_num is not None and read_num is None and row["new_update"]:
+            try:
+                unread = max(0.0, float(latest_num))
+            except (TypeError, ValueError):
+                unread = 0.0
+        if unread > 0:
+            total_unread += unread
+            behind_count += 1
+            series.append(
+                {
+                    "bookmark_id": row["bookmark_id"],
+                    "title": row["title"],
+                    "series_key": sk,
+                    "unread": int(unread) if float(unread).is_integer() else round(unread, 1),
+                }
+            )
+
+    return jsonify(
+        {
+            "ok": True,
+            "unread": int(total_unread) if float(total_unread).is_integer() else round(total_unread, 1),
+            "behind": behind_count,
+            "series": series,
+            "tracked_keys": tracked_keys,
+        }
+    )
+
+
+@csrf.exempt
 @app.route("/api/debug/scrape", methods=["POST"])
 def debug_scrape():
     if not admin_api_authorized():

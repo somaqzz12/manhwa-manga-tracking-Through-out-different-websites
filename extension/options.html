@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Manga Tracker — Settings</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      color: #e5e7eb;
+      background:
+        radial-gradient(360px 220px at 88% 4%, rgba(56, 189, 248, 0.14), transparent 70%),
+        radial-gradient(420px 260px at 8% 0%, rgba(99, 102, 241, 0.16), transparent 70%),
+        linear-gradient(165deg, #050816 0%, #090f23 52%, #04070f 100%);
+    }
+    .wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 28px 24px 80px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      background: linear-gradient(160deg, #60a5fa 0%, #2563eb 48%, #4f46e5 100%);
+      box-shadow: 0 10px 22px rgba(37, 99, 235, 0.32);
+    }
+    h1 { font-size: 22px; margin: 0; letter-spacing: 0.01em; }
+    .sub { color: #9fb0ca; font-size: 13px; margin: 0 0 24px; }
+
+    .card {
+      background: rgba(10, 19, 36, 0.7);
+      border: 1px solid rgba(71, 85, 105, 0.45);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      font-size: 15px;
+      margin: 0 0 4px;
+      letter-spacing: 0.02em;
+      color: #f8fafc;
+    }
+    .card p.help {
+      margin: 0 0 14px;
+      color: #9fb0ca;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    label.field {
+      display: block;
+      font-size: 12px;
+      color: #9fb0ca;
+      margin-bottom: 6px;
+    }
+    input[type="text"], input[type="number"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #2f3c55;
+      border-radius: 10px;
+      background: rgba(9, 18, 36, 0.85);
+      color: #f8fafc;
+      outline: none;
+      font: inherit;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    input[type="text"]:focus, input[type="number"]:focus {
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+    }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .row + .row { margin-top: 12px; }
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid #2f3c55;
+      border-radius: 10px;
+      background: rgba(9, 18, 36, 0.6);
+      cursor: pointer;
+      user-select: none;
+    }
+    .toggle input { transform: scale(1.1); }
+    .toggle .label { font-size: 13px; }
+    .toggle .hint { font-size: 11.5px; color: #9fb0ca; }
+
+    button {
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #fff;
+      background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.3);
+      transition: transform 0.15s ease, filter 0.15s ease;
+      font: inherit;
+    }
+    button:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    button.secondary {
+      background: linear-gradient(180deg, #46566f 0%, #334155 100%);
+      box-shadow: none;
+    }
+    button.danger {
+      background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+      box-shadow: 0 8px 18px rgba(185, 28, 28, 0.3);
+    }
+    .status {
+      min-height: 18px;
+      font-size: 12px;
+      color: #9fb0ca;
+      margin-top: 10px;
+    }
+    .status.ok { color: #86efac; }
+    .status.error { color: #fca5a5; }
+
+    .debug-log {
+      max-height: 320px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      background: rgba(2, 6, 23, 0.55);
+      border: 1px solid rgba(71, 85, 105, 0.4);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .debug-row {
+      padding: 6px 4px;
+      border-bottom: 1px dashed rgba(71, 85, 105, 0.25);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .debug-row:last-child { border-bottom: 0; }
+    .debug-row .ts { color: #93c5fd; margin-right: 8px; }
+    .debug-row .lvl-error { color: #fca5a5; }
+    .debug-row .lvl-info { color: #cbd5f5; }
+    .debug-empty { color: #6b7894; font-style: italic; padding: 8px 4px; }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <div class="logo">MT</div>
+      <div>
+        <h1>Manga Tracker — Settings</h1>
+        <div class="sub">Configure how the companion talks to your self-hosted backend.</div>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2>Backend</h2>
+      <p class="help">URL of your Manga Tracker server. The popup pings <code>/healthz</code> here and the badge polls <code>/api/unread-count</code>.</p>
+      <label class="field" for="apiBase">Backend URL</label>
+      <input id="apiBase" type="text" placeholder="https://your-app.example.com">
+      <div class="toolbar">
+        <button id="saveApiBase">Save backend URL</button>
+        <button class="secondary" id="testConnection">Test connection</button>
+      </div>
+      <div id="apiStatus" class="status"></div>
+    </section>
+
+    <section class="card">
+      <h2>Tracking behavior</h2>
+      <p class="help">Auto-track silently records progress without showing the prompt. Cooldown controls how long "Not now" stays snoozed.</p>
+      <label class="toggle" for="autoTrack">
+        <input id="autoTrack" type="checkbox">
+        <span>
+          <span class="label">Silent auto-track</span><br>
+          <span class="hint">Track recognized chapter pages without prompting.</span>
+        </span>
+      </label>
+      <div class="row" style="margin-top: 14px;">
+        <div style="flex: 1;">
+          <label class="field" for="cooldownHours">Prompt cooldown (hours)</label>
+          <input id="cooldownHours" type="number" min="0" step="0.5" value="24">
+        </div>
+        <button id="saveBehavior" style="align-self: flex-end;">Save</button>
+      </div>
+      <div id="behaviorStatus" class="status"></div>
+    </section>
+
+    <section class="card">
+      <h2>Local data</h2>
+      <p class="help">Wipes the extension's locally stored settings, debug log, and snooze records. Does not touch your backend.</p>
+      <div class="toolbar">
+        <button class="danger" id="clearData">Clear local data</button>
+      </div>
+      <div id="dataStatus" class="status"></div>
+    </section>
+
+    <section class="card">
+      <h2>Debug log</h2>
+      <p class="help">The most recent 25 events the extension recorded. Useful when something doesn't sync.</p>
+      <div id="debugLog" class="debug-log"></div>
+      <div class="toolbar">
+        <button class="secondary" id="refreshLog">Refresh</button>
+        <button class="secondary" id="copyLog">Copy</button>
+        <button class="danger" id="clearLog">Clear log</button>
+      </div>
+      <div id="logStatus" class="status"></div>
+    </section>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
