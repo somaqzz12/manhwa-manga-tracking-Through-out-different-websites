@@ -2,6 +2,7 @@ import os
 import re
 import sqlite3
 import json
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Optional
@@ -44,6 +45,9 @@ MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
 DEFAULT_USER_EMAIL = os.getenv("DEFAULT_USER_EMAIL", "local@tracker")
 APP_DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
 DB_READY = False
+DB_INIT_LOCK = threading.Lock()
+CHECK_SINGLE_LOCKS: dict[int, threading.Lock] = {}
+CHECK_SINGLE_LOCKS_GUARD = threading.Lock()
 REQUIRE_API_AUTH = os.getenv("REQUIRE_API_AUTH", "0") == "1"
 CORS_ALLOW_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
 if not APP_DEBUG and not os.getenv("SECRET_KEY"):
@@ -132,10 +136,7 @@ def add_cors_headers(response):
 
 @app.before_request
 def handle_preflight():
-    global DB_READY
-    if not DB_READY:
-        init_db()
-        DB_READY = True
+    ensure_db_ready()
     if request.method == "OPTIONS":
         return Response(status=204)
     return None
@@ -150,17 +151,23 @@ def get_conn():
 
 
 def _sqlite_bookmarks_has_global_unique_url(conn) -> bool:
-    indexes = conn.execute("PRAGMA index_list(bookmarks)").fetchall()
-    for idx in indexes:
-        # sqlite3.Row behaves like mapping; PostgreSQL does not use this branch.
-        unique = int(idx["unique"]) if "unique" in idx.keys() else 0
-        if unique != 1:
+    table_sql_row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+        ("bookmarks",),
+    ).fetchone()
+    table_sql = (table_sql_row["sql"] or "") if table_sql_row else ""
+    if re.search(r"UNIQUE\s*\(\s*url\s*\)", table_sql, re.IGNORECASE):
+        return True
+
+    index_rows = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
+        ("bookmarks",),
+    ).fetchall()
+    for row in index_rows:
+        sql = (row["sql"] or "").strip()
+        if not sql:
             continue
-        idx_name = idx["name"]
-        safe_name = str(idx_name).replace('"', '""')
-        cols = conn.execute(f'PRAGMA index_info("{safe_name}")').fetchall()
-        col_names = [c["name"] for c in cols if c["name"]]
-        if col_names == ["url"]:
+        if re.search(r"UNIQUE\s+INDEX\s+.+\(\s*url\s*\)", sql, re.IGNORECASE):
             return True
     return False
 
@@ -376,6 +383,17 @@ def init_db() -> None:
         )
 
 
+def ensure_db_ready() -> None:
+    global DB_READY
+    if DB_READY:
+        return
+    with DB_INIT_LOCK:
+        if DB_READY:
+            return
+        init_db()
+        DB_READY = True
+
+
 def parse_chapter_number(text: str) -> Optional[float]:
     match = CHAPTER_PATTERN.search(text or "")
     if not match:
@@ -425,6 +443,14 @@ def parse_chapter_from_url(url: str) -> Optional[float]:
         return float(match.group(2))
     except ValueError:
         return None
+
+
+def is_valid_http_url(raw_url: str) -> bool:
+    try:
+        parsed = urlparse((raw_url or "").strip())
+        return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+    except Exception:
+        return False
 
 
 def resolve_scrape_chapter_fields(
@@ -896,6 +922,13 @@ def scrape_latest_update(url: str) -> tuple[Optional[str], Optional[float], Opti
 
 
 def check_single(bookmark_id: int, user_id: int) -> None:
+    with CHECK_SINGLE_LOCKS_GUARD:
+        lock = CHECK_SINGLE_LOCKS.setdefault(bookmark_id, threading.Lock())
+    with lock:
+        _check_single_locked(bookmark_id, user_id)
+
+
+def _check_single_locked(bookmark_id: int, user_id: int) -> None:
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM bookmarks WHERE id = ? AND user_id = ?", (bookmark_id, user_id)).fetchone()
         if not row:
@@ -1009,6 +1042,7 @@ def check_all(user_id: int) -> None:
 
 
 def check_all_users() -> None:
+    ensure_db_ready()
     with get_conn() as conn:
         users = conn.execute("SELECT id FROM users").fetchall()
     for user in users:
@@ -1195,6 +1229,9 @@ def import_data():
     with get_conn() as conn:
         for b in bookmarks:
             old_id = int(b.get("id") or 0)
+            raw_url = (b.get("url") or "").strip()
+            if not is_valid_http_url(raw_url):
+                continue
             conn.execute(
                 """
                 INSERT OR IGNORE INTO bookmarks
@@ -1204,7 +1241,7 @@ def import_data():
                 (
                     user_id,
                     b.get("title"),
-                    b.get("url"),
+                    raw_url,
                     b.get("latest_seen"),
                     b.get("latest_seen_num"),
                     b.get("latest_seen_url"),
@@ -1217,7 +1254,7 @@ def import_data():
             )
             new_row = conn.execute(
                 "SELECT id FROM bookmarks WHERE user_id = ? AND url = ?",
-                (user_id, b.get("url")),
+                (user_id, raw_url),
             ).fetchone()
             if old_id and new_row:
                 id_map[old_id] = int(new_row["id"])
@@ -1250,14 +1287,13 @@ def add_bookmark():
     user_id = get_actor_user_id()
     title = request.form.get("title", "").strip()
     url = request.form.get("url", "").strip()
-    if not title or not url:
+    if not title or not is_valid_http_url(url):
         return redirect(url_for("index"))
 
-    cover_url = scrape_series_cover(url, title)
     with get_conn() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO bookmarks (user_id, title, url, cover_url) VALUES (?, ?, ?, ?)",
-            (user_id, title, url, cover_url),
+            (user_id, title, url, None),
         )
     return redirect(url_for("index"))
 
@@ -1417,6 +1453,8 @@ def save_progress():
 
 @app.route("/api/debug/scrape", methods=["POST"])
 def debug_scrape():
+    if not api_auth_required():
+        return jsonify({"ok": False, "error": "authentication required"}), 401
     payload = request.get_json(silent=True) or {}
     raw_url = (payload.get("url") or "").strip()
     if not raw_url:
@@ -1470,15 +1508,16 @@ def merge_duplicates():
     deleted_bookmarks = 0
 
     with get_conn() as conn:
-        groups = conn.execute(
-            """
-            SELECT series_key, GROUP_CONCAT(id) AS ids
+        group_query = """
+            SELECT series_key, {agg} AS ids
             FROM bookmarks
             WHERE user_id = ? AND series_key IS NOT NULL AND TRIM(series_key) <> ''
             GROUP BY series_key
             HAVING COUNT(*) > 1
-            """
-        , (user_id,)).fetchall()
+        """.format(
+            agg="STRING_AGG(CAST(id AS TEXT), ',')" if IS_POSTGRES else "GROUP_CONCAT(id)"
+        )
+        groups = conn.execute(group_query, (user_id,)).fetchall()
 
         for group in groups:
             ids = [int(x) for x in (group["ids"] or "").split(",") if x]
@@ -1563,7 +1602,7 @@ def setup_scheduler() -> Optional[BackgroundScheduler]:
 
 
 if __name__ == "__main__":
-    init_db()
+    ensure_db_ready()
     if not APP_DEBUG or os.getenv("WERKZEUG_RUN_MAIN") == "true":
         setup_scheduler()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=APP_DEBUG)
