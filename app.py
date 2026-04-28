@@ -637,32 +637,35 @@ def auth_page():
     mode = (request.args.get("mode") or "login").strip().lower()
     error = None
     if request.method == "POST":
-        action = request.form.get("action", "login")
-        email = (request.form.get("email") or "").strip().lower()
-        password = request.form.get("password") or ""
-        if not email or not password:
-            error = "Email and password are required."
-        elif action == "register":
-            with get_conn() as conn:
-                exists = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
-                if exists:
-                    error = "Email already exists."
-                else:
-                    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
-                    cursor = conn.execute(
-                        "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-                        (email, generate_password_hash(password), now),
-                    )
-                    session["user_id"] = int(cursor.lastrowid)
-                    return redirect(url_for("index"))
-        else:
-            with get_conn() as conn:
-                user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-            if user is None or not check_password_hash(user["password_hash"], password):
-                error = "Invalid credentials."
+        try:
+            action = request.form.get("action", "login")
+            email = (request.form.get("email") or "").strip().lower()
+            password = request.form.get("password") or ""
+            if not email or not password:
+                error = "Email and password are required."
+            elif action == "register":
+                with get_conn() as conn:
+                    exists = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+                    if exists:
+                        error = "Email already exists."
+                    else:
+                        now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                        cursor = conn.execute(
+                            "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
+                            (email, generate_password_hash(password), now),
+                        )
+                        session["user_id"] = int(cursor.lastrowid)
+                        return redirect(url_for("index"))
             else:
-                session["user_id"] = int(user["id"])
-                return redirect(url_for("index"))
+                with get_conn() as conn:
+                    user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+                if user is None or not check_password_hash(user["password_hash"], password):
+                    error = "Invalid credentials."
+                else:
+                    session["user_id"] = int(user["id"])
+                    return redirect(url_for("index"))
+        except sqlite3.Error:
+            error = "Temporary database issue. Please try again in a few seconds."
 
     return render_template("auth.html", mode=mode, error=error)
 
