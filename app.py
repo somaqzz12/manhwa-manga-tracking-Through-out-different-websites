@@ -1,0 +1,864 @@
+import os
+import re
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from typing import Optional
+from urllib.parse import urljoin
+
+import requests
+from apscheduler.schedulers.background import BackgroundScheduler
+from bs4 import BeautifulSoup
+from flask import Flask, jsonify, redirect, render_template, request, url_for
+
+try:
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+except Exception:
+    webdriver = None
+    Options = None
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "tracker.db")
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+CHAPTER_PATTERN = re.compile(r"(chapter|ch\.?|ep\.?|episode)\s*[:#-]?\s*(\d+(?:\.\d+)?)", re.IGNORECASE)
+URL_CHAPTER_PATTERN = re.compile(r"(?:^|[^a-z])(c|chapter|ch|episode|ep)[-_ ]?(\d+(?:\.\d+)?)$", re.IGNORECASE)
+URL_CHAPTER_STEP_PATTERN = re.compile(r"^(chapter|ch|episode|ep)$", re.IGNORECASE)
+
+app = Flask(__name__)
+HTTP_TIMEOUT_SECONDS = int(os.getenv("HTTP_TIMEOUT_SECONDS", "15"))
+MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
+
+
+def get_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db() -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bookmarks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL UNIQUE,
+                latest_seen TEXT,
+                latest_seen_num REAL,
+                new_update INTEGER NOT NULL DEFAULT 0,
+                last_checked TEXT,
+                last_error TEXT
+            )
+            """
+        )
+        cols = conn.execute("PRAGMA table_info(bookmarks)").fetchall()
+        col_names = {c["name"] for c in cols}
+        if "series_key" not in col_names:
+            conn.execute("ALTER TABLE bookmarks ADD COLUMN series_key TEXT")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_series_key ON bookmarks(series_key)")
+        if "latest_seen_url" not in col_names:
+            conn.execute("ALTER TABLE bookmarks ADD COLUMN latest_seen_url TEXT")
+        if "cover_url" not in col_names:
+            conn.execute("ALTER TABLE bookmarks ADD COLUMN cover_url TEXT")
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reading_progress (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bookmark_id INTEGER NOT NULL,
+                chapter_num REAL,
+                chapter_label TEXT,
+                source_url TEXT,
+                seen_at TEXT NOT NULL,
+                UNIQUE(bookmark_id, chapter_num, source_url),
+                FOREIGN KEY(bookmark_id) REFERENCES bookmarks(id) ON DELETE CASCADE
+            )
+            """
+        )
+
+
+def parse_chapter_number(text: str) -> Optional[float]:
+    match = CHAPTER_PATTERN.search(text or "")
+    if not match:
+        return None
+    try:
+        return float(match.group(2))
+    except ValueError:
+        return None
+
+
+def parse_chapter_from_url(url: str) -> Optional[float]:
+    raw_url = (url or "").strip()
+    if not raw_url:
+        return None
+    path = raw_url
+    if "://" in raw_url:
+        try:
+            from urllib.parse import urlparse
+
+            path = urlparse(raw_url).path
+        except Exception:
+            path = raw_url
+    tokens = [t for t in path.strip("/").split("/") if t]
+    if not tokens:
+        return None
+
+    # Pattern: /.../chapter/39 or /.../ep/12.5
+    if len(tokens) >= 2 and URL_CHAPTER_STEP_PATTERN.match(tokens[-2]):
+        try:
+            return float(tokens[-1])
+        except ValueError:
+            pass
+
+    # Pattern: /.../c156 or /.../chapter-156
+    tail = tokens[-1]
+    match = URL_CHAPTER_PATTERN.search(tail)
+    if not match:
+        # Fallback for mixed separators in full path.
+        match = re.search(r"(?:chapter|ch|episode|ep)[^0-9]{0,3}(\d+(?:\.\d+)?)", path, re.IGNORECASE)
+        if match:
+            try:
+                return float(match.group(1))
+            except ValueError:
+                return None
+        return None
+    try:
+        return float(match.group(2))
+    except ValueError:
+        return None
+
+
+def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
+    try:
+        res = requests.get(url, timeout=HTTP_TIMEOUT_SECONDS, headers={"User-Agent": USER_AGENT})
+        res.raise_for_status()
+    except Exception:
+        return None
+
+    soup = BeautifulSoup(res.text, "html.parser")
+    meta_candidates = [
+        ('meta[property="og:image"]', "content"),
+        ('meta[name="og:image"]', "content"),
+        ('meta[name="twitter:image"]', "content"),
+        ('meta[property="twitter:image"]', "content"),
+        ('link[rel="image_src"]', "href"),
+    ]
+    for selector, attr in meta_candidates:
+        node = soup.select_one(selector)
+        value = node.get(attr) if node else None
+        if value:
+            return urljoin(url, value.strip())
+
+    title_tokens = {t for t in re.split(r"[^a-z0-9]+", (series_title or "").lower()) if len(t) >= 3}
+    best_src: Optional[str] = None
+    best_score = -10
+    for img in soup.select("img"):
+        src = (img.get("src") or img.get("data-src") or "").strip()
+        if not src:
+            continue
+        full_src = urljoin(url, src)
+        hay = " ".join(
+            [
+                src.lower(),
+                " ".join(img.get("class", [])) if img.get("class") else "",
+                (img.get("alt") or "").lower(),
+                (img.get("title") or "").lower(),
+            ]
+        )
+        score = 0
+        if re.search(r"cover|poster|thumb|thumbnail|wp-post-image|featured", hay, re.IGNORECASE):
+            score += 4
+        if re.search(r"logo|icon|avatar|banner|ads?|sprite", hay, re.IGNORECASE):
+            score -= 5
+        if title_tokens and any(token in hay for token in title_tokens):
+            score += 3
+        width = img.get("width")
+        height = img.get("height")
+        try:
+            if width and int(width) >= 180:
+                score += 1
+            if height and int(height) >= 240:
+                score += 1
+        except Exception:
+            pass
+        if score > best_score:
+            best_score = score
+            best_src = full_src
+    if best_src and best_score >= 0:
+        return best_src
+    return None
+
+
+def resolve_series_listing_url(url: str) -> str:
+    """Best-effort canonical series URL resolution for sites with chapter-style slugs."""
+    try:
+        res = requests.get(url, timeout=HTTP_TIMEOUT_SECONDS, headers={"User-Agent": USER_AGENT}, allow_redirects=True)
+        res.raise_for_status()
+    except Exception:
+        return url
+
+    final_url = str(res.url or url).strip()
+    soup = BeautifulSoup(res.text, "html.parser")
+    candidates: list[str] = []
+    canonical = soup.select_one('link[rel="canonical"]')
+    if canonical and canonical.get("href"):
+        candidates.append(canonical.get("href", "").strip())
+    og_url = soup.select_one('meta[property="og:url"]')
+    if og_url and og_url.get("content"):
+        candidates.append(og_url.get("content", "").strip())
+    candidates.append(final_url)
+    candidates.append(url)
+
+    def is_chapter_like(raw: str) -> bool:
+        path = raw.lower()
+        return bool(
+            re.search(r"/(?:chapter|ch|episode|ep)[-_ /]?\d", path)
+            or re.search(r"/c\d+(?:\.\d+)?(?:/|$)", path)
+            or re.search(r"-chapter-\d+(?:\.\d+)?(?:/|$)", path)
+            or re.search(r"-\d+(?:\.\d+)?/?$", path)
+        )
+
+    preferred = [c for c in candidates if "/manga/" in c.lower() or "/comics/" in c.lower()]
+    if preferred:
+        return preferred[0].rstrip("/")
+
+    base_slug = extract_series_slug(url)
+    if base_slug:
+        for a in soup.select("a[href]"):
+            href = (a.get("href") or "").strip()
+            if not href:
+                continue
+            absolute = urljoin(final_url or url, href)
+            lowered = absolute.lower()
+            if "/manga/" not in lowered and "/comics/" not in lowered:
+                continue
+            href_slug = extract_series_slug(absolute)
+            if href_slug and (href_slug == base_slug or base_slug in href_slug or href_slug in base_slug):
+                return absolute.rstrip("/")
+
+    for c in candidates:
+        if c and not is_chapter_like(c):
+            return c.rstrip("/")
+    return final_url.rstrip("/") if final_url else url
+
+
+def extract_series_slug(raw_url: str) -> str:
+    try:
+        from urllib.parse import urlparse
+
+        path = urlparse(raw_url).path.strip("/")
+    except Exception:
+        path = (raw_url or "").strip("/")
+    if not path:
+        return ""
+    parts = [p for p in path.split("/") if p]
+    if not parts:
+        return ""
+    if parts[0].lower() in {"manga", "comics"} and len(parts) >= 2:
+        slug = parts[1]
+    else:
+        slug = parts[-1]
+    slug = re.sub(r"-chapter-\d+(?:\.\d+)?$", "", slug, flags=re.IGNORECASE)
+    slug = re.sub(r"[-_]\d+(?:\.\d+)?$", "", slug, flags=re.IGNORECASE)
+    return slug.lower()
+
+
+def iter_chapter_candidates(soup: BeautifulSoup, page_url: str) -> list[tuple[str, str, str]]:
+    """Return chapter candidates as (label, absolute_url, class_text)."""
+    out: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    # Common case: direct chapter links.
+    for a in soup.select("a[href]"):
+        href = (a.get("href") or "").strip()
+        if not href:
+            continue
+        abs_href = urljoin(page_url, href)
+        label = a.get_text(" ", strip=True) or ""
+        class_text = " ".join(a.get("class", [])) if a.get("class") else ""
+        key = (label, abs_href)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((label, abs_href, class_text))
+
+    # Some readers render chapter list in <select><option value="...">.
+    for opt in soup.select("option[value]"):
+        value = (opt.get("value") or "").strip()
+        if not value or value.startswith("#"):
+            continue
+        abs_href = urljoin(page_url, value)
+        label = opt.get_text(" ", strip=True) or ""
+        key = (label, abs_href)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((label, abs_href, "option"))
+
+    # Fallback: data attributes often hold chapter URLs.
+    for node in soup.select("[data-href], [data-url], [data-link]"):
+        raw = (node.get("data-href") or node.get("data-url") or node.get("data-link") or "").strip()
+        if not raw:
+            continue
+        abs_href = urljoin(page_url, raw)
+        label = node.get_text(" ", strip=True) or ""
+        class_text = " ".join(node.get("class", [])) if node.get("class") else ""
+        key = (label, abs_href)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((label, abs_href, class_text))
+
+    return out
+
+
+def pick_best_candidate_with_debug(soup: BeautifulSoup, page_url: str) -> dict:
+    page_slug = extract_series_slug(page_url)
+    best_label: Optional[str] = None
+    best_num: Optional[float] = None
+    best_url: Optional[str] = None
+    best_score = -1
+    parser_hits = {"anchors": 0, "options": 0, "data_attrs": 0}
+    candidate_debug: list[dict] = []
+    error_flags: list[str] = []
+
+    for text, absolute_href, class_text in iter_chapter_candidates(soup, page_url):
+        if "option" in class_text:
+            parser_hits["options"] += 1
+        elif "data-" in class_text:
+            parser_hits["data_attrs"] += 1
+        else:
+            parser_hits["anchors"] += 1
+
+        if not text or len(text) > 140:
+            continue
+        parsed_from_text = parse_chapter_number(text)
+        parsed_from_url = parse_chapter_from_url(absolute_href)
+        if parsed_from_text is None and parsed_from_url is None:
+            continue
+
+        final_num = parsed_from_text if parsed_from_text is not None else parsed_from_url
+        if final_num is None:
+            continue
+
+        href_slug = extract_series_slug(absolute_href) if absolute_href else ""
+        score = 0
+        if parsed_from_url is not None:
+            score += 3
+        if re.search(r"chapter|episode|list|item", class_text, re.IGNORECASE):
+            score += 2
+        if page_slug and href_slug:
+            if page_slug == href_slug or page_slug in absolute_href.lower():
+                score += 5
+            else:
+                continue
+        score += int(final_num)
+
+        candidate_debug.append(
+            {
+                "label": text,
+                "url": absolute_href,
+                "chapter_num": final_num,
+                "score": score,
+                "same_series": bool(not page_slug or (href_slug and (href_slug == page_slug or page_slug in absolute_href.lower()))),
+            }
+        )
+
+        if score > best_score or (score == best_score and (best_num is None or final_num > best_num)):
+            best_score = score
+            best_label = text
+            best_num = final_num
+            best_url = absolute_href or None
+
+    if not candidate_debug:
+        error_flags.append("no_chapter_candidates")
+    elif len(candidate_debug) > 400:
+        error_flags.append("high_candidate_volume")
+
+    confidence = 0.0
+    if best_num is not None:
+        confidence = 0.55
+        if best_url and page_slug and page_slug in best_url.lower():
+            confidence += 0.2
+        if candidate_debug:
+            top_scores = sorted([c["score"] for c in candidate_debug], reverse=True)
+            if len(top_scores) == 1:
+                confidence += 0.2
+            else:
+                gap = top_scores[0] - top_scores[1]
+                if gap >= 6:
+                    confidence += 0.2
+                elif gap >= 3:
+                    confidence += 0.12
+                else:
+                    confidence += 0.05
+        if best_url and parse_chapter_from_url(best_url) is not None:
+            confidence += 0.08
+    confidence = max(0.0, min(0.99, round(confidence, 2)))
+
+    if parser_hits["options"] > 0:
+        parser_version = "generic-option-list"
+    elif parser_hits["data_attrs"] > 0:
+        parser_version = "generic-data-attrs"
+    else:
+        parser_version = "generic-anchor-list"
+
+    if best_label is None:
+        fallback_title = soup.title.string.strip() if soup.title and soup.title.string else "No chapter pattern found"
+        best_label = fallback_title
+
+    return {
+        "label": best_label,
+        "chapter_num": best_num,
+        "chapter_url": best_url,
+        "confidence": confidence,
+        "parser_version": parser_version,
+        "candidates": sorted(candidate_debug, key=lambda c: c["score"], reverse=True),
+        "error_flags": error_flags,
+    }
+
+
+def pick_best_candidate(soup: BeautifulSoup, page_url: str) -> tuple[Optional[str], Optional[float], Optional[str]]:
+    info = pick_best_candidate_with_debug(soup, page_url)
+    return info["label"], info["chapter_num"], info["chapter_url"]
+
+
+def scrape_bs4(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str]]:
+    try:
+        res = requests.get(url, timeout=HTTP_TIMEOUT_SECONDS, headers={"User-Agent": USER_AGENT})
+        res.raise_for_status()
+    except Exception as exc:
+        return None, None, None, f"Request failed: {exc}"
+
+    soup = BeautifulSoup(res.text, "html.parser")
+    label, num, chapter_url = pick_best_candidate(soup, url)
+    return label, num, chapter_url, None
+
+
+def scrape_selenium(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str]]:
+    if webdriver is None or Options is None:
+        return None, None, None, "Selenium not available"
+
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument(f"--user-agent={USER_AGENT}")
+
+    driver = None
+    try:
+        driver = webdriver.Chrome(options=options)
+        driver.set_page_load_timeout(30)
+        driver.get(url)
+        html = driver.page_source
+        soup = BeautifulSoup(html, "html.parser")
+        label, num, chapter_url = pick_best_candidate(soup, url)
+        return label, num, chapter_url, None
+    except Exception as exc:
+        return None, None, None, f"Selenium failed: {exc}"
+    finally:
+        if driver:
+            driver.quit()
+
+
+def scrape_latest_update(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str]]:
+    label, num, latest_url, err = scrape_bs4(url)
+    if err is None:
+        return label, num, latest_url, None
+
+    if os.getenv("USE_SELENIUM_FALLBACK", "1") == "1":
+        s_label, s_num, s_latest_url, s_err = scrape_selenium(url)
+        if s_err is None:
+            return s_label, s_num, s_latest_url, None
+        return None, None, None, f"{err}; {s_err}"
+
+    return None, None, None, err
+
+
+def check_single(bookmark_id: int) -> None:
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM bookmarks WHERE id = ?", (bookmark_id,)).fetchone()
+        if not row:
+            return
+
+        effective_url = resolve_series_listing_url(row["url"])
+        label, num, latest_url, err = scrape_latest_update(effective_url)
+        scraped_cover = scrape_series_cover(effective_url, row["title"] or "")
+        cover_url = scraped_cover or row["cover_url"]
+        now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+        if err:
+            conn.execute(
+                "UPDATE bookmarks SET url = ?, last_checked = ?, last_error = ? WHERE id = ?",
+                (effective_url or row["url"], now, err, bookmark_id),
+            )
+            if cover_url and cover_url != row["cover_url"]:
+                conn.execute("UPDATE bookmarks SET cover_url = ? WHERE id = ?", (cover_url, bookmark_id))
+            return
+
+        previous_num = row["latest_seen_num"]
+        new_update = 0
+
+        if num is not None and previous_num is not None and num > previous_num:
+            new_update = 1
+        if row["latest_seen"] is None:
+            new_update = 0
+
+        conn.execute(
+            """
+            UPDATE bookmarks
+            SET url = ?, latest_seen = ?, latest_seen_num = ?, latest_seen_url = ?, cover_url = ?, new_update = ?, last_checked = ?, last_error = NULL
+            WHERE id = ?
+            """,
+            (effective_url or row["url"], label, num, latest_url, cover_url, new_update, now, bookmark_id),
+        )
+
+
+def upsert_progress(bookmark_id: int, chapter_num: Optional[float], chapter_label: str, source_url: str) -> None:
+    if chapter_num is None:
+        chapter_num = parse_chapter_number(chapter_label) or parse_chapter_from_url(source_url)
+    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO reading_progress (bookmark_id, chapter_num, chapter_label, source_url, seen_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (bookmark_id, chapter_num, chapter_label, source_url, now),
+        )
+
+
+def check_all() -> None:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT id FROM bookmarks").fetchall()
+    ids = [row["id"] for row in rows]
+    if not ids:
+        return
+    # Parallel checks significantly reduce total refresh latency.
+    with ThreadPoolExecutor(max_workers=min(MAX_CHECK_WORKERS, len(ids))) as pool:
+        futures = [pool.submit(check_single, bid) for bid in ids]
+        for f in as_completed(futures):
+            try:
+                f.result()
+            except Exception:
+                # Keep the batch moving even if one site fails.
+                pass
+
+
+@app.route("/")
+def index():
+    with get_conn() as conn:
+        bookmarks = conn.execute(
+            """
+            SELECT b.*,
+                   rp.chapter_num AS read_chapter_num,
+                   rp.chapter_label AS read_chapter_label,
+                   rp.source_url AS read_source_url
+            FROM bookmarks b
+            LEFT JOIN (
+                SELECT x.bookmark_id, x.chapter_num, x.chapter_label, x.source_url
+                FROM reading_progress x
+                INNER JOIN (
+                    SELECT bookmark_id, MAX(id) AS max_id
+                    FROM reading_progress
+                    GROUP BY bookmark_id
+                ) y ON y.bookmark_id = x.bookmark_id AND y.max_id = x.id
+            ) rp ON rp.bookmark_id = b.id
+            ORDER BY b.id DESC
+            """
+        ).fetchall()
+    return render_template("index.html", bookmarks=bookmarks)
+
+
+@app.route("/add", methods=["POST"])
+def add_bookmark():
+    title = request.form.get("title", "").strip()
+    url = request.form.get("url", "").strip()
+    if not title or not url:
+        return redirect(url_for("index"))
+
+    cover_url = scrape_series_cover(url, title)
+    with get_conn() as conn:
+        conn.execute("INSERT OR IGNORE INTO bookmarks (title, url, cover_url) VALUES (?, ?, ?)", (title, url, cover_url))
+    return redirect(url_for("index"))
+
+
+@app.route("/check/<int:bookmark_id>", methods=["POST"])
+def check_bookmark(bookmark_id: int):
+    check_single(bookmark_id)
+    return redirect(url_for("index"))
+
+
+@app.route("/check-all", methods=["POST"])
+def check_all_route():
+    check_all()
+    return redirect(url_for("index"))
+
+
+@app.route("/mark-seen/<int:bookmark_id>", methods=["POST"])
+def mark_seen(bookmark_id: int):
+    with get_conn() as conn:
+        conn.execute("UPDATE bookmarks SET new_update = 0 WHERE id = ?", (bookmark_id,))
+    return redirect(url_for("index"))
+
+
+@app.route("/delete/<int:bookmark_id>", methods=["POST"])
+def delete_bookmark(bookmark_id: int):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM bookmarks WHERE id = ?", (bookmark_id,))
+    return redirect(url_for("index"))
+
+
+@app.route("/api/series/ensure", methods=["POST"])
+def ensure_series():
+    payload = request.get_json(silent=True) or {}
+    title = (payload.get("title") or "").strip()
+    url = (payload.get("url") or "").strip()
+    series_key = (payload.get("series_key") or "").strip().lower()
+    if not title or not url:
+        return jsonify({"ok": False, "error": "title and url required"}), 400
+
+    canonical_url = resolve_series_listing_url(url)
+    cover_url = scrape_series_cover(canonical_url, title)
+    with get_conn() as conn:
+        existing = None
+        if series_key:
+            existing = conn.execute(
+                "SELECT id, title, url, series_key FROM bookmarks WHERE series_key = ?",
+                (series_key,),
+            ).fetchone()
+        if existing is None:
+            existing = conn.execute(
+                "SELECT id, title, url, series_key FROM bookmarks WHERE url = ?",
+                (canonical_url,),
+            ).fetchone()
+
+        if existing is not None:
+            created = False
+            row = existing
+            if cover_url:
+                conn.execute("UPDATE bookmarks SET cover_url = COALESCE(cover_url, ?) WHERE id = ?", (cover_url, row["id"]))
+                row = conn.execute(
+                    "SELECT id, title, url, series_key, cover_url FROM bookmarks WHERE id = ?",
+                    (row["id"],),
+                ).fetchone()
+        else:
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO bookmarks (title, url, series_key, cover_url) VALUES (?, ?, ?, ?)",
+                (title, canonical_url, series_key or None, cover_url),
+            )
+            created = cursor.rowcount == 1
+            row = conn.execute(
+                "SELECT id, title, url, series_key, cover_url FROM bookmarks WHERE url = ?",
+                (canonical_url,),
+            ).fetchone()
+    return jsonify({"ok": True, "created": created, "series": dict(row)})
+
+
+@app.route("/api/progress", methods=["POST"])
+def save_progress():
+    payload = request.get_json(silent=True) or {}
+    series_url = (payload.get("series_url") or "").strip()
+    series_key = (payload.get("series_key") or "").strip().lower()
+    chapter_url = (payload.get("chapter_url") or "").strip()
+    chapter_label = (payload.get("chapter_label") or "").strip()
+    chapter_num = payload.get("chapter_num")
+
+    if not series_url and not series_key:
+        return jsonify({"ok": False, "error": "series_url or series_key required"}), 400
+
+    with get_conn() as conn:
+        row = None
+        if series_key:
+            row = conn.execute("SELECT id FROM bookmarks WHERE series_key = ?", (series_key,)).fetchone()
+        if row is None and series_url:
+            row = conn.execute("SELECT id FROM bookmarks WHERE url = ?", (series_url,)).fetchone()
+        if not row:
+            return jsonify({"ok": False, "error": "series not found (ensure step failed or key mismatch)"}), 404
+        bookmark_id = row["id"]
+
+    parsed_num = None
+    try:
+        parsed_num = float(chapter_num) if chapter_num is not None else None
+    except (TypeError, ValueError):
+        parsed_num = None
+
+    if not chapter_label:
+        chapter_label = chapter_url or "Chapter"
+
+    upsert_progress(bookmark_id, parsed_num, chapter_label, chapter_url)
+    with get_conn() as conn:
+        current = conn.execute(
+            "SELECT latest_seen_num FROM bookmarks WHERE id = ?",
+            (bookmark_id,),
+        ).fetchone()
+        current_num = current["latest_seen_num"] if current else None
+        if parsed_num is not None and (current_num is None or parsed_num > current_num):
+            # Keep latest_seen in sync from actual reading events if scraping lags/fails.
+            conn.execute(
+                """
+                UPDATE bookmarks
+                SET latest_seen = ?, latest_seen_num = ?, latest_seen_url = ?, last_checked = ?, last_error = NULL
+                WHERE id = ?
+                """,
+                (
+                    chapter_label,
+                    parsed_num,
+                    chapter_url or None,
+                    datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                    bookmark_id,
+                ),
+            )
+    return jsonify({"ok": True, "bookmark_id": bookmark_id, "chapter_num": parsed_num})
+
+
+@app.route("/api/debug/scrape", methods=["POST"])
+def debug_scrape():
+    payload = request.get_json(silent=True) or {}
+    raw_url = (payload.get("url") or "").strip()
+    if not raw_url:
+        return jsonify({"ok": False, "error": "url required"}), 400
+
+    resolved_url = resolve_series_listing_url(raw_url)
+    try:
+        res = requests.get(resolved_url, timeout=25, headers={"User-Agent": USER_AGENT})
+        res.raise_for_status()
+    except Exception as exc:
+        return jsonify(
+            {
+                "ok": False,
+                "url": raw_url,
+                "resolved_url": resolved_url,
+                "error": f"fetch_failed: {exc}",
+                "error_flags": ["fetch_failed"],
+            }
+        ), 502
+
+    soup = BeautifulSoup(res.text, "html.parser")
+    details = pick_best_candidate_with_debug(soup, resolved_url)
+    series_slug = extract_series_slug(resolved_url)
+
+    return jsonify(
+        {
+            "ok": True,
+            "url": raw_url,
+            "resolved_url": resolved_url,
+            "series_slug": series_slug,
+            "picked_latest": {
+                "label": details["label"],
+                "chapter_num": details["chapter_num"],
+                "url": details["chapter_url"],
+            },
+            "confidence": details["confidence"],
+            "parser_version": details["parser_version"],
+            "candidate_links": details["candidates"][:80],
+            "candidate_count": len(details["candidates"]),
+            "error_flags": details["error_flags"],
+        }
+    )
+
+
+@app.route("/api/maintenance/merge-duplicates", methods=["POST"])
+def merge_duplicates():
+    merged_groups = 0
+    deleted_bookmarks = 0
+
+    with get_conn() as conn:
+        groups = conn.execute(
+            """
+            SELECT series_key, GROUP_CONCAT(id) AS ids
+            FROM bookmarks
+            WHERE series_key IS NOT NULL AND TRIM(series_key) <> ''
+            GROUP BY series_key
+            HAVING COUNT(*) > 1
+            """
+        ).fetchall()
+
+        for group in groups:
+            ids = [int(x) for x in (group["ids"] or "").split(",") if x]
+            if len(ids) < 2:
+                continue
+            ids.sort()
+            keeper_id = ids[0]
+            duplicate_ids = ids[1:]
+            merged_groups += 1
+
+            keeper = conn.execute(
+                "SELECT latest_seen_num, latest_seen, new_update, title FROM bookmarks WHERE id = ?",
+                (keeper_id,),
+            ).fetchone()
+            best_num = keeper["latest_seen_num"] if keeper else None
+            best_label = keeper["latest_seen"] if keeper else None
+            best_new_update = int(keeper["new_update"]) if keeper else 0
+            best_title = keeper["title"] if keeper else ""
+
+            for dup_id in duplicate_ids:
+                dup = conn.execute(
+                    "SELECT latest_seen_num, latest_seen, new_update, title FROM bookmarks WHERE id = ?",
+                    (dup_id,),
+                ).fetchone()
+                if dup:
+                    dup_num = dup["latest_seen_num"]
+                    if dup_num is not None and (best_num is None or dup_num > best_num):
+                        best_num = dup_num
+                        best_label = dup["latest_seen"]
+                    best_new_update = max(best_new_update, int(dup["new_update"] or 0))
+                    if len((dup["title"] or "").strip()) > len((best_title or "").strip()):
+                        best_title = dup["title"]
+
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO reading_progress (bookmark_id, chapter_num, chapter_label, source_url, seen_at)
+                    SELECT ?, chapter_num, chapter_label, source_url, seen_at
+                    FROM reading_progress
+                    WHERE bookmark_id = ?
+                    """,
+                    (keeper_id, dup_id),
+                )
+                conn.execute("DELETE FROM reading_progress WHERE bookmark_id = ?", (dup_id,))
+                conn.execute("DELETE FROM bookmarks WHERE id = ?", (dup_id,))
+                deleted_bookmarks += 1
+
+            conn.execute(
+                """
+                UPDATE bookmarks
+                SET latest_seen_num = ?, latest_seen = ?, new_update = ?, title = ?
+                WHERE id = ?
+                """,
+                (best_num, best_label, best_new_update, best_title, keeper_id),
+            )
+
+    return jsonify(
+        {
+            "ok": True,
+            "merged_groups": merged_groups,
+            "deleted_bookmarks": deleted_bookmarks,
+        }
+    )
+
+
+def setup_scheduler() -> Optional[BackgroundScheduler]:
+    if os.getenv("DISABLE_AUTO_CHECK") == "1":
+        return None
+    interval = int(os.getenv("CHECK_INTERVAL_MINUTES", "30"))
+    scheduler = BackgroundScheduler(daemon=True)
+    scheduler.add_job(
+        check_all,
+        "interval",
+        minutes=max(interval, 1),
+        id="auto-check",
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.start()
+    # Run once at startup so users don't wait for the first interval.
+    check_all()
+    return scheduler
+
+
+if __name__ == "__main__":
+    debug_mode = True
+    init_db()
+    if not debug_mode or os.getenv("WERKZEUG_RUN_MAIN") == "true":
+        setup_scheduler()
+    app.run(host="127.0.0.1", port=5000, debug=debug_mode)

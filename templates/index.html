@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manga Update Tracker</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      margin: 0;
+      padding: 28px;
+      background: radial-gradient(circle at top right, #131d3f 0%, #06080f 45%, #03050a 100%);
+      color: #e5e7eb;
+      min-height: 100vh;
+    }
+    h1 {
+      margin-top: 0;
+      margin-bottom: 18px;
+      font-size: 30px;
+      letter-spacing: 0.02em;
+      color: #f8fafc;
+    }
+    .panel {
+      background: rgba(9, 13, 25, 0.76);
+      border: 1px solid rgba(107, 114, 128, 0.24);
+      backdrop-filter: blur(8px);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 14px;
+      box-shadow: 0 10px 24px rgba(2, 6, 23, 0.35);
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    input {
+      padding: 10px;
+      margin-right: 0;
+      border: 1px solid #3b4154;
+      border-radius: 10px;
+      background: #0b1220;
+      color: #f3f4f6;
+      min-width: 220px;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    input:focus {
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+    input[name="url"] { flex: 1; min-width: 320px; }
+    button {
+      padding: 9px 12px;
+      border: 0;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+    button:hover { transform: translateY(-1px); opacity: 0.95; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-muted { background: #374151; color: white; }
+    .btn-danger { background: #dc2626; color: white; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+    .series-card {
+      background: linear-gradient(180deg, rgba(13, 20, 38, 0.96) 0%, rgba(7, 12, 26, 0.96) 100%);
+      border: 1px solid rgba(71, 85, 105, 0.3);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 10px 24px rgba(2, 6, 23, 0.35);
+    }
+    .series-head { display: flex; align-items: start; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+    .series-main { display: grid; grid-template-columns: 84px 1fr; gap: 12px; align-items: start; }
+    .cover { width: 84px; height: 112px; object-fit: cover; border-radius: 8px; border: 1px solid #1f2937; background: #0b1220; }
+    .cover-fallback { width: 84px; height: 112px; border-radius: 8px; border: 1px solid #1f2937; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 11px; background: #0b1220; text-align: center; padding: 6px; }
+    .series-title { font-size: 18px; font-weight: 700; line-height: 1.2; margin: 0; }
+    .meta { color: #94a3b8; font-size: 12px; margin-top: 4px; }
+    .info-row { margin-top: 10px; padding: 10px; border-radius: 10px; background: #0b1327; border: 1px solid rgba(71, 85, 105, 0.28); }
+    .label { color: #93c5fd; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }
+    .value { font-size: 14px; font-weight: 600; }
+    .actions { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .badge { padding: 4px 8px; border-radius: 999px; font-size: 12px; }
+    .new { background: #16a34a; color: white; }
+    .none { background: #4b5563; color: white; }
+    .error { color: #f87171; }
+    form.inline { display: inline; margin-right: 0; }
+    a { color: #93c5fd; text-decoration-color: rgba(147, 197, 253, 0.55); }
+    a:hover { color: #bfdbfe; }
+    .empty { color: #9ca3af; }
+  </style>
+</head>
+<body>
+  <h1>Manga/Manhwa Update Tracker</h1>
+  <div class="panel">
+    <form action="/add" method="post">
+      <div class="row">
+        <input name="title" placeholder="Series title" required>
+        <input name="url" placeholder="Series/bookmark URL" required>
+        <button class="btn-primary" type="submit">Add</button>
+      </div>
+    </form>
+  </div>
+  <div class="panel">
+    <form action="/check-all" method="post">
+      <button class="btn-primary" type="submit">Check All Now</button>
+    </form>
+  </div>
+  <div class="grid">
+    {% for b in bookmarks %}
+      <article class="series-card">
+        <div class="series-main">
+          {% if b["cover_url"] %}
+            <img class="cover" src="{{ b["cover_url"] }}" alt="{{ b["title"] }} cover" loading="lazy" referrerpolicy="no-referrer">
+          {% else %}
+            <div class="cover-fallback">No Cover</div>
+          {% endif %}
+          <div>
+            <div class="series-head">
+              <div>
+                <h2 class="series-title">{{ b["title"] }}</h2>
+                <div class="meta">Last checked: {{ b["last_checked"] or "-" }}</div>
+              </div>
+              {% if b["new_update"] %}
+                <span class="badge new">New update</span>
+              {% else %}
+                <span class="badge none">Up to date</span>
+              {% endif %}
+            </div>
+
+            <div class="info-row">
+              <div class="label">Latest Chapter</div>
+              <div class="value">
+                {% if b["latest_seen"] %}
+                  {% if b["latest_seen_url"] %}
+                    <a href="{{ b["latest_seen_url"] }}" target="_blank" rel="noreferrer">{{ b["latest_seen"] }}</a>
+                  {% else %}
+                    <span>{{ b["latest_seen"] }}</span>
+                  {% endif %}
+                {% else %}
+                  <span class="empty">No latest chapter found yet</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="info-row">
+              <div class="label">Last Seen</div>
+              <div class="value">
+                {% if b["read_chapter_num"] is not none or b["read_chapter_label"] %}
+                  {% set seen_text = ("Ch " ~ b["read_chapter_num"]) if b["read_chapter_num"] is not none else b["read_chapter_label"] %}
+                  {% if b["read_source_url"] %}
+                    <a href="{{ b["read_source_url"] }}" target="_blank" rel="noreferrer">{{ seen_text }}</a>
+                  {% else %}
+                    <span>{{ seen_text }}</span>
+                  {% endif %}
+                {% else %}
+                  <span class="empty">No chapter read yet</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="actions">
+              <a href="{{ b["url"] }}" target="_blank" rel="noreferrer">Open series</a>
+              <form class="inline" action="/check/{{ b["id"] }}" method="post"><button class="btn-muted" type="submit">Check</button></form>
+              <form class="inline" action="/mark-seen/{{ b["id"] }}" method="post"><button class="btn-muted" type="submit">Mark Seen</button></form>
+              <form class="inline" action="/delete/{{ b["id"] }}" method="post"><button class="btn-danger" type="submit">Delete</button></form>
+            </div>
+          </div>
+        </div>
+        {% if b["last_error"] %}<div class="error">{{ b["last_error"] }}</div>{% endif %}
+      </article>
+    {% else %}
+      <div class="panel">No bookmarks yet.</div>
+    {% endfor %}
+  </div>
+</body>
+</html>

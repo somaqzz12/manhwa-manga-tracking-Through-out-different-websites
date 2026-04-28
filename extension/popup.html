@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Manga Tracker</title>
+  <style>
+    body { font-family: Arial, sans-serif; width: 260px; padding: 12px; }
+    .row { margin-bottom: 10px; }
+    button { width: 100%; padding: 8px; border: 0; background: #2563eb; color: #fff; border-radius: 6px; cursor: pointer; }
+    label { display: flex; align-items: center; gap: 8px; }
+    .hint { color: #555; font-size: 12px; }
+    pre { max-height: 220px; overflow: auto; background: #f5f5f5; padding: 8px; border-radius: 6px; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <label><input id="autoprompt" type="checkbox"> Prompt before adding series</label>
+  </div>
+  <div class="row">
+    <label><input id="debugMode" type="checkbox"> Debug mode</label>
+  </div>
+  <div class="row">
+    <button id="openDashboard">Open dashboard</button>
+  </div>
+  <div class="row">
+    <button id="mergeDuplicates">Merge duplicate series</button>
+  </div>
+  <div class="row">
+    <button id="refreshDebug">Refresh debug</button>
+  </div>
+  <pre id="debugOutput">Debug events will appear here.</pre>
+  <div class="hint">Dashboard API must run on 127.0.0.1:5000.</div>
+  <script src="popup.js"></script>
+</body>
+</html>
