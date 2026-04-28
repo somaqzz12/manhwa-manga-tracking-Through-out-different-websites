@@ -1,3 +1,7 @@
+landing/node_modules/
+landing/.next/
+landing/out/
+
 __pycache__/
 *.pyc
 tracker.db
