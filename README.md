@@ -1,179 +1,155 @@
 # Manga Tracker
 
-Manga Tracker helps users track manga/manhwa updates across different websites with automatic latest chapter checks, reading progress sync, and a dashboard for catching up quickly.
+A self-hosted manga and manhwa tracker. Add a series listing URL, the server scrapes the latest chapter every 30 minutes, the dashboard shows what you're behind on, and an optional Chrome extension picks up the chapter you're currently reading and syncs progress automatically.
+
+![Dashboard screenshot](docs/screenshot.png)
+
+> Replace `docs/screenshot.png` with a real screenshot once you take one.
 
 ## Features
 
-- User authentication (local accounts with hashed passwords)
-- Add/remove series by providing title and series listing URL
-- Automatic chapter detection from series pages (latest chapter number and label)
-- Unread badge (shows how many chapters behind)
-- Reading progress via web UI and extension API
-- Parallel checks with thread pool
-- Scheduled background checks every 30 minutes (configurable)
-- Full JSON import/export for backup and migration
-- Cover image extraction from meta tags or images
-- Site profiles for popular sites (AsuraScans, MangaKatana, ArenaScan, etc.)
-- Advanced chapter parsing (heuristics, URL patterns, series slug matching)
-- Browser extension API (`/api/series/ensure`, `/api/progress`)
-- Debug scrape endpoint with confidence and parser diagnostics
-- PostgreSQL support for production (SQLite fallback for local dev)
-- Optional Selenium fallback for JavaScript-heavy pages
+- Local accounts with hashed passwords, CSRF protection, and rate-limited auth.
+- Add series from any reader by pasting the series listing URL.
+- Automatic latest-chapter detection on a 30-minute schedule (configurable, runnable in parallel).
+- Site profiles for popular hosts (AsuraScans, MangaKatana, ArenaScan, MangaDex, etc.) plus generic heuristics for everything else.
+- Cover image extraction from Open Graph tags or the largest cover image on the page.
+- Optional Selenium fallback for JS-only sites that block plain HTTP scraping.
+- Reading progress tracked per chapter, "Continue" links that resume where you left off, and an unread badge per series.
+- Mark-all-seen for the whole library, plus per-series mark-as-seen and read-through actions.
+- Sortable, paginated, searchable dashboard with light/dark theme.
+- Full JSON import/export for backup or migrating between hosts.
+- Browser extension (Chromium): auto-detects chapter pages, optional silent auto-track, badge counter for unread chapters, right-click "Track this manga chapter", and an `Alt+Shift+T` shortcut.
+- PostgreSQL in production, SQLite for local dev.
+- Render-ready: the included [`render.yaml`](render.yaml) provisions a web service plus managed Postgres in one click.
 
-## Tech Stack
+## Tech stack
 
-- Backend: Flask, APScheduler, requests, BeautifulSoup4
-- Databases: SQLite (default) or PostgreSQL (`psycopg2-binary`)
-- Optional scraping runtime: Selenium + ChromeDriver
-- Frontend: Jinja templates + custom CSS
+| Layer | Choice |
+| --- | --- |
+| Backend framework | Flask 3, Flask-WTF, Flask-Limiter |
+| Scheduler | APScheduler (background chapter checks) |
+| Scraping | requests + BeautifulSoup4, optional Selenium + ChromeDriver fallback |
+| Database | SQLite (local dev) or PostgreSQL via `psycopg[binary]` (production) |
+| Frontend | Jinja templates + hand-written CSS, no JS framework |
+| Server | gunicorn (production), Flask dev server (local) |
+| Extension | Chrome MV3 service worker, vanilla JS, Shadow DOM modal |
 
-## Installation
-
-### 1) Clone the repository
-
-```bash
-git clone https://github.com/yourusername/manga-tracker.git
-cd manga-tracker
-```
-
-### 2) Create virtual environment (recommended)
-
-```bash
-python -m venv venv
-source venv/bin/activate   # Linux/Mac
-# or
-venv\Scripts\activate      # Windows
-```
-
-### 3) Install dependencies
+## Quick start
 
 ```bash
 pip install -r requirements.txt
-```
-
-### 4) Configure environment
-
-```bash
-# Required in production
-export SECRET_KEY="your-very-long-random-secret-key"
-
-# PostgreSQL for persistence on Render
-export DATABASE_URL="postgresql://user:pass@host:5432/dbname"
-
-# Optional tuning
-export HTTP_TIMEOUT_SECONDS=15
-export MAX_CHECK_WORKERS=6
-export CHECK_INTERVAL_MINUTES=30
-export USE_SELENIUM_FALLBACK=1
-export DISABLE_AUTO_CHECK=0
-export FLASK_DEBUG=1
-```
-
-Notes:
-- `SECRET_KEY` is mandatory when `FLASK_DEBUG=0`.
-- If `DATABASE_URL` is not set, SQLite file `tracker.db` is used for local development only.
-- On Render production, set `FLASK_DEBUG=0`.
-- In production mode, the app now refuses to start without `DATABASE_URL` unless you explicitly set `ALLOW_SQLITE_IN_PRODUCTION=1` (not recommended).
-
-### 5) Run the app
-
-Development:
-
-```bash
+export SECRET_KEY="dev-secret-change-me"
 python app.py
 ```
 
-Production:
+Then open <http://127.0.0.1:5000>, register a user, and paste a series listing URL. On Windows PowerShell, replace `export` with `$env:SECRET_KEY = "..."`.
 
-```bash
-gunicorn -w 4 -b 0.0.0.0:$PORT app:app
-```
+## Deploy on Render
 
-With `Procfile`, Render can run:
+The repo ships with a [`render.yaml`](render.yaml) blueprint that provisions:
 
-```text
-web: gunicorn app:app
-```
+- a free web service running `python app.py`,
+- a free managed Postgres instance,
+- environment defaults that lock down production (`FLASK_DEBUG=0`, `REQUIRE_API_AUTH=1`, `ALLOW_SQLITE_IN_PRODUCTION=0`),
+- an auto-generated `SECRET_KEY`.
 
-## Usage
+In Render, choose **New → Blueprint**, point it at this repository, and accept the defaults. The web service will refuse to start without a `DATABASE_URL` in production, so let the blueprint wire that up for you.
 
-### Web UI
+## Environment variables
 
-- `/` shows landing page for logged-out users.
-- `/dashboard` is the authenticated tracker dashboard.
-- Register/login with username and password.
-- Add a series using title + series listing URL.
-- Use **Check All** to refresh latest chapters.
-- Use **Continue** and unread badges to catch up quickly.
-- Export/import backups from dashboard.
+All configuration is via environment variables. The `Required?` column is what the server actually enforces; defaults below match `app.py` exactly.
 
-### Extension API
+| Variable | Required? | Default | Purpose |
+| --- | --- | --- | --- |
+| `SECRET_KEY` | Required when `FLASK_DEBUG=0` | `dev-secret-change-me` | Flask session signing key. Generate at least 32 random bytes for production. |
+| `DATABASE_URL` | Required in production | _(unset)_ | PostgreSQL connection string. When unset, the app falls back to a local `tracker.db` SQLite file. |
+| `ALLOW_SQLITE_IN_PRODUCTION` | Optional | `0` | Set to `1` to allow SQLite when `FLASK_DEBUG=0`. Strongly discouraged on Render. |
+| `FLASK_DEBUG` | Optional | `1` | Enables the Flask debugger and relaxes session/CSRF flags. Must be `0` in production. |
+| `PORT` | Optional | `5000` | Port the dev server binds to. Render injects this automatically. |
+| `LOG_LEVEL` | Optional | `INFO` | Standard Python log level. |
+| `REQUIRE_API_AUTH` | Optional | `0` | When `1`, every `/api/*` route requires an authenticated session cookie. The browser extension forwards your dashboard cookie. |
+| `ADMIN_API_TOKEN` | Optional | _(unset)_ | Bearer token that gates `/api/debug/scrape` and `/api/maintenance/merge-duplicates`. Routes return 404 when unset. |
+| `CORS_ALLOW_ORIGINS` | Optional | _(unset)_ | Comma-separated list of origins allowed to call the API. |
+| `SESSION_COOKIE_SECURE` | Optional | `1` in prod, `0` in debug | Forces the session cookie to HTTPS-only. |
+| `HTTP_TIMEOUT_SECONDS` | Optional | `15` | Per-request timeout for the chapter scraper. |
+| `MAX_CHECK_WORKERS` | Optional | `6` | Concurrency for "Check All". Lower on small Render plans. |
+| `CHECK_INTERVAL_MINUTES` | Optional | `30` | Background scheduler interval. |
+| `DISABLE_AUTO_CHECK` | Optional | `0` | Set to `1` to disable the scheduler entirely. |
+| `INITIAL_AUTO_CHECK` | Optional | `0` | Set to `1` to fire one check pass right after startup. |
+| `USE_SELENIUM_FALLBACK` | Optional | `1` | Whether to retry failed scrapes with Selenium. |
+| `MIN_PASSWORD_LENGTH` | Optional | `8` | Minimum password length on registration. |
+| `BOOKMARKS_PAGE_SIZE` | Optional | `60` | Bookmarks per dashboard page. |
+| `READ_PROGRESS_MAX_PER_BOOKMARK` | Optional | `400` | Cap on stored chapter-read events per series. |
+| `READ_PROGRESS_MAX_PER_USER` | Optional | `20000` | Hard cap on total reading-progress rows per user. |
+| `PROGRESS_PRUNE_INTERVAL_HOURS` | Optional | `6` | How often the scheduler prunes overflow progress rows. |
+| `IMPORT_MAX_BYTES` | Optional | `5242880` | Max upload size for the JSON importer. |
+| `IMPORT_MAX_ITEMS` | Optional | `20000` | Max bookmarks accepted per import. |
+| `AUTH_RATE_LIMIT_PER_IP` | Optional | `10/minute;60/hour` | Flask-Limiter rule applied to login/register per IP. |
+| `AUTH_RATE_LIMIT_PER_USER` | Optional | `8/minute;30/hour` | Flask-Limiter rule applied per username. |
+| `RATELIMIT_STORAGE_URI` | Optional | `memory://` (debug), Redis recommended in prod | Storage backend for Flask-Limiter. |
+| `BUG_REPORT_URL`, `CONTACT_EMAIL`, `GITHUB_URL` | Optional | Defaults baked into the templates | Strings used in the footer. |
+| `DEFAULT_USER_EMAIL` | Optional | `local@tracker` | Email used for the auto-created default user when no users exist. |
 
-#### `POST /api/series/ensure`
+## Browser extension
 
-Ensures a series exists.
+A Chromium MV3 companion lives in [`extension/`](extension/). It detects chapter pages, prompts you the first time you visit a series, and forwards reads to `/api/series/ensure` and `/api/progress`.
 
-```json
-{
-  "title": "Series Title",
-  "url": "https://example.com/manga/series/",
-  "series_key": "optional-stable-key"
-}
-```
+### Install (unpacked)
 
-#### `POST /api/progress`
+1. Build is not required — the extension is plain JS.
+2. Visit `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select the [`extension/`](extension/) folder.
+3. Click the puzzle piece in the toolbar, pin **Manga Tracker**, and open the popup.
+4. Open the options page (right-click the toolbar icon → **Options**) and set the backend URL to your tracker (e.g. `https://your-app.onrender.com` or `http://127.0.0.1:5000`).
+5. Sign in to the dashboard once in the same browser profile so the session cookie is available; the extension forwards it on every API call.
 
-Saves reading progress.
+### What you get
 
-```json
-{
-  "series_url": "https://example.com/manga/series/",
-  "series_key": "optional-stable-key",
-  "chapter_url": "https://example.com/manga/series/chapter-42",
-  "chapter_label": "Chapter 42",
-  "chapter_num": 42.0
-}
-```
+- Three-state popup: not configured, no chapter detected, chapter detected.
+- Live `/healthz` connection dot.
+- "Track now" / "Already tracked — save this chapter" depending on whether the series is in your library.
+- Badge counter showing unread chapters across the whole library, refreshed every 30 minutes via `chrome.alarms`.
+- Right-click **Track this manga chapter** context menu and an `Alt+Shift+T` shortcut.
+- Optional silent auto-track that skips the prompt entirely.
+- A debug log of the last 25 events visible on the options page.
 
-#### `POST /api/debug/scrape`
+### Supported sites
 
-Debug scrape diagnostics for a given URL.
+The content script auto-detects chapter pages on hosts whose domain matches any of these substrings, plus a per-host extractor map for higher accuracy on the most-used readers:
 
-```json
-{ "url": "https://asurascans.com/comics/some-series/" }
-```
+`asura`, `reaper`, `flame`, `scan`, `toon`, `manga`, `manhwa`, `manhua`, `webtoon`, `bato`, `comick`, `mangadex`, `manganato`, `mangakakalot`, `mangapark`, `mangabuddy`, `mangaowl`, `mangahere`, `mangafox`, `mangafire`, `kissmanga`, `manga4life`, `mangasee`, `lhtranslation`, `cosmicscans`, `luminousscans`, `anigliscans`, `leviatanscans`, `drakescans`, `isekaiscan`, `rizzcomic`, `rawkuma`, `tcb`, `zinmanga`, `earlymanga`.
 
-Returns candidate links, picked latest, parser version, confidence, and error flags.
+MangaDex skips the DOM entirely and uses the public `api.mangadex.org` REST endpoint via the extension service worker.
 
-## Configuration Reference
+The full extension roadmap and design notes are in [`EXTENSION_PLAN.md`](EXTENSION_PLAN.md).
 
-- `SECRET_KEY` – Flask session secret (required for production)
-- `DATABASE_URL` – Postgres connection string
-- `HTTP_TIMEOUT_SECONDS` – request timeout during scraping
-- `MAX_CHECK_WORKERS` – concurrency for bulk checks
-- `CHECK_INTERVAL_MINUTES` – scheduler interval
-- `USE_SELENIUM_FALLBACK` – enable selenium fallback
-- `DISABLE_AUTO_CHECK` – disable scheduler when set to `1`
-- `PORT` – app port
-- `FLASK_DEBUG` – debug mode toggle
+## API endpoints
 
-## Troubleshooting
+Routes the extension and external clients can rely on. All `/api/*` routes are CSRF-exempt and honor `REQUIRE_API_AUTH`; admin routes additionally require `ADMIN_API_TOKEN`.
 
-- **No chapters found**
-  - Try `/api/debug/scrape` and inspect `error_flags`.
-  - Use canonical series listing URL (not a chapter URL).
-  - Enable Selenium fallback if site is heavily JS-rendered.
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/healthz` | None | Liveness probe used by Render and the extension popup connection dot. |
+| `POST` | `/api/series/ensure` | Session (when `REQUIRE_API_AUTH=1`) | Idempotently create or look up a bookmark by `series_key` or `url`. |
+| `POST` | `/api/progress` | Session | Record reading progress for a chapter and bump `latest_seen_*` if the user is ahead of the scraper. |
+| `GET` | `/api/unread-count` | Session | Returns total unread, behind-count, per-series unread, and the user's `tracked_keys`. Used by the extension badge. |
+| `POST` | `/api/debug/scrape` | Admin token | Returns candidate links, chosen latest, parser version, confidence, and error flags for a given URL. |
+| `POST` | `/api/maintenance/merge-duplicates` | Admin token | Coalesces bookmarks that point at the same canonical series URL. |
 
-- **Selenium fails**
-  - Install Chrome + ChromeDriver and ensure driver is available in PATH.
+Example request bodies are in `app.py` near each route, and the extension's call sites in [`extension/background.js`](extension/background.js) are the canonical clients.
 
-- **Slow checks**
-  - Lower `MAX_CHECK_WORKERS` on small hosts.
-  - Increase `CHECK_INTERVAL_MINUTES` for large bookmark sets.
+## Known limitations
 
-- **Data reset on cloud**
-  - Set `DATABASE_URL` and use PostgreSQL on Render.
+- **Cover images are best-effort.** Covers are scraped from Open Graph metadata and the largest visible image on the listing page. Sites that lazy-load behind JavaScript or hotlink-block requests will show a placeholder until you point the parser at a different URL.
+- **Selenium is opt-in but heavy.** When `USE_SELENIUM_FALLBACK=1` (the default), the server starts ChromeDriver to retry pages that defeat plain HTTP scraping. This adds significant memory pressure on small Render plans and requires Chrome + ChromeDriver installed in the environment. Free Render builds include them, but custom hosts may not.
+- **SQLite is for local dev only.** The bundled `tracker.db` is fine on your laptop, but on any cloud host the disk is ephemeral and you will lose data on every redeploy. Production refuses to boot without `DATABASE_URL` unless `ALLOW_SQLITE_IN_PRODUCTION=1`.
+- **Heuristic chapter detection.** The extension and the scraper both fall back to URL/title heuristics for hosts without a per-site profile. Expect occasional misses on unusual readers; the per-host extractor map in [`extension/content.js`](extension/content.js) is the right place to add fixes.
+- **Single-tenant by design.** Accounts are local to the instance you host. There is no SSO, no team sharing, and no cross-server sync.
+- **MV3 service-worker lifecycle.** The extension background worker can be unloaded after ~30s idle. Long-running state lives in `chrome.storage` or is reconstructed from `chrome.alarms`/event listeners; if you fork the extension, do not assume module-scope variables persist.
+
+## Issues and contributions
+
+Bug reports and feature requests live on the GitHub issues page: <https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites/issues>.
 
 ## License
 
-MIT
+MIT.
