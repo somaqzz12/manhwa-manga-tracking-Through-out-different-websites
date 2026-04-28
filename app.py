@@ -57,6 +57,12 @@ DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://"):]
 IS_POSTGRES = bool(DATABASE_URL)
+ALLOW_SQLITE_IN_PRODUCTION = os.getenv("ALLOW_SQLITE_IN_PRODUCTION", "0") == "1"
+if not APP_DEBUG and not IS_POSTGRES and not ALLOW_SQLITE_IN_PRODUCTION:
+    raise RuntimeError(
+        "Production requires DATABASE_URL (PostgreSQL) to prevent deploy-time data loss. "
+        "Set ALLOW_SQLITE_IN_PRODUCTION=1 only if you accept ephemeral storage risk."
+    )
 
 
 def _adapt_query_for_postgres(query: str) -> str:
@@ -176,7 +182,7 @@ def _migrate_sqlite_bookmarks_to_user_unique(conn) -> None:
     )
     conn.execute(
         """
-        INSERT INTO bookmarks_new
+        INSERT OR IGNORE INTO bookmarks_new
         (id, user_id, title, url, latest_seen, latest_seen_num, new_update, last_checked, last_error, series_key, latest_seen_url, cover_url, latest_confidence, latest_parser_version, latest_error_flags)
         SELECT id, user_id, title, url, latest_seen, latest_seen_num, new_update, last_checked, last_error, series_key, latest_seen_url, cover_url, latest_confidence, latest_parser_version, latest_error_flags
         FROM bookmarks

@@ -71,8 +71,9 @@ export FLASK_DEBUG=1
 
 Notes:
 - `SECRET_KEY` is mandatory when `FLASK_DEBUG=0`.
-- If `DATABASE_URL` is not set, SQLite file `tracker.db` is used.
+- If `DATABASE_URL` is not set, SQLite file `tracker.db` is used for local development only.
 - On Render production, set `FLASK_DEBUG=0`.
+- In production mode, the app now refuses to start without `DATABASE_URL` unless you explicitly set `ALLOW_SQLITE_IN_PRODUCTION=1` (not recommended).
 
 ### 5) Run the app
 
