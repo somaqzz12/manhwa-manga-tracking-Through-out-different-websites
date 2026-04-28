@@ -143,7 +143,7 @@
 </head>
 <body>
   <div class="card-wrap">
-    <a class="back-dash" href="{{ url_for('index') }}">← Back to dashboard</a>
+    <a class="back-dash" href="{{ url_for('index', **edit_back_kw) }}">← Back to dashboard</a>
     <div class="card">
       <h1>Edit series</h1>
       {% with messages = get_flashed_messages(with_categories=true) %}
@@ -157,6 +157,9 @@
       {% endwith %}
       <form method="post" id="editBookmarkForm" data-loading-form="true">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="q" value="{{ return_q or '' }}">
+        <input type="hidden" name="sort" value="{{ return_sort }}">
+        <input type="hidden" name="page" value="{{ return_page }}">
         <label for="edit-title">Title</label>
         <input id="edit-title" name="title" value="{{ bookmark['title'] }}" placeholder="Series title" aria-label="Title" required>
         <label for="edit-url">Series URL</label>

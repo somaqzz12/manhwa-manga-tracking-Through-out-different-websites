@@ -210,6 +210,39 @@
       border-color: rgba(129, 140, 248, 0.45);
       box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
     }
+    .sort-row { margin-top: 12px; }
+    .sort-row label { font-size: 0.8125rem; font-weight: 500; color: var(--muted); }
+    .sort-select {
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(8, 11, 20, 0.55);
+      color: var(--heading);
+      cursor: pointer;
+    }
+    .sort-select:focus-visible { outline: 2px solid var(--primary-hi); outline-offset: 2px; }
+    .read-through-form {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--card-border);
+    }
+    .read-through-form input[type="number"] {
+      width: 5rem;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(8, 11, 20, 0.55);
+      color: var(--heading);
+      font-family: inherit;
+      font-size: 0.8125rem;
+    }
     .add-bar-wrap { padding: 14px; margin-bottom: 14px; }
     .add-bar {
       display: flex;
@@ -552,8 +585,17 @@
         <div class="filter-row">
           <button class="btn btn-primary btn-sm" type="submit">Search library</button>
           {% if search_q %}
-            <a class="btn btn-ghost btn-sm" href="{{ url_for('index') }}">Clear</a>
+            <a class="btn btn-ghost btn-sm" href="{{ url_for('index', **({'sort': sort} if sort != 'added' else {})) }}">Clear</a>
           {% endif %}
+        </div>
+        <div class="filter-row sort-row">
+          <label for="sort-by">Sort</label>
+          <select id="sort-by" name="sort" class="sort-select" aria-label="Sort library" onchange="if (this.form.requestSubmit) this.form.requestSubmit(); else this.form.submit();">
+            <option value="added" {% if sort == 'added' %}selected{% endif %}>Date added</option>
+            <option value="title" {% if sort == 'title' %}selected{% endif %}>Title A–Z</option>
+            <option value="updated" {% if sort == 'updated' %}selected{% endif %}>Last checked</option>
+            <option value="unread" {% if sort == 'unread' %}selected{% endif %}>Most unread</option>
+          </select>
         </div>
       </form>
       <div class="filter-row" style="margin-top:14px;">
@@ -566,6 +608,9 @@
     <div class="card-surface add-bar-wrap">
       <form action="/add" method="post" data-loading-form="true">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="q" value="{{ search_q or '' }}">
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <input type="hidden" name="page" value="{{ page }}">
         <div class="add-bar">
           <label class="sr-only" for="series-title">Series title</label>
           <input id="series-title" name="title" placeholder="Series title" aria-label="Series title" required>
@@ -579,11 +624,24 @@
     <div class="card-surface tools-row">
       <form action="/check-all" method="post" data-loading-form="true" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="q" value="{{ search_q or '' }}">
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <input type="hidden" name="page" value="{{ page }}">
         <button class="btn btn-primary btn-sm" type="submit" data-loading-text="Checking…">Check all now</button>
+      </form>
+      <form action="/mark-all-seen" method="post" data-loading-form="true" class="inline" data-confirm="Clear the &quot;new update&quot; flag on every series in your library? Search and the current page do not limit this — it applies to your whole library. Reading progress is unchanged.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="q" value="{{ search_q or '' }}">
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <input type="hidden" name="page" value="{{ page }}">
+        <button class="btn btn-ghost btn-sm" type="submit" data-loading-text="" title="Clear new-update flags for your entire library" aria-label="Mark all seen — entire library">Mark all seen</button>
       </form>
       <a class="btn btn-ghost btn-sm" href="/export" aria-label="Export backup JSON">Export backup</a>
       <form action="/import" method="post" enctype="multipart/form-data" class="inline" data-loading-form="true">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="q" value="{{ search_q or '' }}">
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <input type="hidden" name="page" value="{{ page }}">
         <label class="sr-only" for="backup-file">Backup file</label>
         <input id="backup-file" type="file" name="backup_file" accept="application/json" aria-label="Backup JSON file" required>
         <button class="btn btn-ghost btn-sm" type="submit" data-loading-text="Importing…">Import backup</button>
@@ -597,7 +655,7 @@
 
     <div class="grid" id="series-grid">
       {% for b in bookmarks %}
-        {% set show_continue = b.unread_count > 0 or b.read_chapter_num is not none or ((b.read_chapter_label or '')|trim) or ((b.continue_url or '') != (b.url or '')) %}
+        {% set show_continue = ((b.read_source_url or '')|trim) or (b.read_chapter_num is not none) or ((b.read_chapter_label or '')|trim) %}
         <article class="series-card" data-series-title="{{ b['title']|lower }}">
           <div class="series-badge-corner">
             {% if b["new_update"] %}
@@ -660,24 +718,43 @@
                 {% if show_continue %}
                   <a href="{{ b['continue_url'] }}" target="_blank" rel="noreferrer" class="btn btn-primary" aria-label="Continue reading {{ b['title'] }}">Continue</a>
                 {% endif %}
-                <a class="btn btn-ghost btn-sm" href="{{ url_for('edit_bookmark', bookmark_id=b['id']) }}" aria-label="Edit {{ b['title'] }}">Edit</a>
+                <a class="btn btn-ghost btn-sm" href="{{ url_for('edit_bookmark', bookmark_id=b['id'], **edit_link_kw) }}" aria-label="Edit {{ b['title'] }}">Edit</a>
                 <a class="btn btn-ghost btn-sm" href="{{ b["url"] }}" target="_blank" rel="noreferrer" aria-label="Open series page for {{ b['title'] }}">Open series</a>
                 {% if b["unread_count"] > 0 %}
                   <span class="pill-new">{{ b["unread_count"] }} new</span>
                 {% endif %}
                 <form class="inline" action="/check/{{ b["id"] }}" method="post" data-loading-form="true">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="q" value="{{ search_q or '' }}">
+                  <input type="hidden" name="sort" value="{{ sort }}">
+                  <input type="hidden" name="page" value="{{ page }}">
                   <button class="btn btn-slate btn-icon" type="submit" data-loading-text="" title="Check now" aria-label="Check now">↻</button>
                 </form>
                 <form class="inline" action="/mark-seen/{{ b["id"] }}" method="post" data-loading-form="true">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="q" value="{{ search_q or '' }}">
+                  <input type="hidden" name="sort" value="{{ sort }}">
+                  <input type="hidden" name="page" value="{{ page }}">
                   <button class="btn btn-slate btn-icon" type="submit" data-loading-text="" title="Mark seen" aria-label="Mark seen">✓</button>
                 </form>
                 <form class="inline" action="/delete/{{ b["id"] }}" method="post" data-loading-form="true" data-confirm="Delete &quot;{{ b['title'] }}&quot;? This will remove the series and its reading progress and cannot be undone.">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="q" value="{{ search_q or '' }}">
+                  <input type="hidden" name="sort" value="{{ sort }}">
+                  <input type="hidden" name="page" value="{{ page }}">
                   <button class="btn btn-danger-icon btn-icon" type="submit" data-loading-text="" title="Delete {{ b['title'] }}" aria-label="Delete {{ b['title'] }}">🗑</button>
                 </form>
               </div>
+              <form class="read-through-form" action="{{ url_for('read_through', bookmark_id=b['id']) }}" method="post" data-loading-form="true">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="q" value="{{ search_q or '' }}">
+                <input type="hidden" name="sort" value="{{ sort }}">
+                <input type="hidden" name="page" value="{{ page }}">
+                <span class="filter-label" style="margin:0;">Read through</span>
+                <label class="sr-only" for="read-through-{{ b['id'] }}">Chapter number read through for {{ b['title'] }}</label>
+                <input id="read-through-{{ b['id'] }}" name="chapter_num" type="number" inputmode="decimal" step="any" min="0" placeholder="Ch." aria-label="Chapter read through for {{ b['title'] }}">
+                <button class="btn btn-ghost btn-sm" type="submit" data-loading-text="" title="Record progress" aria-label="Mark read through chapter for {{ b['title'] }}">Set</button>
+              </form>
               {% if b["last_error"] %}<div class="err-line" role="alert">Error: {{ b["last_error"] }}</div>{% endif %}
             </div>
           </div>
@@ -685,7 +762,7 @@
       {% else %}
         <div class="card-surface" style="padding:24px;grid-column:1/-1;">
           {% if search_q %}
-            No series match “{{ search_q }}”. Try another term or <a href="{{ url_for('index') }}" style="color:var(--primary-hi);">clear the search</a>.
+            No series match “{{ search_q }}”. Try another term or <a href="{{ url_for('index', **({'sort': sort} if sort != 'added' else {})) }}" style="color:var(--primary-hi);">clear the search</a>.
           {% else %}
             No bookmarks yet.
           {% endif %}
@@ -701,44 +778,29 @@
         </div>
         <div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;width:100%;">
           {% if page > 1 %}
-            {% if search_q %}<a class="page-chip" href="{{ url_for('index', page=page - 1, q=search_q) }}" rel="prev" aria-label="Previous page">‹</a>
-            {% else %}<a class="page-chip" href="{{ url_for('index', page=page - 1) }}" rel="prev" aria-label="Previous page">‹</a>{% endif %}
+            <a class="page-chip" href="{{ url_for('index', page=page - 1, **index_link_kw) }}" rel="prev" aria-label="Previous page">‹</a>
           {% else %}
             <span class="page-chip is-disabled" aria-disabled="true">‹</span>
           {% endif %}
 
           {% if total_pages <= 14 %}
             {% for p in range(1, total_pages + 1) %}
-              {% if search_q %}<a class="page-chip{% if p == page %} is-active{% endif %}" href="{{ url_for('index', page=p, q=search_q) }}" {% if p == page %}aria-current="page"{% endif %}>{{ p }}</a>
-              {% else %}<a class="page-chip{% if p == page %} is-active{% endif %}" href="{{ url_for('index', page=p) }}" {% if p == page %}aria-current="page"{% endif %}>{{ p }}</a>{% endif %}
+              <a class="page-chip{% if p == page %} is-active{% endif %}" href="{{ url_for('index', page=p, **index_link_kw) }}" {% if p == page %}aria-current="page"{% endif %}>{{ p }}</a>
             {% endfor %}
           {% else %}
-            {% if search_q %}
-              <a class="page-chip{% if page == 1 %} is-active{% endif %}" href="{{ url_for('index', page=1, q=search_q) }}">1</a>
-              {% if page > 4 %}<span class="page-ellipsis">…</span>{% endif %}
-              {% for p in range(page - 2, page + 3) %}
-                {% if p > 1 and p < total_pages %}
-                  <a class="page-chip{% if p == page %} is-active{% endif %}" href="{{ url_for('index', page=p, q=search_q) }}">{{ p }}</a>
-                {% endif %}
-              {% endfor %}
-              {% if page < total_pages - 3 %}<span class="page-ellipsis">…</span>{% endif %}
-              <a class="page-chip{% if page == total_pages %} is-active{% endif %}" href="{{ url_for('index', page=total_pages, q=search_q) }}">{{ total_pages }}</a>
-            {% else %}
-              <a class="page-chip{% if page == 1 %} is-active{% endif %}" href="{{ url_for('index', page=1) }}">1</a>
-              {% if page > 4 %}<span class="page-ellipsis">…</span>{% endif %}
-              {% for p in range(page - 2, page + 3) %}
-                {% if p > 1 and p < total_pages %}
-                  <a class="page-chip{% if p == page %} is-active{% endif %}" href="{{ url_for('index', page=p) }}">{{ p }}</a>
-                {% endif %}
-              {% endfor %}
-              {% if page < total_pages - 3 %}<span class="page-ellipsis">…</span>{% endif %}
-              <a class="page-chip{% if page == total_pages %} is-active{% endif %}" href="{{ url_for('index', page=total_pages) }}">{{ total_pages }}</a>
-            {% endif %}
+            <a class="page-chip{% if page == 1 %} is-active{% endif %}" href="{{ url_for('index', page=1, **index_link_kw) }}">1</a>
+            {% if page > 4 %}<span class="page-ellipsis">…</span>{% endif %}
+            {% for p in range(page - 2, page + 3) %}
+              {% if p > 1 and p < total_pages %}
+                <a class="page-chip{% if p == page %} is-active{% endif %}" href="{{ url_for('index', page=p, **index_link_kw) }}">{{ p }}</a>
+              {% endif %}
+            {% endfor %}
+            {% if page < total_pages - 3 %}<span class="page-ellipsis">…</span>{% endif %}
+            <a class="page-chip{% if page == total_pages %} is-active{% endif %}" href="{{ url_for('index', page=total_pages, **index_link_kw) }}">{{ total_pages }}</a>
           {% endif %}
 
           {% if page < total_pages %}
-            {% if search_q %}<a class="page-chip" href="{{ url_for('index', page=page + 1, q=search_q) }}" rel="next" aria-label="Next page">›</a>
-            {% else %}<a class="page-chip" href="{{ url_for('index', page=page + 1) }}" rel="next" aria-label="Next page">›</a>{% endif %}
+            <a class="page-chip" href="{{ url_for('index', page=page + 1, **index_link_kw) }}" rel="next" aria-label="Next page">›</a>
           {% else %}
             <span class="page-chip is-disabled" aria-disabled="true">›</span>
           {% endif %}
@@ -798,7 +860,16 @@
       });
     });
 
+    const filterForm = document.querySelector(".filter-form");
     const filterInput = document.getElementById("series-filter");
+    if (filterForm && filterInput) {
+      filterForm.addEventListener("submit", () => {
+        filterInput.value = "";
+        document.querySelectorAll(".series-card").forEach((card) => {
+          card.style.display = "";
+        });
+      });
+    }
     if (filterInput) {
       filterInput.addEventListener("input", () => {
         const q = filterInput.value.trim().toLowerCase();

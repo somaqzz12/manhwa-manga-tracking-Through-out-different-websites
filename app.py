@@ -1,3 +1,4 @@
+import math
 import os
 import re
 import sqlite3
@@ -97,6 +98,7 @@ CORS_ALLOW_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").spl
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "").strip()
 READ_PROGRESS_MAX_PER_USER = int(os.getenv("READ_PROGRESS_MAX_PER_USER", "20000"))
 BOOKMARKS_PAGE_SIZE = max(1, int(os.getenv("BOOKMARKS_PAGE_SIZE", "60")))
+SORT_MODES = frozenset({"added", "title", "updated", "unread"})
 IMPORT_MAX_BYTES = int(os.getenv("IMPORT_MAX_BYTES", str(5 * 1024 * 1024)))
 IMPORT_MAX_ITEMS = int(os.getenv("IMPORT_MAX_ITEMS", "20000"))
 AUTH_RATE_LIMIT_PER_IP = os.getenv("AUTH_RATE_LIMIT_PER_IP", "10/minute;60/hour")
@@ -159,6 +161,105 @@ if CORS_ALLOW_ORIGINS:
             "CORS credentials enabled for %d explicit origin(s); keep this list minimal and trusted.",
             len(CORS_ALLOW_ORIGINS),
         )
+
+
+def _index_redirect_kwargs(
+    q: Optional[str] = None, sort: Optional[str] = None, page: Optional[int] = None
+) -> dict:
+    qv = (q or "").strip()[:200]
+    sv = (sort or "added").strip().lower()
+    if sv not in SORT_MODES:
+        sv = "added"
+    kw = {}
+    if qv:
+        kw["q"] = qv
+    if sv != "added":
+        kw["sort"] = sv
+    if page is not None and page > 1:
+        kw["page"] = page
+    return kw
+
+
+def redirect_index_preserve_search():
+    """After a dashboard POST, keep library `q`, `sort`, and `page` when the form submitted hidden fields."""
+    try:
+        page_val = max(1, int(request.form.get("page") or "1"))
+    except ValueError:
+        page_val = 1
+    return redirect(
+        url_for(
+            "index",
+            **_index_redirect_kwargs(request.form.get("q"), request.form.get("sort"), page_val),
+        )
+    )
+
+
+def _bookmark_list_order_by(sort: str) -> str:
+    if sort == "title":
+        return "ORDER BY LOWER(b.title) ASC, b.id DESC"
+    if sort == "updated":
+        if IS_POSTGRES:
+            return "ORDER BY b.last_checked DESC NULLS LAST, b.id DESC"
+        return "ORDER BY (b.last_checked IS NULL), b.last_checked DESC, b.id DESC"
+    if sort == "unread":
+        return (
+            "ORDER BY (CASE WHEN b.latest_seen_num IS NOT NULL AND rp.chapter_num IS NOT NULL "
+            "THEN (b.latest_seen_num - rp.chapter_num) ELSE 0 END) DESC, b.id DESC"
+        )
+    return "ORDER BY b.id DESC"
+
+
+def apply_manual_read_through(user_id: int, bookmark_id: int, chapter_num: float) -> None:
+    """Insert reading progress for chapter_num and align bookmark latest_* / new_update like /api/progress."""
+    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT id, url, latest_seen, latest_seen_num, latest_seen_url
+            FROM bookmarks
+            WHERE id = ? AND user_id = ?
+            """,
+            (bookmark_id, user_id),
+        ).fetchone()
+        if not row:
+            raise ValueError("bookmark not found")
+
+    latest_n = row["latest_seen_num"]
+    latest_lbl = (row["latest_seen"] or "").strip()
+    latest_url = (row["latest_seen_url"] or "").strip()
+    series_url = (row["url"] or "").strip()
+
+    matches_latest = latest_n is not None and abs(float(latest_n) - float(chapter_num)) < 1e-6
+    label = latest_lbl if matches_latest and latest_lbl else f"Ch {chapter_num:g}"
+    src_url = (latest_url or series_url) if matches_latest else series_url
+
+    upsert_progress(user_id, bookmark_id, chapter_num, label, src_url)
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            "SELECT latest_seen_num FROM bookmarks WHERE id = ? AND user_id = ?",
+            (bookmark_id, user_id),
+        ).fetchone()
+        current_num = cur["latest_seen_num"] if cur else None
+        if current_num is None or float(chapter_num) > float(current_num):
+            conn.execute(
+                """
+                UPDATE bookmarks
+                SET latest_seen = ?, latest_seen_num = ?, latest_seen_url = ?, last_checked = ?, last_error = NULL
+                WHERE id = ? AND user_id = ?
+                """,
+                (label, chapter_num, src_url or None, now, bookmark_id, user_id),
+            )
+        cur2 = conn.execute(
+            "SELECT latest_seen_num FROM bookmarks WHERE id = ? AND user_id = ?",
+            (bookmark_id, user_id),
+        ).fetchone()
+        latest_after = cur2["latest_seen_num"] if cur2 else None
+        if latest_after is not None and float(chapter_num) + 1e-6 >= float(latest_after):
+            conn.execute(
+                "UPDATE bookmarks SET new_update = 0 WHERE id = ? AND user_id = ?",
+                (bookmark_id, user_id),
+            )
 
 
 def _adapt_query_for_postgres(query: str) -> str:
@@ -1349,7 +1450,13 @@ def index():
         page = 1
 
     search_q = (request.args.get("q") or "").strip()[:200]
+    sort = (request.args.get("sort") or "added").strip().lower()
+    if sort not in SORT_MODES:
+        sort = "added"
     title_clause, title_params = _bookmark_title_search_clause(search_q)
+    order_clause = _bookmark_list_order_by(sort)
+    index_link_kw = _index_redirect_kwargs(search_q, sort)
+    edit_link_kw = _index_redirect_kwargs(search_q, sort, page)
 
     with get_conn() as conn:
         # Library-wide aggregates (computed across all pages so the summary stays accurate).
@@ -1408,7 +1515,7 @@ def index():
             ) rp ON rp.bookmark_id = b.id
             WHERE b.user_id = ?
             {title_clause}
-            ORDER BY b.id DESC
+            {order_clause}
             LIMIT ? OFFSET ?
             """,
             (user_id, user_id, user_id, *title_params, page_size, offset),
@@ -1457,6 +1564,9 @@ def index():
         total_count=total_count,
         page_size=page_size,
         search_q=search_q,
+        sort=sort,
+        index_link_kw=index_link_kw,
+        edit_link_kw=edit_link_kw,
     )
 
 
@@ -1489,42 +1599,42 @@ def import_data():
     file = request.files.get("backup_file")
     if file is None or not (file.filename or "").strip():
         flash("No backup file selected. Choose a Manga Tracker backup JSON to import.", "warning")
-        return redirect(url_for("index"))
+        return redirect_index_preserve_search()
 
     raw = file.read(IMPORT_MAX_BYTES + 1)
     if len(raw) == 0:
         flash("Import failed: the file is empty.", "error")
-        return redirect(url_for("index"))
+        return redirect_index_preserve_search()
     if len(raw) > IMPORT_MAX_BYTES:
         max_mb = IMPORT_MAX_BYTES / (1024 * 1024)
         flash(f"Import failed: file is larger than {max_mb:.1f} MB. Trim it or split it before importing.", "error")
-        return redirect(url_for("index"))
+        return redirect_index_preserve_search()
 
     try:
         payload = json.loads(raw.decode("utf-8"))
     except UnicodeDecodeError:
         flash("Import failed: file is not UTF-8 text. Export a fresh backup and try again.", "error")
-        return redirect(url_for("index"))
+        return redirect_index_preserve_search()
     except json.JSONDecodeError:
         flash("Import failed: file is not valid JSON. Did you select the right file?", "error")
-        return redirect(url_for("index"))
+        return redirect_index_preserve_search()
 
     if not isinstance(payload, dict):
         flash("Import failed: backup file is missing the expected structure.", "error")
-        return redirect(url_for("index"))
+        return redirect_index_preserve_search()
 
     bookmarks = payload.get("bookmarks")
     progress = payload.get("reading_progress")
     if bookmarks is None and progress is None:
         flash("Import failed: backup has no \"bookmarks\" or \"reading_progress\" sections.", "error")
-        return redirect(url_for("index"))
+        return redirect_index_preserve_search()
 
     if bookmarks is not None and not isinstance(bookmarks, list):
         flash("Import failed: \"bookmarks\" must be a list.", "error")
-        return redirect(url_for("index"))
+        return redirect_index_preserve_search()
     if progress is not None and not isinstance(progress, list):
         flash("Import failed: \"reading_progress\" must be a list.", "error")
-        return redirect(url_for("index"))
+        return redirect_index_preserve_search()
 
     bookmarks = bookmarks or []
     progress = progress or []
@@ -1534,7 +1644,7 @@ def import_data():
             f"Import failed: backup has {len(bookmarks) + len(progress)} entries which exceeds the {IMPORT_MAX_ITEMS} item limit.",
             "error",
         )
-        return redirect(url_for("index"))
+        return redirect_index_preserve_search()
 
     user_id = get_actor_user_id()
     id_map: dict[int, int] = {}
@@ -1631,7 +1741,7 @@ def import_data():
     if pruned:
         parts.append(f"Trimmed {pruned} oldest progress rows to stay under the per-user cap.")
     flash(" ".join(parts), "warning" if skipped_total else "success")
-    return redirect(url_for("index"))
+    return redirect_index_preserve_search()
 
 
 @app.route("/add", methods=["POST"])
@@ -1642,14 +1752,33 @@ def add_bookmark():
     title = request.form.get("title", "").strip()
     url = request.form.get("url", "").strip()
     if not title or not is_valid_http_url(url):
-        return redirect(url_for("index"))
+        return redirect_index_preserve_search()
 
+    bookmark_id: Optional[int] = None
     with get_conn() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO bookmarks (user_id, title, url, cover_url) VALUES (?, ?, ?, ?)",
             (user_id, title, url, None),
         )
-    return redirect(url_for("index"))
+        row = conn.execute(
+            "SELECT id FROM bookmarks WHERE user_id = ? AND url = ?",
+            (user_id, url),
+        ).fetchone()
+        if row:
+            bookmark_id = int(row["id"])
+
+    if bookmark_id is not None:
+        bid, uid = bookmark_id, user_id
+
+        def _check_after_add():
+            try:
+                check_single(bid, uid)
+            except Exception:
+                log.exception("check_single after add_bookmark failed")
+
+        threading.Thread(target=_check_after_add, name=f"check-after-add-{bid}", daemon=True).start()
+
+    return redirect_index_preserve_search()
 
 
 @app.route("/check/<int:bookmark_id>", methods=["POST"])
@@ -1657,7 +1786,7 @@ def check_bookmark(bookmark_id: int):
     if not login_required():
         return redirect(url_for("auth_page"))
     check_single(bookmark_id, get_actor_user_id())
-    return redirect(url_for("index"))
+    return redirect_index_preserve_search()
 
 
 @app.route("/check-all", methods=["POST"])
@@ -1665,7 +1794,7 @@ def check_all_route():
     if not login_required():
         return redirect(url_for("auth_page"))
     check_all(get_actor_user_id())
-    return redirect(url_for("index"))
+    return redirect_index_preserve_search()
 
 
 @app.route("/mark-seen/<int:bookmark_id>", methods=["POST"])
@@ -1675,7 +1804,41 @@ def mark_seen(bookmark_id: int):
     user_id = get_actor_user_id()
     with get_conn() as conn:
         conn.execute("UPDATE bookmarks SET new_update = 0 WHERE id = ? AND user_id = ?", (bookmark_id, user_id))
-    return redirect(url_for("index"))
+    return redirect_index_preserve_search()
+
+
+@app.route("/mark-all-seen", methods=["POST"])
+def mark_all_seen():
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
+    with get_conn() as conn:
+        conn.execute("UPDATE bookmarks SET new_update = 0 WHERE user_id = ?", (user_id,))
+    flash("Marked all series as seen — new-update flags cleared for your whole library.", "success")
+    return redirect_index_preserve_search()
+
+
+@app.route("/bookmark/<int:bookmark_id>/read-through", methods=["POST"])
+def read_through(bookmark_id: int):
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
+    raw = (request.form.get("chapter_num") or "").strip()
+    try:
+        chapter_num = float(raw)
+    except ValueError:
+        flash("Enter a valid chapter number.", "error")
+        return redirect_index_preserve_search()
+    if not math.isfinite(chapter_num) or chapter_num < 0:
+        flash("Chapter number must be zero or positive.", "error")
+        return redirect_index_preserve_search()
+    try:
+        apply_manual_read_through(user_id, bookmark_id, chapter_num)
+    except ValueError:
+        flash("Series not found.", "error")
+        return redirect_index_preserve_search()
+    flash("Reading progress updated.", "success")
+    return redirect_index_preserve_search()
 
 
 @app.route("/bookmark/<int:bookmark_id>/edit", methods=["GET", "POST"])
@@ -1683,6 +1846,19 @@ def edit_bookmark(bookmark_id: int):
     if not login_required():
         return redirect(url_for("auth_page"))
     user_id = get_actor_user_id()
+    if request.method == "POST":
+        return_q = (request.form.get("q") or "").strip()[:200]
+        return_sort = (request.form.get("sort") or "").strip().lower()
+    else:
+        return_q = (request.args.get("q") or "").strip()[:200]
+        return_sort = (request.args.get("sort") or "").strip().lower()
+    if return_sort not in SORT_MODES:
+        return_sort = "added"
+    try:
+        rp = request.form.get("page") if request.method == "POST" else request.args.get("page")
+        return_page = max(1, int(rp or "1"))
+    except ValueError:
+        return_page = 1
     with get_conn() as conn:
         row = conn.execute(
             "SELECT id, title, url FROM bookmarks WHERE id = ? AND user_id = ?",
@@ -1690,13 +1866,20 @@ def edit_bookmark(bookmark_id: int):
         ).fetchone()
     if not row:
         flash("Series not found.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("index", **_index_redirect_kwargs(return_q, return_sort, return_page)))
     if request.method == "POST":
         title = request.form.get("title", "").strip()
         url = request.form.get("url", "").strip()
         if not title or not is_valid_http_url(url):
             flash("Title and a valid http(s) URL are required.", "error")
-            return render_template("edit_bookmark.html", bookmark=dict(row))
+            return render_template(
+                "edit_bookmark.html",
+                bookmark=dict(row),
+                return_q=return_q,
+                return_sort=return_sort,
+                return_page=return_page,
+                edit_back_kw=_index_redirect_kwargs(return_q, return_sort, return_page),
+            )
         old_url = (row["url"] or "").strip()
         new_url = url.strip()
         norm_new = normalize_bookmark_url(new_url)
@@ -1708,7 +1891,14 @@ def edit_bookmark(bookmark_id: int):
             ).fetchall()
             if any(normalize_bookmark_url(o["url"]) == norm_new for o in others):
                 flash("That series URL is already in your library.", "error")
-                return render_template("edit_bookmark.html", bookmark=dict(row))
+                return render_template(
+                    "edit_bookmark.html",
+                    bookmark=dict(row),
+                    return_q=return_q,
+                    return_sort=return_sort,
+                    return_page=return_page,
+                    edit_back_kw=_index_redirect_kwargs(return_q, return_sort, return_page),
+                )
             if url_changed:
                 conn.execute(
                     "UPDATE bookmarks SET title = ?, url = ?, series_key = NULL WHERE id = ? AND user_id = ?",
@@ -1731,8 +1921,15 @@ def edit_bookmark(bookmark_id: int):
                 )
         else:
             flash("Series updated.", "success")
-        return redirect(url_for("index"))
-    return render_template("edit_bookmark.html", bookmark=dict(row))
+        return redirect_index_preserve_search()
+    return render_template(
+        "edit_bookmark.html",
+        bookmark=dict(row),
+        return_q=return_q,
+        return_sort=return_sort,
+        return_page=return_page,
+        edit_back_kw=_index_redirect_kwargs(return_q, return_sort, return_page),
+    )
 
 
 @app.route("/delete/<int:bookmark_id>", methods=["POST"])
@@ -1742,7 +1939,7 @@ def delete_bookmark(bookmark_id: int):
     user_id = get_actor_user_id()
     with get_conn() as conn:
         conn.execute("DELETE FROM bookmarks WHERE id = ? AND user_id = ?", (bookmark_id, user_id))
-    return redirect(url_for("index"))
+    return redirect_index_preserve_search()
 
 
 @csrf.exempt
