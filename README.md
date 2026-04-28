@@ -122,6 +122,29 @@ MangaDex skips the DOM entirely and uses the public `api.mangadex.org` REST endp
 
 The full extension roadmap and design notes are in [`EXTENSION_PLAN.md`](EXTENSION_PLAN.md).
 
+### Publish on the Chrome Web Store (free for end users)
+
+Google charges a **one-time $5 USD** registration fee per developer account. After that, listing the extension is free; users install it from the store at no cost.
+
+1. **Register** at the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
+2. **Privacy policy URL** (required for broad host access): use the policy in this repo, for example  
+   `https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites/blob/main/docs/EXTENSION_PRIVACY_POLICY.md`  
+   (or host the same text on a simple site / GitHub Pages if you prefer a dedicated domain).
+3. **Build the upload zip** (only production files — no `generate_icons.py`):
+
+   ```powershell
+   cd extension
+   powershell -ExecutionPolicy Bypass -File .\package-for-store.ps1
+   ```
+
+   The artifact is `extension/dist/manga-tracker-companion-v<version>.zip`. Upload that zip as a **new item** (or new version) in the dashboard.
+
+4. **Store listing assets**: short description (≤132 characters), detailed description, **128×128** icon (you can reuse `extension/icons/icon-128.png`), and **screenshots** (1280×800 or 640×400 are common sizes). Show the popup on a chapter page, the options screen, and the connection states reviewers care about.
+5. **Permission justifications**: explain `storage`, `tabs`, `activeTab`, `alarms`, `contextMenus`, and **why** `<all_urls>` is needed (many independent reader domains; network traffic only goes to the user’s configured backend plus optional MangaDex API metadata — mirror [`docs/EXTENSION_PRIVACY_POLICY.md`](docs/EXTENSION_PRIVACY_POLICY.md)).
+6. **Review**: submissions are usually checked within a few days. Fix any rejection notes and re-upload a new zip after bumping `"version"` in [`extension/manifest.json`](extension/manifest.json).
+
+The extension’s `homepage_url` in the manifest points at this GitHub repository so users can read the source and file issues.
+
 ## API endpoints
 
 Routes the extension and external clients can rely on. All `/api/*` routes are CSRF-exempt and honor `REQUIRE_API_AUTH`; admin routes additionally require `ADMIN_API_TOKEN`.

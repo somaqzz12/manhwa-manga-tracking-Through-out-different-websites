@@ -2,7 +2,8 @@
   "manifest_version": 3,
   "name": "Manga Tracker Companion",
   "version": "0.2.0",
-  "description": "Auto-detect manga/manhwa chapters, prompt to add series, and sync read progress.",
+  "description": "Sync manga and manhwa reading progress to your self-hosted Manga Tracker. Optional prompts, badge, and shortcuts.",
+  "homepage_url": "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites",
   "permissions": ["storage", "activeTab", "tabs", "alarms", "contextMenus"],
   "host_permissions": ["<all_urls>", "http://127.0.0.1:5000/*"],
   "icons": {
