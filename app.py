@@ -973,11 +973,21 @@ def auth_page():
                     else:
                         now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
                         synthetic_email = f"{username}@local.user"
-                        cursor = conn.execute(
+                        insert_cur = conn.execute(
                             "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
                             (username, synthetic_email, generate_password_hash(password), now),
                         )
-                        new_user_id = int(cursor.lastrowid)
+                        # PostgreSQL drivers do not set lastrowid; fetch the row we just inserted.
+                        if IS_POSTGRES:
+                            inserted = conn.execute(
+                                "SELECT id FROM users WHERE username = ? AND email = ?",
+                                (username, synthetic_email),
+                            ).fetchone()
+                            if not inserted:
+                                raise RuntimeError("user insert did not return id")
+                            new_user_id = int(inserted["id"])
+                        else:
+                            new_user_id = int(insert_cur.lastrowid)
                         session["user_id"] = new_user_id
                         conn.execute(
                             "INSERT OR IGNORE INTO bookmarks (user_id, title, url) VALUES (?, ?, ?)",
