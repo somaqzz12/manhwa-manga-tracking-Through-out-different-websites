@@ -273,6 +273,11 @@ async function saveTrackData(data) {
   if (sessionStorage.getItem(promptKey) === "1") return { ok: true, skipped: true };
 
   const knownKey = `mangaTrackerKnownSeries:${data.seriesKey}`;
+  const knownSeries = localStorage.getItem(knownKey) === "1";
+  if (!knownSeries) {
+    const shouldTrack = window.confirm(`Track this series?\n\n${data.title}\n${data.seriesUrl}`);
+    if (!shouldTrack) return { ok: false, error: "User skipped tracking." };
+  }
   sessionStorage.setItem(promptKey, "1");
 
   const ensure = await sendMessage({
