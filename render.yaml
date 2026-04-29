@@ -17,7 +17,7 @@ services:
       # Add your app URL and either CHROME_EXTENSION_ID (below) or the full
       # chrome-extension://<id> string after you publish the extension.
       - key: CORS_ALLOW_ORIGINS
-        value: "https://mangawatchlist.space,https://app.mangawatchlist.space"
+        value: "https://mangawatchlist.space,https://www.mangawatchlist.space,https://api.mangawatchlist.space,https://app.mangawatchlist.space"
       # Keep free-tier memory stable: disable Selenium fallback and reduce
       # per-check timeout / concurrency.
       - key: USE_SELENIUM_FALLBACK

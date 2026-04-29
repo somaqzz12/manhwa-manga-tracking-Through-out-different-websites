@@ -3,5 +3,6 @@
 //
 // Update PUBLIC_API_BASE here if you redeploy the Flask app under a new URL.
 // Power users can still override per-install via the options page.
-const PUBLIC_API_BASE = "https://app.mangawatchlist.space";
+const PUBLIC_API_BASE = "https://api.mangawatchlist.space";
+const LEGACY_PUBLIC_API_BASE = "https://app.mangawatchlist.space";
 const DEFAULT_API_BASE = PUBLIC_API_BASE;

@@ -6,6 +6,7 @@
   "homepage_url": "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites",
   "permissions": ["storage", "activeTab", "tabs", "alarms", "contextMenus"],
   "host_permissions": [
+    "https://api.mangawatchlist.space/*",
     "https://app.mangawatchlist.space/*",
     "https://manhwa-manga-tracking-through-out.onrender.com/*",
     "http://127.0.0.1:5000/*"

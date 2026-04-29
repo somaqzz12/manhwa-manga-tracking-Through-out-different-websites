@@ -8,15 +8,25 @@ const CONTEXT_MENU_ID = "manga-watchlist-track-chapter";
 const TRACK_COMMAND = "track-current-chapter";
 const DEBUG_LOG_LIMIT = 25;
 
+function normalizeApiBase(raw) {
+  const clean = String(raw || "").trim().replace(/\/$/, "");
+  if (clean === LEGACY_PUBLIC_API_BASE) return PUBLIC_API_BASE;
+  return clean;
+}
+
 async function getSettings() {
   const stored = await chrome.storage.local.get([
     "apiBase",
     "autoTrack",
     "cooldownHours",
   ]);
-  const apiBaseRaw = (stored.apiBase || DEFAULT_API_BASE).trim();
+  const originalApiBase = stored.apiBase || DEFAULT_API_BASE;
+  const apiBaseRaw = normalizeApiBase(originalApiBase);
+  if (stored.apiBase && apiBaseRaw !== stored.apiBase.trim().replace(/\/$/, "")) {
+    await chrome.storage.local.set({ apiBase: apiBaseRaw });
+  }
   return {
-    apiBase: apiBaseRaw.replace(/\/$/, ""),
+    apiBase: apiBaseRaw,
     autoTrack: Boolean(stored.autoTrack),
     cooldownHours: Number.isFinite(stored.cooldownHours)
       ? stored.cooldownHours
@@ -229,7 +239,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return;
       }
       if (msg?.type === "SET_API_BASE") {
-        const raw = (msg.payload?.apiBase || DEFAULT_API_BASE).trim().replace(/\/$/, "");
+        const raw = normalizeApiBase(msg.payload?.apiBase || DEFAULT_API_BASE);
         await chrome.storage.local.set({ apiBase: raw });
         sendResponse({ ok: true, apiBase: raw });
         return;
