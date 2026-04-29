@@ -4,7 +4,9 @@ This folder is the full **Chrome / Edge (Chromium) MV3** extension. There is no 
 
 ## Quick install (use the hosted app)
 
-1. Clone or download this repository (you only need the `extension/` folder).
+**Fastest:** download **only this folder** as a ZIP (GitHub serves it via [download-directory](https://download-directory.github.io/)) — use the same link as on [mangawatchlist.space](https://mangawatchlist.space) (“Download extension (ZIP)”), or open your repo’s `main` branch tree at `extension/` and use the green **Code** button if you prefer.
+
+1. Or clone / download the full repository (you only need the `extension/` folder).
 2. Open `chrome://extensions` (or `edge://extensions`).
 3. Turn on **Developer mode**.
 4. Click **Load unpacked** and choose this **`extension`** directory (the one that contains `manifest.json`).

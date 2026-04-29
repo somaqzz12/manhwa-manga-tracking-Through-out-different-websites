@@ -12,7 +12,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote, urljoin, urlparse
 
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -139,6 +139,16 @@ if not APP_DEBUG and not os.getenv("SECRET_KEY"):
 _DEFAULT_GITHUB_URL = "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites"
 
 
+def _extension_zip_download_url() -> str:
+    """Public one-click ZIP of the `extension/` tree (for Load unpacked)."""
+    custom = (os.getenv("EXTENSION_ZIP_DOWNLOAD_URL") or "").strip()
+    if custom:
+        return custom
+    gh = (os.getenv("GITHUB_URL") or _DEFAULT_GITHUB_URL).strip().rstrip("/")
+    tree = f"{gh}/tree/main/extension"
+    return "https://download-directory.github.io/?url=" + quote(tree, safe="")
+
+
 @app.context_processor
 def inject_template_globals():
     return {
@@ -147,7 +157,7 @@ def inject_template_globals():
         "site_description": "Track manga and manhwa chapter releases, reading progress, and updates in one dashboard.",
         "min_password_length": MIN_PASSWORD_LENGTH,
         "github_url": (os.getenv("GITHUB_URL") or _DEFAULT_GITHUB_URL).strip(),
-        "extension_coming_soon": True,
+        "extension_zip_download_url": _extension_zip_download_url(),
     }
 
 

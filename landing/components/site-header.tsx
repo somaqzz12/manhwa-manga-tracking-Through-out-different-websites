@@ -3,27 +3,51 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChromeIcon } from "@/components/chrome-icon";
-import { githubUrl, webStoreUrl } from "@/lib/site-config";
+import {
+  extensionZipDownloadUrl,
+  githubUrl,
+  webStoreUrl,
+} from "@/lib/site-config";
 
-function primaryCta() {
-  const label =
-    webStoreUrl.length > 0 ? "Add to Chrome" : "Extension source";
-  const href =
-    webStoreUrl.length > 0
-      ? webStoreUrl
-      : `${githubUrl}/tree/main/extension`;
-  const external = true;
-  return (
-    <Link
-      href={href}
-      className="btn-primary inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white outline-none transition duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
-      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      aria-label={label}
+function ExtensionCtas() {
+  const zip = (
+    <a
+      href={extensionZipDownloadUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={
+        webStoreUrl.length > 0
+          ? "btn-glass inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-[var(--color-text)] outline-none transition duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+          : "btn-primary inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white outline-none transition duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+      }
+      aria-label="Download extension as ZIP"
     >
-      <ChromeIcon className="h-5 w-5 text-white" />
-      {label}
-    </Link>
+      {webStoreUrl.length === 0 ? (
+        <ChromeIcon className="h-5 w-5 text-white" />
+      ) : null}
+      {webStoreUrl.length > 0 ? "ZIP" : "Download extension"}
+    </a>
   );
+
+  if (webStoreUrl.length > 0) {
+    return (
+      <>
+        <Link
+          href={webStoreUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-primary inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white outline-none transition duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+          aria-label="Add to Chrome"
+        >
+          <ChromeIcon className="h-5 w-5 text-white" />
+          Add to Chrome
+        </Link>
+        {zip}
+      </>
+    );
+  }
+
+  return zip;
 }
 
 export function SiteHeader() {
@@ -72,7 +96,7 @@ export function SiteHeader() {
           >
             GitHub
           </Link>
-          {primaryCta()}
+          <ExtensionCtas />
         </div>
       </div>
     </header>

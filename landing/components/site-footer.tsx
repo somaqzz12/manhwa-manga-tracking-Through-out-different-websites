@@ -4,6 +4,7 @@ import {
   authorName,
   bugReportUrl,
   extensionPrivacyHref,
+  extensionZipDownloadUrl,
   githubUrl,
 } from "@/lib/site-config";
 
@@ -21,6 +22,14 @@ export function SiteFooter() {
           >
             Repository
           </Link>
+          <a
+            href={extensionZipDownloadUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition hover:text-[var(--color-text)]"
+          >
+            Download extension
+          </a>
           <Link
             href={bugReportUrl}
             target="_blank"

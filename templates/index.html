@@ -282,6 +282,7 @@
           <option value="comedy">Comedy</option>
           <option value="drama">Drama</option>
         </select>
+        <a class="btn" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Extension ZIP</a>
         <button id="themeToggle" class="btn" type="button">☾</button>
         <form action="/logout" method="post" data-loading-form="true" style="display:inline;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

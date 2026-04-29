@@ -10,6 +10,13 @@ export const githubUrl =
   process.env.NEXT_PUBLIC_GITHUB_URL?.trim() ||
   "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites";
 
+/** One-click ZIP of `extension/` only (unzip → Load unpacked). Override with a Release asset URL if you prefer. */
+export const extensionZipDownloadUrl =
+  process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL?.trim() ||
+  `https://download-directory.github.io/?url=${encodeURIComponent(
+    `${githubUrl.replace(/\/$/, "")}/tree/main/extension`,
+  )}`;
+
 export const bugReportUrl =
   process.env.NEXT_PUBLIC_BUG_REPORT_URL?.trim() ||
   "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites/issues";

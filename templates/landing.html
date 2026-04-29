@@ -258,21 +258,18 @@
         View source on GitHub
       </a>
     </div>
-    {% if extension_coming_soon %}
     <div class="ext-banner">
       <div class="ext-banner-head">
         <svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h3a1 1 0 0 0 1-1V5a2 2 0 0 1 4 0v1a1 1 0 0 0 1 1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-1a2 2 0 0 0-4 0v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a2 2 0 0 0 0-4H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z"/></svg>
         <div>
-          <h2>Browser Extension</h2>
-          <p>Browser Extension Coming Soon — track chapters without leaving the page.</p>
+          <h2>Browser extension</h2>
+          <p>Download a ZIP of the extension, unzip it, then in Chrome go to <strong>Extensions → Developer mode → Load unpacked</strong> and pick that folder. Sign in on this site in the same browser profile.</p>
           <div class="ext-actions">
-            <span class="badge-soon">Coming soon</span>
-            <button type="button" class="btn btn-disabled" disabled aria-disabled="true">Add to Chrome</button>
+            <a class="btn btn-primary" href="{{ extension_zip_download_url }}" rel="noopener noreferrer" target="_blank">Download extension (ZIP)</a>
           </div>
         </div>
       </div>
     </div>
-    {% endif %}
     <p class="foot-links">
       <a href="{{ bug_report_href }}" rel="noopener noreferrer">Report an issue</a>
       {% if contact_email %}
