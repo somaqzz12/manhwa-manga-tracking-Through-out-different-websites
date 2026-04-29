@@ -1693,6 +1693,35 @@ def export_data():
     )
 
 
+@app.route("/export/migration-ids", methods=["GET"])
+def export_migration_ids():
+    """Lightweight export for cross-tool migrations keyed by bookmark id."""
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, title, url, series_key, latest_chapter, latest_chapter_label
+            FROM bookmarks
+            WHERE user_id = ?
+            ORDER BY id ASC
+            """,
+            (user_id,),
+        ).fetchall()
+    payload = {
+        "version": 1,
+        "exported_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "items": [dict(r) for r in rows],
+    }
+    body = json.dumps(payload, ensure_ascii=True, indent=2)
+    return Response(
+        body,
+        mimetype="application/json",
+        headers={"Content-Disposition": 'attachment; filename="manga-watchlist-migration-ids.json"'},
+    )
+
+
 @app.route("/import", methods=["POST"])
 def import_data():
     if not login_required():
