@@ -157,29 +157,37 @@ function ensureContextMenu() {
   } catch {}
 }
 
-async function trackActiveTab() {
+async function trackActiveTab({ force = false } = {}) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return { ok: false, error: "No active tab found." };
   let pageRes;
   try {
-    pageRes = await chrome.tabs.sendMessage(tab.id, { type: "GET_PAGE_TRACK_DATA" });
+    pageRes = await chrome.tabs.sendMessage(tab.id, {
+      type: "GET_PAGE_TRACK_DATA",
+      force,
+    });
   } catch (err) {
     return { ok: false, error: `Content script unavailable: ${err?.message || err}` };
   }
   if (!pageRes?.ok || !pageRes?.data) {
-    return { ok: false, error: "This page is not recognized as a chapter page." };
+    return {
+      ok: false,
+      error: force
+        ? "Could not read this page. Try refreshing it and tracking again."
+        : "This page is not recognized as a chapter page.",
+    };
   }
   try {
     const data = await trackPayload(pageRes.data);
     await storeDebug({
-      type: "manual_track_ok",
+      type: force ? "manual_track_force_ok" : "manual_track_ok",
       message: pageRes.data.title || "(untitled)",
     });
     fetchUnreadAndUpdateBadge().catch(() => {});
     return { ok: true, data };
   } catch (err) {
     await storeDebug({
-      type: "manual_track_failed",
+      type: force ? "manual_track_force_failed" : "manual_track_failed",
       level: "error",
       error: String(err?.message || err),
     });
@@ -228,7 +236,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return;
       }
       if (msg?.type === "TRACK_TAB_NOW") {
-        const result = await trackActiveTab();
+        const result = await trackActiveTab({ force: Boolean(msg.force) });
         sendResponse(result);
         return;
       }

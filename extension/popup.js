@@ -111,6 +111,24 @@ async function init() {
       $("noChapterUnread").classList.remove("hidden");
       $("noChapterUnreadValue").textContent = String(totalUnread);
     }
+    const forceBtn = $("forceTrackButton");
+    if (forceBtn) {
+      forceBtn.addEventListener("click", async () => {
+        forceBtn.disabled = true;
+        setStatus("Saving...");
+        const result = await sendMessage({ type: "TRACK_TAB_NOW", force: true });
+        if (result?.ok) {
+          setStatus("Saved.");
+          showToast("Saved to tracker", "success");
+          forceBtn.textContent = "Saved";
+          setTimeout(() => init(), 900);
+        } else {
+          setStatus(`Failed: ${result?.error || "unknown error"}`);
+          showToast(result?.error || "Failed to save", "error");
+          forceBtn.disabled = false;
+        }
+      });
+    }
     bindFooter();
     return;
   }

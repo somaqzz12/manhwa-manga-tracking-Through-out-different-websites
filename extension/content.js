@@ -208,31 +208,21 @@ function pathHasChapterSignal(path) {
 }
 
 function pageLooksLikeReader() {
+  // Chapter readers stack many tall images. We accept either fully decoded
+  // (`naturalHeight`) or layout-sized (`offsetHeight`/attribute) images so the
+  // signal works at `document_idle` before lazy-loaded images have downloaded.
   const imgs = document.querySelectorAll("img");
   let tallImageCount = 0;
   for (const img of imgs) {
-    const h = img.naturalHeight || img.height || 0;
-    const w = img.naturalWidth || img.width || 0;
-    if (h >= 900 && w >= 500) tallImageCount += 1;
+    const naturalH = img.naturalHeight || 0;
+    const naturalW = img.naturalWidth || 0;
+    const layoutH = img.offsetHeight || Number(img.getAttribute("height")) || 0;
+    const layoutW = img.offsetWidth || Number(img.getAttribute("width")) || 0;
+    const tall = (naturalH >= 900 && naturalW >= 500) || (layoutH >= 700 && layoutW >= 400);
+    if (tall) tallImageCount += 1;
     if (tallImageCount >= 3) return true;
   }
   return false;
-}
-
-function countLargeImages() {
-  // Cheap, capped scan to act as a negative signal: chapter pages typically
-  // have many large images, while series-listing pages and search results have
-  // few or none.
-  const imgs = document.querySelectorAll("img");
-  let large = 0;
-  let scanned = 0;
-  for (const img of imgs) {
-    scanned += 1;
-    const w = img.naturalWidth || img.width || 0;
-    if (w >= 600) large += 1;
-    if (scanned >= 200) break;
-  }
-  return large;
 }
 
 function pageHasReaderControls() {
@@ -330,9 +320,7 @@ function looksLikeMangaSite(url, title) {
     const path = u.pathname.toLowerCase();
     const t = (title || "").toLowerCase();
 
-    if (isBlockedHost(host)) {
-      return false;
-    }
+    if (isBlockedHost(host)) return false;
 
     const hostHasHint = SUPPORTED_HOST_HINTS.some((hint) => host.includes(hint));
     const pathHasChapter = pathHasChapterSignal(path);
@@ -343,28 +331,53 @@ function looksLikeMangaSite(url, title) {
     const readerControls = pageHasReaderControls();
     const listingPage = isLikelyListingPage(path, bodyText);
 
-    if (listingPage && !pathHasChapter && !pathHasSlugChapter && !titleHasChapter && !readerLikeDom && !readerControls) {
+    // Reject obvious browse / latest / genre listing pages with no chapter
+    // signal at all. Reader DOM or chapter-shaped URL can still rescue a page
+    // that looks like a listing on the surface (e.g. infinite-scroll readers
+    // that surface chapter lists in the footer).
+    if (
+      listingPage &&
+      !pathHasChapter &&
+      !pathHasSlugChapter &&
+      !titleHasChapter &&
+      !readerLikeDom
+    ) {
       return false;
     }
 
-    // Negative signal: chapter-looking URL on a host hint, but the page has
-    // essentially no large images. Common on series detail pages that mention
-    // "Chapter N" in a recommendations list. We still allow the strongest
-    // combo (chapter URL + chapter title + reader DOM) through, but we
-    // downgrade weaker single-signal matches.
-    const largeImages = countLargeImages();
-    const veryFewImages = largeImages < 2;
+    // Image-based signals are unreliable at `document_idle` because most
+    // readers lazy-load chapter images, so we treat them as positive boosts
+    // only — never as required gates.
 
-    // Strong signal: chapter-like URL plus chapter-like title.
-    if (pathHasChapter && titleHasChapter && !veryFewImages) return true;
-    // Reader-like page plus chapter-like URL.
-    if (pathHasChapter && readerLikeDom) return true;
-    // Some sites use series-slug-with-number chapter paths instead of /chapter/NN.
-    if (pathHasSlugChapter && hostHasHint && (readerLikeDom || readerControls || titleHasChapter) && !veryFewImages) return true;
-    // Reader controls are a fallback only with explicit chapter signal.
-    if (hostHasHint && readerControls && (pathHasChapter || pathHasSlugChapter || titleHasChapter) && !veryFewImages) return true;
-    // Strong chapter signal with host hints.
-    if (hostHasHint && (pathHasChapter || titleHasChapter) && (readerLikeDom || readerControls)) return true;
+    // URL and <title> independently agree on a chapter — strongest portable
+    // signal, works even on hosts not in SUPPORTED_HOST_HINTS.
+    if (pathHasChapter && titleHasChapter) return true;
+
+    // Explicit /chapter/N (or /cN) URL on a known manga host.
+    if (pathHasChapter && hostHasHint) return true;
+
+    // Series-slug-with-trailing-number URL on a manga host (Asura family etc).
+    if (pathHasSlugChapter && hostHasHint) return true;
+
+    // Title says "Chapter N" on a known manga host (covers SPAs where the URL
+    // is hash-only or pinned at the series root).
+    if (titleHasChapter && hostHasHint) return true;
+
+    // Reader-shaped DOM (long stack of large images) plus any chapter signal.
+    if (readerLikeDom && (pathHasChapter || pathHasSlugChapter || titleHasChapter)) {
+      return true;
+    }
+
+    // Reader controls (Prev / Next / Select Chapter) on a manga host with a
+    // chapter signal.
+    if (
+      readerControls &&
+      hostHasHint &&
+      (pathHasChapter || pathHasSlugChapter || titleHasChapter)
+    ) {
+      return true;
+    }
+
     return false;
   } catch {
     return false;
@@ -458,6 +471,38 @@ async function getTrackDataFromPage() {
   const data = await detectPageData();
   if (!data || !data.seriesUrl || data.seriesUrl.startsWith("chrome://")) return null;
   return data;
+}
+
+// Force-mode payload used when the user explicitly asks to track the current
+// tab from the popup ("Track this page anyway"). Skips the manga-site gate so
+// pages that don't trip the heuristics can still be added; the user has
+// already confirmed by clicking.
+function buildRawTrackData() {
+  try {
+    const url = window.location.href;
+    const u = new URL(url);
+    if (/^(chrome|edge|about|chrome-extension):/i.test(u.protocol)) return null;
+    const title = document.title || u.hostname;
+    const path = u.pathname.toLowerCase();
+    const pathHasSlugChapter = pathLooksLikeSeriesChapterSlug(path);
+    const readerControls = pageHasReaderControls();
+    const cleanedTitle = cleanSeriesTitle(title);
+    const seriesUrl = normalizeSeriesUrl(url, {
+      dropTrailingSlugNumber: pathHasSlugChapter && readerControls,
+    });
+    const seriesKey = buildSeriesKey(seriesUrl, cleanedTitle);
+    const chapterNum = parseChapterFromText(title) ?? parseChapterFromUrl(url);
+    return {
+      title: cleanedTitle,
+      seriesUrl,
+      seriesKey,
+      chapterUrl: url,
+      chapterLabel: title,
+      chapterNum,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function showTrackPrompt(data) {
@@ -800,12 +845,12 @@ function clearPageSnoozeRecords() {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     if (msg?.type === "GET_PAGE_TRACK_DATA") {
-      const data = await getTrackDataFromPage();
+      const data = msg.force ? buildRawTrackData() : await getTrackDataFromPage();
       sendResponse({ ok: true, data });
       return;
     }
     if (msg?.type === "TRACK_NOW") {
-      const data = await getTrackDataFromPage();
+      const data = msg.force ? buildRawTrackData() : await getTrackDataFromPage();
       const result = await saveTrackData(data);
       sendResponse(result);
       return;
