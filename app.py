@@ -70,6 +70,28 @@ app.config["WTF_CSRF_TIME_LIMIT"] = None
 app.config["WTF_CSRF_SSL_STRICT"] = os.getenv("FLASK_DEBUG", "1") != "1"
 csrf = CSRFProtect(app)
 
+
+@app.template_filter("clean")
+def clean_number(value):
+    """Render chapter-like numeric values without noisy trailing .0."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return str(int(value)) if value.is_integer() else f"{value:g}"
+    text = str(value).strip()
+    if not text:
+        return ""
+    try:
+        num = float(text)
+    except ValueError:
+        return text
+    return str(int(num)) if num.is_integer() else f"{num:g}"
+
+
 _RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
 limiter = Limiter(
     key_func=get_remote_address,

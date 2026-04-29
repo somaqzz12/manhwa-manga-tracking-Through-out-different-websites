@@ -231,30 +231,42 @@
     }
     .title { font-size: 0.95rem; font-weight: 500; margin: 0; font-family: "Inter", sans-serif; }
     .tag { font-size: 0.72rem; color: var(--muted); }
-    .card-progress {
+    .chapter-progress {
       margin: 0 12px 10px;
+      margin-top: 12px;
       padding-top: 10px;
       border-top: 1px solid var(--border);
       display: grid;
-      gap: 4px;
-      font-size: 0.78rem;
-      color: var(--muted);
-      line-height: 1.35;
+      gap: 6px;
+      font-size: 14px;
     }
-    .card-progress a {
-      color: inherit;
+    .progress-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+    }
+    .progress-row span {
+      color: #777;
+    }
+    .progress-row a,
+    .progress-row strong {
+      color: #222;
+      font-weight: 600;
       text-decoration: none;
-      border-bottom: 1px dotted color-mix(in srgb, var(--muted) 55%, transparent);
+      white-space: nowrap;
     }
-    .card-progress a:hover {
-      color: var(--text);
-      border-bottom-color: color-mix(in srgb, var(--text) 45%, transparent);
+    .dark .progress-row a,
+    .dark .progress-row strong {
+      color: #eaeaea;
     }
-    .card-progress .unread {
-      color: #7c5cff;
-      font-weight: 500;
+    .progress-row a:hover {
+      text-decoration: underline;
     }
-    .dark .card-progress .unread {
+    .progress-row.unread strong {
+      color: #7c4dff;
+    }
+    .dark .progress-row.unread strong {
       color: #b59bfa;
     }
     .card-actions {
@@ -367,8 +379,8 @@
       <div class="grid section" id="series-grid">
         {% for b in bookmarks %}
           {% set show_continue = (b.continue_url or '')|trim %}
-          {% set last_read_label = (b.read_chapter_label or '')|trim %}
-          {% set latest_label = (b.latest_seen or '')|trim %}
+          {% set last_read_num = b.read_chapter_num %}
+          {% set latest_num = b.latest_seen_num %}
           <article class="card" data-genre="{{ (b.get('genre') or '')|lower }}">
             {% if b["cover_url"] %}
               <img src="{{ b['cover_url'] }}" alt="" class="cover" loading="lazy" referrerpolicy="origin">
@@ -379,29 +391,36 @@
               <p class="title">{{ b["title"] }}</p>
               <span class="tag">{% if b["new_update"] %}NEW{% else %}OK{% endif %}</span>
             </div>
-            <div class="card-progress">
-              <span>
-                Last read:
-                {% if (b.read_source_url or '')|trim and last_read_label %}
-                  <a href="{{ b.read_source_url }}" target="_blank" rel="noreferrer">{{ last_read_label }}</a>
-                {% elif last_read_label %}
-                  {{ last_read_label }}
+            <div class="chapter-progress">
+              <div class="progress-row">
+                <span>Last read</span>
+                {% if last_read_num is not none %}
+                  {% if (b.read_source_url or '')|trim %}
+                    <a href="{{ b.read_source_url }}" target="_blank" rel="noreferrer">Ch. {{ last_read_num|clean }}</a>
+                  {% else %}
+                    <strong>Ch. {{ last_read_num|clean }}</strong>
+                  {% endif %}
                 {% else %}
-                  Not started
+                  <strong>Not started</strong>
                 {% endif %}
-              </span>
-              <span>
-                Latest:
-                {% if (b.latest_seen_url or '')|trim and latest_label %}
-                  <a href="{{ b.latest_seen_url }}" target="_blank" rel="noreferrer">{{ latest_label }}</a>
-                {% elif latest_label %}
-                  {{ latest_label }}
+              </div>
+              <div class="progress-row">
+                <span>Latest</span>
+                {% if latest_num is not none %}
+                  {% if (b.latest_seen_url or '')|trim %}
+                    <a href="{{ b.latest_seen_url }}" target="_blank" rel="noreferrer">Ch. {{ latest_num|clean }}</a>
+                  {% else %}
+                    <strong>Ch. {{ latest_num|clean }}</strong>
+                  {% endif %}
                 {% else %}
-                  Unknown
+                  <strong>Unknown</strong>
                 {% endif %}
-              </span>
+              </div>
               {% if (b.unread_count or 0) > 0 %}
-                <span class="unread">{{ b.unread_count }} unread</span>
+                <div class="progress-row unread">
+                  <span>Unread</span>
+                  <strong>+{{ b.unread_count|clean }}</strong>
+                </div>
               {% endif %}
             </div>
             <div class="card-actions">
