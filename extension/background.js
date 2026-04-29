@@ -1,4 +1,6 @@
-const DEFAULT_API_BASE = "http://127.0.0.1:5000";
+// Loads `DEFAULT_API_BASE` (and `PUBLIC_API_BASE`) into the service worker scope.
+// Edit extension/config.js to point the companion at a different deployment.
+importScripts("config.js");
 const DEFAULT_COOLDOWN_HOURS = 24;
 const UNREAD_ALARM_NAME = "manga-tracker-unread-poll";
 const UNREAD_POLL_PERIOD_MINUTES = 30;

@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE = "http://127.0.0.1:5000";
+// `DEFAULT_API_BASE` comes from extension/config.js, loaded before this script in options.html.
 const DEFAULT_COOLDOWN_HOURS = 24;
 
 const $ = (id) => document.getElementById(id);

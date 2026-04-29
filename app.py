@@ -48,11 +48,22 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger(__name__)
 
-# Session cookies: HttpOnly + SameSite=Lax limits XSS and cross-site POST CSRF;
-# Secure defaults on when FLASK_DEBUG is off (HTTPS). Override with SESSION_COOKIE_SECURE=0 only if needed.
+# Session cookies: HttpOnly always; SameSite default flips by environment so the
+# Chrome extension (a chrome-extension:// origin) can still send the cookie back
+# to us via cross-site fetch with credentials.
+#   - In production (FLASK_DEBUG=0), Secure is required and SameSite must be "None"
+#     for the extension to attach the cookie. Browsers will only honor SameSite=None
+#     when the cookie is also Secure (HTTPS).
+#   - In dev (FLASK_DEBUG=1), keep SameSite=Lax / not-Secure so localhost works.
+# Override either with SESSION_COOKIE_SAMESITE / SESSION_COOKIE_SECURE env vars.
+_IS_PROD = os.getenv("FLASK_DEBUG", "1") != "1"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "0" if os.getenv("FLASK_DEBUG", "1") == "1" else "1") == "1"
+app.config["SESSION_COOKIE_SAMESITE"] = os.getenv(
+    "SESSION_COOKIE_SAMESITE", "None" if _IS_PROD else "Lax"
+)
+app.config["SESSION_COOKIE_SECURE"] = os.getenv(
+    "SESSION_COOKIE_SECURE", "1" if _IS_PROD else "0"
+) == "1"
 app.config["WTF_CSRF_TIME_LIMIT"] = None
 app.config["WTF_CSRF_SSL_STRICT"] = os.getenv("FLASK_DEBUG", "1") != "1"
 csrf = CSRFProtect(app)

@@ -1,5 +1,4 @@
-const DEFAULT_API_BASE = "http://127.0.0.1:5000";
-
+// `DEFAULT_API_BASE` comes from extension/config.js, loaded before this script in popup.html.
 const $ = (id) => document.getElementById(id);
 
 function sendMessage(msg) {

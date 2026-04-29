@@ -166,15 +166,15 @@
       <div class="logo">MT</div>
       <div>
         <h1>Manga Tracker — Settings</h1>
-        <div class="sub">Configure how the companion talks to your self-hosted backend.</div>
+        <div class="sub">By default the companion talks to the official Manga Tracker server. Override the URL only if you run your own deployment.</div>
       </div>
     </div>
 
     <section class="card">
-      <h2>Backend</h2>
-      <p class="help">URL of your Manga Tracker server. The popup pings <code>/healthz</code> here and the badge polls <code>/api/unread-count</code>.</p>
+      <h2>Backend URL</h2>
+      <p class="help">The Manga Tracker site this extension syncs to. Leave the default to use the official server; only change it if you're hosting your own copy. The popup pings <code>/healthz</code> here and the badge polls <code>/api/unread-count</code>.</p>
       <label class="field" for="apiBase">Backend URL</label>
-      <input id="apiBase" type="text" placeholder="https://your-app.example.com">
+      <input id="apiBase" type="text" placeholder="https://manga-tracker.onrender.com">
       <div class="toolbar">
         <button id="saveApiBase">Save backend URL</button>
         <button class="secondary" id="testConnection">Test connection</button>
@@ -204,7 +204,7 @@
 
     <section class="card">
       <h2>Local data</h2>
-      <p class="help">Wipes the extension's locally stored settings, debug log, and snooze records. Does not touch your backend.</p>
+      <p class="help">Wipes the extension's locally stored settings, debug log, and snooze records. Does not touch your account or library on the server.</p>
       <div class="toolbar">
         <button class="danger" id="clearData">Clear local data</button>
       </div>
@@ -223,6 +223,7 @@
       <div id="logStatus" class="status"></div>
     </section>
   </div>
+  <script src="config.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

@@ -12,6 +12,12 @@ services:
         value: "1"
       - key: ALLOW_SQLITE_IN_PRODUCTION
         value: "0"
+      # Required for the Chrome extension: cross-site cookies must be SameSite=None+Secure
+      # so the chrome-extension:// origin can forward the session cookie on /api/* calls.
+      - key: SESSION_COOKIE_SAMESITE
+        value: "None"
+      - key: SESSION_COOKIE_SECURE
+        value: "1"
       - key: DATABASE_URL
         fromDatabase:
           name: manga-tracker-db
