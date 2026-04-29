@@ -17,7 +17,7 @@ from urllib.parse import quote, urljoin, urlparse
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from bs4 import BeautifulSoup
-from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for, Response
+from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for, Response, abort
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
@@ -147,6 +147,7 @@ if CHROME_EXTENSION_ID:
     if ext_origin not in CORS_ALLOW_ORIGINS:
         CORS_ALLOW_ORIGINS.append(ext_origin)
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "").strip()
+ADMIN_USERNAME = (os.getenv("ADMIN_USERNAME") or "").strip().lower()
 READ_PROGRESS_MAX_PER_USER = int(os.getenv("READ_PROGRESS_MAX_PER_USER", "20000"))
 BOOKMARKS_PAGE_SIZE = max(1, int(os.getenv("BOOKMARKS_PAGE_SIZE", "60")))
 SORT_MODES = frozenset({"added", "title", "updated", "unread"})
@@ -848,6 +849,37 @@ def admin_api_authorized() -> bool:
         if provided and provided == ADMIN_API_TOKEN:
             return True
     return False
+
+
+def _provided_admin_token() -> str:
+    return (request.headers.get("X-Admin-Token") or request.args.get("admin_token") or "").strip()
+
+
+def admin_view_authorized() -> bool:
+    """Allow admin pages for configured admin user or valid admin token."""
+    if APP_DEBUG:
+        return True
+    current = get_current_user()
+    if current and ADMIN_USERNAME:
+        try:
+            current_username = str(current["username"] or "").strip().lower()
+        except Exception:
+            current_username = ""
+        if current_username == ADMIN_USERNAME:
+            return True
+    if ADMIN_API_TOKEN:
+        provided = _provided_admin_token()
+        if provided and provided == ADMIN_API_TOKEN:
+            return True
+    return False
+
+
+def _admin_link_kw() -> dict:
+    if ADMIN_API_TOKEN:
+        provided = (request.args.get("admin_token") or "").strip()
+        if provided and provided == ADMIN_API_TOKEN:
+            return {"admin_token": provided}
+    return {}
 
 
 def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
@@ -2477,6 +2509,110 @@ def merge_duplicates():
             "merged_groups": merged_groups,
             "deleted_bookmarks": deleted_bookmarks,
         }
+    )
+
+
+@app.route("/admin/users", methods=["GET"])
+def admin_users():
+    if not admin_view_authorized():
+        if not login_required():
+            return redirect(url_for("auth_page", mode="login"))
+        return abort(403)
+    with get_conn() as conn:
+        totals = conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM users) AS total_users,
+                (SELECT COUNT(*) FROM bookmarks) AS total_bookmarks,
+                (SELECT COUNT(*) FROM reading_progress) AS total_progress
+            """
+        ).fetchone()
+        users = conn.execute(
+            """
+            SELECT
+                u.id,
+                u.username,
+                u.email,
+                u.created_at,
+                (SELECT COUNT(*) FROM bookmarks b WHERE b.user_id = u.id) AS bookmark_count,
+                (SELECT COUNT(*) FROM reading_progress rp WHERE rp.user_id = u.id) AS progress_count
+            FROM users u
+            ORDER BY u.created_at DESC, u.id DESC
+            """
+        ).fetchall()
+        latest_users = conn.execute(
+            """
+            SELECT id, username, email, created_at
+            FROM users
+            ORDER BY created_at DESC, id DESC
+            LIMIT 10
+            """
+        ).fetchall()
+        latest_bookmarks = conn.execute(
+            """
+            SELECT b.id, b.title, b.url, b.created_at, b.user_id, u.username
+            FROM bookmarks b
+            LEFT JOIN users u ON u.id = b.user_id
+            ORDER BY b.created_at DESC, b.id DESC
+            LIMIT 10
+            """
+        ).fetchall()
+    return render_template(
+        "admin_users.html",
+        totals=totals,
+        users=users,
+        latest_users=latest_users,
+        latest_bookmarks=latest_bookmarks,
+        admin_link_kw=_admin_link_kw(),
+    )
+
+
+@app.route("/admin/users/<int:user_id>", methods=["GET"])
+def admin_user_detail(user_id: int):
+    if not admin_view_authorized():
+        if not login_required():
+            return redirect(url_for("auth_page", mode="login"))
+        return abort(403)
+    with get_conn() as conn:
+        user = conn.execute(
+            "SELECT id, username, email, created_at FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        if not user:
+            abort(404)
+        bookmarks = conn.execute(
+            """
+            SELECT id, title, url, latest_seen, latest_seen_num, new_update, created_at
+            FROM bookmarks
+            WHERE user_id = ?
+            ORDER BY id DESC
+            """,
+            (user_id,),
+        ).fetchall()
+        progress = conn.execute(
+            """
+            SELECT
+                rp.id,
+                rp.bookmark_id,
+                rp.chapter_num,
+                rp.chapter_label,
+                rp.source_url,
+                rp.seen_at,
+                b.title AS bookmark_title
+            FROM reading_progress rp
+            LEFT JOIN bookmarks b ON b.id = rp.bookmark_id
+            WHERE rp.user_id = ?
+            ORDER BY rp.seen_at DESC, rp.id DESC
+            LIMIT 300
+            """,
+            (user_id,),
+        ).fetchall()
+    return render_template(
+        "admin_user_detail.html",
+        user=user,
+        bookmarks=bookmarks,
+        progress=progress,
+        admin_link_kw=_admin_link_kw(),
     )
 
 

@@ -9,6 +9,12 @@ tracker.db
 .env
 .env.*
 *.env
+!.env.example
 secrets.*
 *.pem
 extension/dist/
+.cursor/
+manga-watchlist-backup*.json
+manga-watchlist-migration-ids*.json
+exports/
+backups/

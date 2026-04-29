@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin User Detail - Manga Watchlist</title>
+  <style>
+    body { font-family: Inter, Arial, sans-serif; margin: 24px; color: #1a1a1a; }
+    h1 { margin: 0 0 8px; font-size: 1.35rem; }
+    h2 { margin: 24px 0 10px; font-size: 1.05rem; }
+    .muted { color: #666; font-size: 0.92rem; margin-bottom: 10px; }
+    .top-link { display: inline-block; margin-bottom: 14px; color: #1b4fd8; text-decoration: none; }
+    .top-link:hover { text-decoration: underline; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { border: 1px solid #d9d9d9; padding: 7px 9px; text-align: left; vertical-align: top; }
+    th { background: #f5f5f5; font-weight: 600; }
+    a { color: #1b4fd8; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <a class="top-link" href="{{ url_for('admin_users', **admin_link_kw) }}">← Back to users</a>
+  <h1>User #{{ user.id }} - {{ user.username or "-" }}</h1>
+  <div class="muted">Email: {{ user.email or "-" }} | Created: {{ user.created_at or "-" }}</div>
+
+  <h2>Bookmarks ({{ bookmarks|length }})</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Title</th>
+        <th>URL</th>
+        <th>Latest Seen</th>
+        <th>Latest Seen Num</th>
+        <th>New?</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in bookmarks %}
+        <tr>
+          <td>{{ b.id }}</td>
+          <td>{{ b.title }}</td>
+          <td><a href="{{ b.url }}" target="_blank" rel="noreferrer">Open</a></td>
+          <td>{{ b.latest_seen or "-" }}</td>
+          <td>{{ b.latest_seen_num if b.latest_seen_num is not none else "-" }}</td>
+          <td>{{ "yes" if b.new_update else "no" }}</td>
+          <td>{{ b.created_at or "-" }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7">No bookmarks.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Recent Reading Progress ({{ progress|length }})</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Seen At</th>
+        <th>Bookmark ID</th>
+        <th>Bookmark</th>
+        <th>Chapter Num</th>
+        <th>Chapter Label</th>
+        <th>Source URL</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in progress %}
+        <tr>
+          <td>{{ p.id }}</td>
+          <td>{{ p.seen_at or "-" }}</td>
+          <td>{{ p.bookmark_id }}</td>
+          <td>{{ p.bookmark_title or "-" }}</td>
+          <td>{{ p.chapter_num if p.chapter_num is not none else "-" }}</td>
+          <td>{{ p.chapter_label or "-" }}</td>
+          <td>
+            {% if p.source_url %}
+              <a href="{{ p.source_url }}" target="_blank" rel="noreferrer">Open</a>
+            {% else %}
+              -
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7">No reading progress rows.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

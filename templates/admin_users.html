@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Users - Manga Watchlist</title>
+  <style>
+    body { font-family: Inter, Arial, sans-serif; margin: 24px; color: #1a1a1a; }
+    h1 { margin: 0 0 16px; font-size: 1.4rem; }
+    h2 { margin: 22px 0 10px; font-size: 1.05rem; }
+    .muted { color: #666; font-size: 0.92rem; margin-bottom: 12px; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px;
+      margin: 14px 0 18px;
+    }
+    .stat {
+      border: 1px solid #d9d9d9;
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fafafa;
+    }
+    .stat-label { color: #666; font-size: 0.84rem; }
+    .stat-value { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    th, td { border: 1px solid #d9d9d9; padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f5f5f5; font-weight: 600; }
+    a { color: #1b4fd8; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>Admin: Users</h1>
+  <div class="muted">Password hashes are intentionally not shown.</div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Total users</div>
+      <div class="stat-value">{{ totals.total_users or 0 }}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Total bookmarks</div>
+      <div class="stat-value">{{ totals.total_bookmarks or 0 }}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Total reading progress rows</div>
+      <div class="stat-value">{{ totals.total_progress or 0 }}</div>
+    </div>
+  </div>
+
+  <h2>Latest 10 users</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>User ID</th>
+        <th>Username</th>
+        <th>Email</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in latest_users %}
+        <tr>
+          <td>{{ u.id }}</td>
+          <td>
+            <a href="{{ url_for('admin_user_detail', user_id=u.id, **admin_link_kw) }}">
+              {{ u.username or "-" }}
+            </a>
+          </td>
+          <td>{{ u.email or "-" }}</td>
+          <td>{{ u.created_at or "-" }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4">No users found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Latest 10 added bookmarks</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Bookmark ID</th>
+        <th>Title</th>
+        <th>User</th>
+        <th>Created</th>
+        <th>Open</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in latest_bookmarks %}
+        <tr>
+          <td>{{ b.id }}</td>
+          <td>{{ b.title or "-" }}</td>
+          <td>
+            <a href="{{ url_for('admin_user_detail', user_id=b.user_id, **admin_link_kw) }}">
+              {{ b.username or ("user#" ~ b.user_id) }}
+            </a>
+          </td>
+          <td>{{ b.created_at or "-" }}</td>
+          <td><a href="{{ b.url }}" target="_blank" rel="noreferrer">Open</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5">No bookmarks found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>All users</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>User ID</th>
+        <th>Username</th>
+        <th>Email</th>
+        <th>Created</th>
+        <th>Bookmarks</th>
+        <th>Reading Progress Rows</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+        <tr>
+          <td>{{ u.id }}</td>
+          <td>
+            <a href="{{ url_for('admin_user_detail', user_id=u.id, **admin_link_kw) }}">
+              {{ u.username or "-" }}
+            </a>
+          </td>
+          <td>{{ u.email or "-" }}</td>
+          <td>{{ u.created_at or "-" }}</td>
+          <td>{{ u.bookmark_count or 0 }}</td>
+          <td>{{ u.progress_count or 0 }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6">No users found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>
