@@ -144,6 +144,28 @@ async function setBadge(unread) {
   } catch {}
 }
 
+async function requestPageTrackData(tabId, force) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, {
+      type: "GET_PAGE_TRACK_DATA",
+      force,
+    });
+  } catch (err) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["content.js"],
+      });
+      return await chrome.tabs.sendMessage(tabId, {
+        type: "GET_PAGE_TRACK_DATA",
+        force,
+      });
+    } catch (injectErr) {
+      throw new Error(injectErr?.message || err?.message || String(injectErr || err));
+    }
+  }
+}
+
 async function ensureUnreadAlarm() {
   const existing = await chrome.alarms.get(UNREAD_ALARM_NAME);
   if (!existing) {
@@ -171,10 +193,7 @@ async function trackActiveTab({ force = false } = {}) {
   if (!tab?.id) return { ok: false, error: "No active tab found." };
   let pageRes;
   try {
-    pageRes = await chrome.tabs.sendMessage(tab.id, {
-      type: "GET_PAGE_TRACK_DATA",
-      force,
-    });
+    pageRes = await requestPageTrackData(tab.id, force);
   } catch (err) {
     return { ok: false, error: `Content script unavailable: ${err?.message || err}` };
   }

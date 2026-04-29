@@ -702,9 +702,34 @@ def is_public_http_url(raw_url: str) -> bool:
         return False
 
 
+def fetch_public_url(url: str, **kwargs) -> requests.Response:
+    """Fetch a public URL while revalidating every redirect target."""
+    current = (url or "").strip()
+    max_redirects = int(kwargs.pop("max_redirects", 5))
+    timeout = kwargs.pop("timeout", HTTP_TIMEOUT_SECONDS)
+    for _ in range(max_redirects + 1):
+        if not is_public_http_url(current):
+            raise ValueError("Blocked URL (private/internal host)")
+        res = SESSION.get(current, timeout=timeout, allow_redirects=False, **kwargs)
+        if not res.is_redirect:
+            return res
+        location = (res.headers.get("Location") or "").strip()
+        if not location:
+            return res
+        current = urljoin(current, location)
+    raise ValueError("Too many redirects")
+
+
 def normalize_bookmark_url(raw_url: str) -> str:
     """Normalize URL for duplicate checks (trim, strip trailing slash, case-fold)."""
     return (raw_url or "").strip().rstrip("/").lower()
+
+
+def parse_backup_int(value) -> Optional[int]:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return None
 
 
 def _bookmark_title_search_clause(needle: str) -> tuple[str, list]:
@@ -807,11 +832,12 @@ def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
     if not is_public_http_url(url):
         return None
     try:
-        res = SESSION.get(url, timeout=HTTP_TIMEOUT_SECONDS)
+        res = fetch_public_url(url)
         res.raise_for_status()
     except Exception:
         return None
 
+    fetched_url = str(res.url or url).strip()
     soup = BeautifulSoup(res.text, "html.parser")
     meta_candidates = [
         ('meta[property="og:image"]', "content"),
@@ -824,7 +850,8 @@ def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
         node = soup.select_one(selector)
         value = node.get(attr) if node else None
         if value:
-            return urljoin(url, value.strip())
+            candidate = urljoin(fetched_url or url, value.strip())
+            return candidate if is_public_http_url(candidate) else None
 
     title_tokens = {t for t in re.split(r"[^a-z0-9]+", (series_title or "").lower()) if len(t) >= 3}
     best_src: Optional[str] = None
@@ -833,7 +860,9 @@ def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
         src = (img.get("src") or img.get("data-src") or "").strip()
         if not src:
             continue
-        full_src = urljoin(url, src)
+        full_src = urljoin(fetched_url or url, src)
+        if not is_public_http_url(full_src):
+            continue
         hay = " ".join(
             [
                 src.lower(),
@@ -876,7 +905,7 @@ def resolve_series_listing_url(url: str) -> str:
         # Fast path: already looks like canonical series listing URL.
         return url.rstrip("/")
     try:
-        res = SESSION.get(url, timeout=HTTP_TIMEOUT_SECONDS, allow_redirects=True)
+        res = fetch_public_url(url)
         res.raise_for_status()
     except Exception:
         return url
@@ -886,10 +915,10 @@ def resolve_series_listing_url(url: str) -> str:
     candidates: list[str] = []
     canonical = soup.select_one('link[rel="canonical"]')
     if canonical and canonical.get("href"):
-        candidates.append(canonical.get("href", "").strip())
+        candidates.append(urljoin(final_url or url, canonical.get("href", "").strip()))
     og_url = soup.select_one('meta[property="og:url"]')
     if og_url and og_url.get("content"):
-        candidates.append(og_url.get("content", "").strip())
+        candidates.append(urljoin(final_url or url, og_url.get("content", "").strip()))
     candidates.append(final_url)
     candidates.append(url)
 
@@ -902,6 +931,7 @@ def resolve_series_listing_url(url: str) -> str:
             or re.search(r"-\d+(?:\.\d+)?/?$", path)
         )
 
+    candidates = [c for c in candidates if c and is_public_http_url(c)]
     preferred = [c for c in candidates if "/manga/" in c.lower() or "/comics/" in c.lower()]
     if preferred:
         return preferred[0].rstrip("/")
@@ -913,6 +943,8 @@ def resolve_series_listing_url(url: str) -> str:
             if not href:
                 continue
             absolute = urljoin(final_url or url, href)
+            if not is_public_http_url(absolute):
+                continue
             lowered = absolute.lower()
             if "/manga/" not in lowered and "/comics/" not in lowered:
                 continue
@@ -1079,23 +1111,24 @@ def scrape_bs4(url: str) -> tuple[Optional[str], Optional[float], Optional[str],
         return scrape_mangadex_api(url)
     t_fetch = time.perf_counter()
     try:
-        res = SESSION.get(url, timeout=HTTP_TIMEOUT_SECONDS)
+        res = fetch_public_url(url)
         res.raise_for_status()
     except Exception as exc:
         _log_scrape_timing("html_fetch_failed", url, t_fetch)
         return None, None, None, f"Request failed: {exc}", {}
     _log_scrape_timing("html_fetch", url, t_fetch)
 
+    fetched_url = str(res.url or url).strip() or url
     t_parse = time.perf_counter()
     soup = BeautifulSoup(res.text, "html.parser")
     _log_scrape_timing("html_parse", url, t_parse)
     t_extract = time.perf_counter()
     if profile and not profile.get("api"):
-        info = scrape_with_profile(soup, url, profile)
+        info = scrape_with_profile(soup, fetched_url, profile)
         flags = set(info.get("error_flags") or [])
         if info.get("chapter_num") is None and flags.intersection({"profile_no_match", "missing_selector"}):
             # Site layout may have changed; generic parser often still works.
-            fallback = pick_best_candidate_with_debug(soup, url)
+            fallback = pick_best_candidate_with_debug(soup, fetched_url)
             if fallback.get("chapter_num") is not None:
                 fb_flags = list(fallback.get("error_flags") or [])
                 fb_flags.append("profile_fallback_generic")
@@ -1109,7 +1142,7 @@ def scrape_bs4(url: str) -> tuple[Optional[str], Optional[float], Optional[str],
                     "parser_version": info.get("parser_version", "") + "+tried-generic",
                 }
     else:
-        info = pick_best_candidate_with_debug(soup, url)
+        info = pick_best_candidate_with_debug(soup, fetched_url)
     _log_scrape_timing("chapter_extract", url, t_extract)
     return info.get("label"), info.get("chapter_num"), info.get("chapter_url"), None, info
 
@@ -1693,35 +1726,6 @@ def export_data():
     )
 
 
-@app.route("/export/migration-ids", methods=["GET"])
-def export_migration_ids():
-    """Lightweight export for cross-tool migrations keyed by bookmark id."""
-    if not login_required():
-        return redirect(url_for("auth_page"))
-    user_id = get_actor_user_id()
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT id, title, url, series_key, latest_chapter, latest_chapter_label
-            FROM bookmarks
-            WHERE user_id = ?
-            ORDER BY id ASC
-            """,
-            (user_id,),
-        ).fetchall()
-    payload = {
-        "version": 1,
-        "exported_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-        "items": [dict(r) for r in rows],
-    }
-    body = json.dumps(payload, ensure_ascii=True, indent=2)
-    return Response(
-        body,
-        mimetype="application/json",
-        headers={"Content-Disposition": 'attachment; filename="manga-watchlist-migration-ids.json"'},
-    )
-
-
 @app.route("/import", methods=["POST"])
 def import_data():
     if not login_required():
@@ -1789,7 +1793,10 @@ def import_data():
             if not isinstance(b, dict):
                 skipped_malformed_bookmarks += 1
                 continue
-            old_id = int(b.get("id") or 0)
+            old_id = parse_backup_int(b.get("id"))
+            if old_id is None:
+                skipped_malformed_bookmarks += 1
+                continue
             raw_url = (b.get("url") or "").strip()
             title = (b.get("title") or "").strip()
             if not title or not is_public_http_url(raw_url):
@@ -1827,7 +1834,11 @@ def import_data():
             if not isinstance(p, dict):
                 skipped_malformed_progress += 1
                 continue
-            mapped_bookmark_id = id_map.get(int(p.get("bookmark_id") or 0))
+            old_bookmark_id = parse_backup_int(p.get("bookmark_id"))
+            if old_bookmark_id is None:
+                skipped_malformed_progress += 1
+                continue
+            mapped_bookmark_id = id_map.get(old_bookmark_id)
             if mapped_bookmark_id is None:
                 skipped_progress += 1
                 continue
@@ -2319,10 +2330,14 @@ def debug_scrape():
     raw_url = (payload.get("url") or "").strip()
     if not raw_url:
         return jsonify({"ok": False, "error": "url required"}), 400
+    if not is_public_http_url(raw_url):
+        return jsonify({"ok": False, "error": "blocked URL"}), 400
 
     resolved_url = resolve_series_listing_url(raw_url)
+    if not is_public_http_url(resolved_url):
+        return jsonify({"ok": False, "error": "blocked URL"}), 400
     try:
-        res = SESSION.get(resolved_url, timeout=25)
+        res = fetch_public_url(resolved_url, timeout=25)
         res.raise_for_status()
     except Exception as exc:
         return jsonify(

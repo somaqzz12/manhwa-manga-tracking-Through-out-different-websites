@@ -4,7 +4,7 @@
   "version": "0.5.3",
   "description": "Sign in to Manga Watchlist and your manga and manhwa reading progress syncs from any reader. Optional prompts, badge, and shortcuts.",
   "homepage_url": "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites",
-  "permissions": ["storage", "activeTab", "tabs", "alarms", "contextMenus"],
+  "permissions": ["storage", "activeTab", "tabs", "alarms", "contextMenus", "scripting"],
   "host_permissions": [
     "https://api.mangawatchlist.space/*",
     "https://app.mangawatchlist.space/*",
@@ -48,7 +48,25 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "*://*.asurascans.com/*",
+        "*://*.mangadex.org/*",
+        "*://*.webtoons.com/*",
+        "*://*.bato.to/*",
+        "*://*.batocomic.com/*",
+        "*://*.mangakatana.com/*",
+        "*://*.manganato.com/*",
+        "*://*.mangakakalot.com/*",
+        "*://*.mangapark.net/*",
+        "*://*.mangabuddy.com/*",
+        "*://*.mangafire.to/*",
+        "*://*.manga4life.com/*",
+        "*://*.mangasee123.com/*",
+        "*://*.comick.io/*",
+        "*://*.reaperscans.com/*",
+        "*://*.flamescans.org/*",
+        "*://*.rizzcomic.com/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
