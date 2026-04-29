@@ -23,15 +23,21 @@ services:
       - key: USE_SELENIUM_FALLBACK
         value: "0"
       - key: HTTP_TIMEOUT_SECONDS
-        value: "8"
+        value: "6"
       - key: MAX_CHECK_WORKERS
-        value: "2"
+        value: "10"
       - key: INITIAL_AUTO_CHECK
         value: "0"
       - key: CHECK_STALE_MINUTES
         value: "45"
       - key: PER_SITE_CONCURRENCY
-        value: "2"
+        value: "3"
+      # Keep checks fast: skip canonical-resolve retry in normal background checks.
+      - key: SCRAPE_RETRY_ON_FAIL
+        value: "0"
+      # Optional profiling during production debugging (0 keeps logs quiet).
+      - key: SCRAPE_TIMING_LOGS
+        value: "0"
       - key: SCHEDULER_ENABLED
         value: "1"
       - key: SCHEDULER_LEADER

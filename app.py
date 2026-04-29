@@ -8,6 +8,7 @@ import logging
 import secrets
 import socket
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Optional
@@ -93,6 +94,8 @@ def _ratelimited(_err):
 
 HTTP_TIMEOUT_SECONDS = int(os.getenv("HTTP_TIMEOUT_SECONDS", "15"))
 MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
+SCRAPE_RETRY_ON_FAIL = os.getenv("SCRAPE_RETRY_ON_FAIL", "0") == "1"
+SCRAPE_TIMING_LOGS = os.getenv("SCRAPE_TIMING_LOGS", "0") == "1"
 DEFAULT_USER_EMAIL = os.getenv("DEFAULT_USER_EMAIL", "local@tracker")
 MIN_PASSWORD_LENGTH = max(1, int(os.getenv("MIN_PASSWORD_LENGTH", "8")))
 READ_PROGRESS_MAX_PER_BOOKMARK = int(os.getenv("READ_PROGRESS_MAX_PER_BOOKMARK", "400"))
@@ -973,17 +976,109 @@ def scrape_with_profile(soup: BeautifulSoup, page_url: str, profile: dict) -> di
     }
 
 
+def _log_scrape_timing(stage: str, url: str, started_at: float) -> None:
+    if not SCRAPE_TIMING_LOGS:
+        return
+    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+    log.info("scrape_timing stage=%s elapsed_ms=%d url=%s", stage, elapsed_ms, url)
+
+
+def _extract_mangadex_manga_id(url: str) -> tuple[Optional[str], Optional[str]]:
+    raw = (url or "").strip()
+    title_match = re.search(r"mangadex\.org/title/([0-9a-fA-F-]{36})", raw)
+    if title_match:
+        return title_match.group(1), None
+    chapter_match = re.search(r"mangadex\.org/chapter/([0-9a-fA-F-]{36})", raw)
+    if not chapter_match:
+        return None, "MangaDex title/chapter id not found in URL"
+    chapter_id = chapter_match.group(1)
+    chapter_api_url = f"https://api.mangadex.org/chapter/{chapter_id}?includes[]=manga"
+    t_fetch = time.perf_counter()
+    try:
+        res = SESSION.get(chapter_api_url, timeout=HTTP_TIMEOUT_SECONDS)
+        res.raise_for_status()
+        payload = res.json()
+    except Exception as exc:
+        _log_scrape_timing("mangadex_chapter_lookup_failed", chapter_api_url, t_fetch)
+        return None, f"MangaDex chapter lookup failed: {exc}"
+    _log_scrape_timing("mangadex_chapter_lookup", chapter_api_url, t_fetch)
+    relationships = ((payload.get("data") or {}).get("relationships") or [])
+    for rel in relationships:
+        if (rel or {}).get("type") == "manga" and (rel or {}).get("id"):
+            return rel["id"], None
+    return None, "MangaDex chapter lookup returned no manga relationship"
+
+
+def scrape_mangadex_api(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str], dict]:
+    manga_id, id_err = _extract_mangadex_manga_id(url)
+    if id_err or not manga_id:
+        return None, None, None, id_err or "MangaDex manga id not found", {}
+    api_url = (
+        "https://api.mangadex.org/chapter"
+        f"?manga={manga_id}"
+        "&limit=1"
+        "&order[chapter]=desc"
+        "&translatedLanguage[]=en"
+        "&contentRating[]=safe"
+        "&contentRating[]=suggestive"
+        "&contentRating[]=erotica"
+        "&contentRating[]=pornographic"
+    )
+    t_fetch = time.perf_counter()
+    try:
+        res = SESSION.get(api_url, timeout=HTTP_TIMEOUT_SECONDS)
+        res.raise_for_status()
+        payload = res.json()
+    except Exception as exc:
+        _log_scrape_timing("mangadex_api_fetch_failed", api_url, t_fetch)
+        return None, None, None, f"MangaDex API failed: {exc}", {}
+    _log_scrape_timing("mangadex_api_fetch", api_url, t_fetch)
+    data = payload.get("data") or []
+    if not data:
+        return None, None, None, "MangaDex API returned no chapters", {"parser_version": "mangadex-api", "error_flags": ["no_chapter_candidates"]}
+    first = data[0] or {}
+    attrs = first.get("attributes") or {}
+    chapter_raw = (attrs.get("chapter") or "").strip()
+    title_raw = (attrs.get("title") or "").strip()
+    chapter_num = None
+    try:
+        if chapter_raw:
+            chapter_num = float(chapter_raw)
+    except ValueError:
+        chapter_num = parse_chapter_number(chapter_raw or title_raw)
+    label = f"Ch {chapter_raw}" if chapter_raw else (title_raw or "Latest chapter")
+    chapter_id = first.get("id")
+    chapter_url = f"https://mangadex.org/chapter/{chapter_id}" if chapter_id else None
+    info = {
+        "label": label,
+        "chapter_num": chapter_num,
+        "chapter_url": chapter_url,
+        "confidence": 0.99 if chapter_num is not None else 0.8,
+        "parser_version": "mangadex-api",
+        "error_flags": [],
+    }
+    return info["label"], info["chapter_num"], info["chapter_url"], None, info
+
+
 def scrape_bs4(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str], dict]:
     if not is_public_http_url(url):
         return None, None, None, "Blocked URL (private/internal host)", {}
+    profile = get_profile_for_url(url)
+    if profile and profile.get("api") and "mangadex.org" in urlparse(url).netloc.lower():
+        return scrape_mangadex_api(url)
+    t_fetch = time.perf_counter()
     try:
         res = SESSION.get(url, timeout=HTTP_TIMEOUT_SECONDS)
         res.raise_for_status()
     except Exception as exc:
+        _log_scrape_timing("html_fetch_failed", url, t_fetch)
         return None, None, None, f"Request failed: {exc}", {}
+    _log_scrape_timing("html_fetch", url, t_fetch)
 
+    t_parse = time.perf_counter()
     soup = BeautifulSoup(res.text, "html.parser")
-    profile = get_profile_for_url(url)
+    _log_scrape_timing("html_parse", url, t_parse)
+    t_extract = time.perf_counter()
     if profile and not profile.get("api"):
         info = scrape_with_profile(soup, url, profile)
         flags = set(info.get("error_flags") or [])
@@ -1004,6 +1099,7 @@ def scrape_bs4(url: str) -> tuple[Optional[str], Optional[float], Optional[str],
                 }
     else:
         info = pick_best_candidate_with_debug(soup, url)
+    _log_scrape_timing("chapter_extract", url, t_extract)
     return info.get("label"), info.get("chapter_num"), info.get("chapter_url"), None, info
 
 
@@ -1036,16 +1132,22 @@ def scrape_selenium(url: str) -> tuple[Optional[str], Optional[float], Optional[
 
 
 def scrape_latest_update(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str], dict]:
+    t_total = time.perf_counter()
     label, num, latest_url, err, info = scrape_bs4(url)
     if err is None:
+        _log_scrape_timing("scrape_total_ok", url, t_total)
         return label, num, latest_url, None, info
 
     if os.getenv("USE_SELENIUM_FALLBACK", "1") == "1":
+        t_selenium = time.perf_counter()
         s_label, s_num, s_latest_url, s_err, s_info = scrape_selenium(url)
+        _log_scrape_timing("selenium_attempt", url, t_selenium)
         if s_err is None:
+            _log_scrape_timing("scrape_total_ok_after_selenium", url, t_total)
             return s_label, s_num, s_latest_url, None, s_info
         return None, None, None, f"{err}; {s_err}", {}
 
+    _log_scrape_timing("scrape_total_failed_no_selenium", url, t_total)
     return None, None, None, err, {}
 
 
@@ -1099,19 +1201,15 @@ def _check_single_locked(bookmark_id: int, user_id: int, force: bool = False) ->
         sem = _get_site_check_semaphore(effective_url)
         with sem:
             label, num, latest_url, err, debug_info = scrape_latest_update(effective_url)
-            # One-time fallback: if scraping failed, try resolving redirects/canonical
-            # URL once and retry there.
-            if err:
+            # Optional retry path for harder sites. Disabled by default to keep
+            # regular checks fast and predictable under constrained hosting.
+            if err and SCRAPE_RETRY_ON_FAIL:
                 resolved_once = resolve_series_listing_url(effective_url)
                 if resolved_once and resolved_once.rstrip("/") != effective_url.rstrip("/"):
                     label, num, latest_url, err, debug_info = scrape_latest_update(resolved_once)
                     if not err:
                         effective_url = resolved_once
         cover_url = row["cover_url"]
-        if not cover_url:
-            with sem:
-                scraped_cover = scrape_series_cover(effective_url, row["title"] or "")
-            cover_url = scraped_cover or row["cover_url"]
         now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
         if err:
