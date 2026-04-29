@@ -18,6 +18,9 @@ export const metadata: Metadata = {
       "Sign in anywhere. Track series across every site — dashboard and extension keep your account in sync.",
     type: "website",
   },
+  verification: {
+    google: "MDvTaEaXcUEc4wPBYIvZpWAgwXVuK12chNDMNF-eUbc",
+  },
 };
 
 export default function RootLayout({
