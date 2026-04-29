@@ -178,3 +178,13 @@ Smoke regression on each release:
 - **`<all_urls>` host access.** Required for arbitrary reader sites. Documented in Section 9.
 - **Heuristic chapter detection.** Title/URL/DOM heuristics will produce false positives and misses on unusual readers. The per-site map (Section 5) reduces but does not eliminate this.
 - **MV3 service worker lifecycle.** The background script is unloaded after ~30 s idle. All long-running state must live in `chrome.storage` or be reconstructed from `chrome.alarms`/event listeners; do not rely on module-scope variables persisting between events.
+
+## 13. Deferred platform work (main app / ops)
+
+These items belong to the Flask backend and deployment story, not the companion UI itself:
+
+- Split the monolithic `app.py` into blueprints or modules (routes, database, scraping, scheduler, admin).
+- Implement or remove the `POST /api/import/mal` stub once MyAnimeList API access and UX are defined.
+- Add Origin / Referer allowlists for CSRF-exempt JSON routes that mutate account or API-token state (defense in depth on top of session auth).
+- Optional: move Selenium to an extra requirements file when `USE_SELENIUM_FALLBACK=0` is the long-term default.
+- Decide a single public marketing entry point (Flask `landing.html` vs the Next `landing/` site) or document both URLs clearly.

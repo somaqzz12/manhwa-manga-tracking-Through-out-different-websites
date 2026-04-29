@@ -88,7 +88,7 @@
     {% if health_updated_at %}
       <p class="sub" style="margin-top:-12px;">Last health run: <code>{{ health_updated_at }}</code></p>
     {% else %}
-      <p class="sub" style="margin-top:-12px;">No health file yet — run <code>python scripts/check_sources.py</code> to populate <code>sources/_health.json</code>.</p>
+      <p class="sub" style="margin-top:-12px;">No health file yet — run <code>python scripts/check_sources.py</code> (or wait for the scheduler) to populate <code>sources/_health.json</code>. That file is generated per environment and is not checked into git.</p>
     {% endif %}
 
     <div class="grid">

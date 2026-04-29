@@ -8,9 +8,19 @@ Live at **[mangawatchlist.space](https://mangawatchlist.space)**.
 
 A self-hosted manga and manhwa tracker. Add a series listing URL, the server scrapes the latest chapter every 30 minutes, the dashboard shows what you're behind on, and an optional Chrome extension picks up the chapter you're currently reading and syncs progress automatically.
 
-![Dashboard screenshot](docs/screenshot.png)
+### What this system does (end-to-end)
 
-> Replace `docs/screenshot.png` with a real screenshot once you take one.
+1. **You run one web app** (Flask + gunicorn in production). It stores users, passwords (hashed), and each user’s **bookmarks**: a series title, the **series listing URL** you pasted, optional **series key** / **story grouping**, and **reading progress** (which chapter you last opened or marked seen).
+2. **The server discovers “what’s latest”** by HTTP-fetching each bookmark’s listing page on a schedule (APScheduler). It uses a **JSON source catalog** ([`sources/catalog.json`](sources/catalog.json)) for known sites (selectors, MangaDex API, etc.) and **generic heuristics** for unknown hosts. Results are cached on each bookmark (latest chapter number, label, last check time). Optional **Selenium** can retry stubborn JS-heavy pages when enabled.
+3. **The dashboard** is server-rendered HTML: library list, sort/search/pagination, “behind” / unread-style signals, **Continue** links, per-series and bulk **mark seen**, **check now**, **edit** (including linking **alternate URLs** for the same story), **import/export** JSON, **public list** slug, **RSS** with a secret token, optional **email** new-chapter notifications (SMTP), **source requests** voting, and static pages (**privacy**, **changelog**, **supported sources** with live **health** stats when `_health.json` exists).
+4. **JSON and cookie-authenticated APIs** let the **Chrome extension** (same browser profile as your login) call **`/api/series/ensure`**, **`/api/progress`**, and **`/api/unread-count`** so chapter pages update your library without manually pasting URLs every time. A separate **Bearer API token** can drive **`/api/v1/bookmarks`** for scripts or integrations.
+5. **Admin and maintenance** routes exist for power users (debug scrape, merge duplicates, user admin HTML) behind **`ADMIN_API_TOKEN`** / **`ADMIN_USERNAME`** as documented below.
+
+This repository also contains an optional **Next.js** [`landing/`](landing/) site for marketing pages; the main product UI for logged-in use is the Flask app.
+
+Dashboard screenshots live in repo docs once added: save a capture as `docs/screenshot.png` and uncomment the image line below if you want it in the GitHub-rendered README.
+
+<!-- ![Dashboard screenshot](docs/screenshot.png) -->
 
 ## Features
 
@@ -80,7 +90,7 @@ All configuration is via environment variables. The `Required?` column is what t
 | `PORT` | Optional | `5000` | Port the dev server binds to. Render injects this automatically. |
 | `LOG_LEVEL` | Optional | `INFO` | Standard Python log level. |
 | `CHROME_EXTENSION_ID` | Optional | _(unset)_ | Published extension id; if set, `chrome-extension://<id>` is appended to the CORS allowlist. |
-| `ADMIN_API_TOKEN` | Optional | _(unset)_ | Secret for `/api/debug/scrape`, `/api/maintenance/merge-duplicates`, and optional header-only access to `/admin/*`. Send as **`Authorization: Bearer &lt;token&gt;`** or **`X-Admin-Token`**. Routes return **404** when unset. **Query-string tokens are not accepted** (they leak via browser history and `Referer`). |
+| `ADMIN_API_TOKEN` | Optional | _(unset)_ | Secret for `/api/debug/scrape`, `/api/maintenance/merge-duplicates`, and optional header-only access to `/admin/*`. Send as **`Authorization: Bearer <token>`** or **`X-Admin-Token`**. Routes return **404** when unset. **Query-string tokens are not accepted** (they leak via browser history and `Referer`). |
 | `ADMIN_USERNAME` | Optional | _(unset)_ | If set, that **username** may open `/admin/users` after a normal dashboard login (recommended for the HTML admin UI in production). |
 | `CORS_ALLOW_ORIGINS` | **Strongly required in production** | _(unset)_ | Comma-separated **exact** origins allowed to receive `Access-Control-Allow-Origin` with credentials. Must include your dashboard origin (e.g. `https://app.example.com`) and, unless you rely on `CHROME_EXTENSION_ID`, the full `chrome-extension://<id>` origin. With `FLASK_DEBUG=1` and an empty list, dev mode allows unpacked extensions and localhost only — not production-safe. |
 | `SESSION_COOKIE_SECURE` | Optional | `1` in prod, `0` in debug | Forces the session cookie to HTTPS-only. |
@@ -103,7 +113,7 @@ All configuration is via environment variables. The `Required?` column is what t
 | `BUG_REPORT_URL`, `CONTACT_EMAIL`, `GITHUB_URL` | Optional | Defaults baked into the templates | Strings used in the footer. |
 | `EXTENSION_ZIP_DOWNLOAD_URL` | Optional | _(built from `GITHUB_URL`)_ | Direct link for “Download extension (ZIP)” on the Flask dashboard/landing. Defaults to a one-click ZIP of `extension/` via [download-directory.github.io](https://download-directory.github.io/). Set this to a GitHub Release asset URL if you prefer. |
 | `DEFAULT_USER_EMAIL` | Optional | `local@tracker` | Email for the auto-created **system** user used to attach legacy rows with `user_id` NULL. A **random** password hash is stored (not login-capable). Older DBs created before this change are rotated off the historical `local-only` password on startup. |
-| `SOURCE_HEALTH_INTERVAL_HOURS` | Optional | `24` | How often the background job re-probes every `sample_series_url` in the catalog and writes `sources/_health.json`. Set to `0` to disable. Also run `python scripts/check_sources.py` manually or in CI after catalog edits. |
+| `SOURCE_HEALTH_INTERVAL_HOURS` | Optional | `24` | How often the background job re-probes every `sample_series_url` in the catalog and writes `sources/_health.json` (gitignored; created per deploy). Set to `0` to disable. Also run `python scripts/check_sources.py` manually after catalog edits. |
 | `PUBLIC_BASE_URL` | Optional | _(unset)_ | Canonical public site URL used for RSS `<link>` when the app sits behind a reverse proxy; if unset, each request falls back to `request.url_root`. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Optional | _(unset)_ | When `SMTP_HOST` is set and a user opts in (`notify_email_chapters` on the account settings page), new-chapter notifications are sent via SMTP (port `465` SSL or `587` STARTTLS). |
 | `DEAD_SERIES_WARNING_DAYS` | Optional | `120` | Dashboard flag when aggregating stale “last checked” ages (not a hard drop from the library). |
@@ -111,7 +121,7 @@ All configuration is via environment variables. The `Required?` column is what t
 ## Source catalog and health checks
 
 - **Validate structure:** `python scripts/validate_catalog.py` — fails if any source is missing `sample_series_url` or domains (use in CI).
-- **Probe all samples:** `python scripts/check_sources.py` — writes `sources/_health.json` used by `/sources` and `GET /api/registry/public`.
+- **Probe all samples:** `python scripts/check_sources.py` — writes `sources/_health.json` (gitignored; generate on each server or in release automation) used by `/sources` and `GET /api/registry/public`.
 - **Scheduler:** When `SOURCE_HEALTH_INTERVAL_HOURS` is greater than `0`, the same probe runs on that interval in-process (single leader; see `SCHEDULER_LEADER`).
 
 ## Docker Compose (sketch)

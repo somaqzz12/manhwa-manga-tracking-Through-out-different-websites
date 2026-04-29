@@ -16,7 +16,7 @@
       "page_type": "series",
       "needs_js": false,
       "notes": "Madara-style variants; selectors may need updates when the theme changes.",
-      "sample_series_url": "https://asurascans.com/manga/regressor-of-the-fallen/"
+      "sample_series_url": "https://asurascans.com/comics/solo-farming-in-the-tower"
     },
     {
       "id": "reaperscans",
@@ -33,7 +33,7 @@
       "page_type": "series",
       "needs_js": false,
       "notes": "",
-      "sample_series_url": "https://reaperscans.com/series/regressor-instruction-manual/"
+      "sample_series_url": "https://reaperscans.com/comics/regressor-instruction-manual"
     },
     {
       "id": "flamescans",
@@ -67,7 +67,7 @@
       "page_type": "series",
       "needs_js": false,
       "notes": "",
-      "sample_series_url": "https://void-scans.com/series/careful-of-the-strong-on-the-sea/"
+      "sample_series_url": "https://void-scans.com/comics/martial-peak"
     },
     {
       "id": "luminousscans",
@@ -101,12 +101,12 @@
       "page_type": "series",
       "needs_js": false,
       "notes": "",
-      "sample_series_url": "https://mangakatana.com/manga/solo-leveling"
+      "sample_series_url": "https://mangakatana.com/manga/please-go-home-akutsu-san.24297"
     },
     {
       "id": "manganato",
       "display_name": "MangaNato",
-      "domains": ["manganato.com"],
+      "domains": ["manganato.com", "manganato.gg"],
       "status": "partial",
       "language": "en",
       "content_type": "mixed",
@@ -118,7 +118,7 @@
       "page_type": "series",
       "needs_js": false,
       "notes": "Nato/Nelo family sites share similar DOM.",
-      "sample_series_url": "https://www.manganato.gg/manga/solo-leveling-from-the-worst-levels"
+      "sample_series_url": "https://www.manganato.gg/manga/solo-leveling"
     },
     {
       "id": "manganelo",
@@ -152,7 +152,7 @@
       "page_type": "both",
       "needs_js": false,
       "notes": "Uses official api.mangadex.org for latest chapter; paste title or chapter URL.",
-      "sample_series_url": "https://mangadex.org/title/32d76d19-8a05-4db0-9b0a-694626e7b17c"
+      "sample_series_url": "https://mangadex.org/title/a1c7c817-4e59-43b7-9365-09675a149a6f"
     },
     {
       "id": "comick",
@@ -254,7 +254,7 @@
       "page_type": "series",
       "needs_js": false,
       "notes": "Broad chapter selector includes fallback anchors; may need tightening.",
-      "sample_series_url": "https://arenascan.com/series/careful-of-the-strong-on-the-sea/"
+      "sample_series_url": "https://arenascan.com/manga/omniscient-readers-viewpoint/"
     },
     {
       "id": "toonily",

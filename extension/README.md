@@ -51,7 +51,8 @@ There are **no** database connection strings, admin tokens, or user passwords in
 - **`tabs` / `activeTab`**: Read the current tab URL for chapter detection and tracking.
 - **`alarms`**: Refresh unread badge on a schedule.
 - **`contextMenus`**: Right-click “track this chapter”.
-- **`<all_urls>` content script**: Reader sites live on many domains; the script only runs detection logic and talks to **your configured API** (and optionally MangaDex’s public API for metadata).
+- **`<all_urls>` content script**: Reader sites live on many domains; the script only runs detection logic and talks to **your configured API**.
+- **`https://api.mangadex.org/*` host permission**: Declared in `manifest.json` so the background worker can resolve MangaDex chapter metadata via the public API without asking the user to grant blanket optional host access for that origin.
 
 ## Need help?
 
