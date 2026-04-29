@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Delete account — Manga Watchlist</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: #080b14; --text: #e2e8f0; --muted: #94a3b8; --danger: #f87171; }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    .card { width: min(420px, 100%); background: rgba(15,23,42,.6); border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 28px; }
+    h1 { margin: 0 0 12px; font-size: 1.25rem; }
+    p { color: var(--muted); font-size: 0.9rem; line-height: 1.5; margin: 0 0 16px; }
+    label { display: block; font-size: 0.85rem; margin-bottom: 6px; }
+    input[type="password"] { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.25); color: var(--text); font: inherit; box-sizing: border-box; }
+    button { margin-top: 16px; width: 100%; padding: 12px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; background: #b91c1c; color: #fff; }
+    button:hover { background: #dc2626; }
+    a { color: #a5b4fc; font-size: 0.9rem; }
+    .flash { background: rgba(239,68,68,.15); border: 1px solid rgba(239,68,68,.35); padding: 10px 12px; border-radius: 10px; margin-bottom: 14px; font-size: 0.88rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Delete account</h1>
+    <p>This permanently removes your user, all bookmarks, and all reading progress. This cannot be undone.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form method="post" action="{{ url_for('delete_account') }}" data-confirm="Delete your account and all data permanently?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="pw">Confirm with your password</label>
+      <input id="pw" type="password" name="password" required autocomplete="current-password">
+      <button type="submit">Delete my account</button>
+    </form>
+    <p style="margin-top:20px;margin-bottom:0;"><a href="{{ url_for('index') }}">Cancel — back to dashboard</a></p>
+  </div>
+  <script>
+    document.querySelector("form[data-confirm]").addEventListener("submit", function (e) {
+      const msg = this.getAttribute("data-confirm");
+      if (msg && !window.confirm(msg)) e.preventDefault();
+    });
+  </script>
+</body>
+</html>

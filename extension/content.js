@@ -831,6 +831,7 @@ async function maybeTrackOnRouteChange() {
     await maybeTrack();
   } finally {
     __trackInFlight = false;
+    scheduleReaderOverlayRefresh();
   }
 }
 
@@ -934,3 +935,228 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   })();
   return true;
 });
+
+/* Optional floating reader overlay (enable in extension settings). */
+const READER_OVERLAY_ID = "manga-watchlist-reader-overlay";
+
+function registryHostSupported(registry, hostname) {
+  const h = hostname.replace(/^www\./i, "").toLowerCase();
+  const domains = registry?.domains || [];
+  for (const d of domains) {
+    const dd = String(d).toLowerCase();
+    if (h === dd || h.endsWith("." + dd)) return true;
+  }
+  return false;
+}
+
+async function isReaderOverlayEnabled() {
+  const s = await chrome.storage.local.get(["readerOverlay"]);
+  return s.readerOverlay === true;
+}
+
+async function pushProgressQuiet(data) {
+  if (!data) return { ok: false, error: "no data" };
+  const ensure = await sendMessage({
+    type: "ENSURE_SERIES",
+    payload: { title: data.title, url: data.seriesUrl, series_key: data.seriesKey },
+  });
+  if (!ensure?.ok) return { ok: false, error: ensure?.error || "ensure failed" };
+  return sendMessage({
+    type: "SAVE_PROGRESS",
+    payload: {
+      series_url: data.seriesUrl,
+      series_key: data.seriesKey,
+      chapter_url: data.chapterUrl,
+      chapter_label: data.chapterLabel,
+      chapter_num: data.chapterNum,
+    },
+  });
+}
+
+async function addSeriesQuiet(data) {
+  if (!data) return { ok: false };
+  return sendMessage({
+    type: "ENSURE_SERIES",
+    payload: { title: data.title, url: data.seriesUrl, series_key: data.seriesKey },
+  });
+}
+
+let __overlayRefreshTimer = null;
+function scheduleReaderOverlayRefresh() {
+  if (__overlayRefreshTimer) clearTimeout(__overlayRefreshTimer);
+  __overlayRefreshTimer = setTimeout(() => {
+    __overlayRefreshTimer = null;
+    updateReaderOverlay().catch(() => {});
+  }, 450);
+}
+
+async function updateReaderOverlay() {
+  if (!(await isReaderOverlayEnabled())) {
+    document.getElementById(READER_OVERLAY_ID)?.remove();
+    return;
+  }
+
+  const regMsg = await sendMessage({ type: "GET_REGISTRY_PUBLIC" });
+  const registry = regMsg?.data || {};
+  let hostname = "";
+  try {
+    hostname = new URL(window.location.href).hostname;
+  } catch {
+    return;
+  }
+  const catalogOk = registryHostSupported(registry, hostname);
+
+  const track = await getTrackDataFromPage();
+  let overlayText = catalogOk ? "This site is in the catalog" : "Site not in catalog";
+  let sub = "";
+  const actions = [];
+
+  if (track) {
+    const ov = await sendMessage({
+      type: "GET_READER_OVERLAY",
+      payload: {
+        series_url: track.seriesUrl,
+        series_key: track.seriesKey,
+        page_url: window.location.href,
+      },
+    });
+    const d = ov?.data;
+    const needAuth =
+      (d && d.ok === false && String(d.error || "").toLowerCase().includes("authentication")) ||
+      (ov && ov.ok === false && String(ov.error || "").includes("401"));
+    if (needAuth) {
+      sub = "Sign in on Manga Watchlist to see library status.";
+    } else if (d?.ok && d.tracked) {
+      const lr = d.read_chapter_num != null ? `Ch. ${d.read_chapter_num}` : "-";
+      const lt = d.latest_seen_num != null ? `Ch. ${d.latest_seen_num}` : "-";
+      sub = `Tracked | Last ${lr} | Latest ${lt} | Unread ${d.unread ?? 0}`;
+      actions.push({ type: "button", action: "mark", text: "Mark read" });
+      if (d.continue_url) {
+        actions.push({ type: "link", href: d.continue_url, text: "Continue" });
+      }
+      if (d.latest_seen_url) {
+        actions.push({ type: "link", href: d.latest_seen_url, text: "Latest" });
+      }
+    } else if (d?.ok && !d.tracked) {
+      sub = "Not in your library";
+      actions.push({ type: "button", action: "add", text: "Add series", primary: true });
+    }
+  }
+
+  let host = document.getElementById(READER_OVERLAY_ID);
+  if (!host) {
+    host = document.createElement("div");
+    host.id = READER_OVERLAY_ID;
+    host.style.all = "initial";
+    host.style.position = "fixed";
+    host.style.right = "12px";
+    host.style.bottom = "12px";
+    host.style.zIndex = "2147483646";
+    host.style.fontSize = "13px";
+    document.documentElement.appendChild(host);
+    const root = host.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = `
+      .box {
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color: #e5e7eb;
+        background: linear-gradient(180deg, #0f172a 0%, #0b1020 100%);
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 14px;
+        padding: 10px 12px;
+        max-width: min(320px, 92vw);
+        box-shadow: 0 12px 32px rgba(2, 6, 23, 0.55);
+      }
+      .t { font-weight: 700; margin: 0 0 4px; font-size: 13px; }
+      .s { margin: 0 0 8px; opacity: 0.9; font-size: 12px; line-height: 1.35; }
+      .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      .mw-o-btn {
+        font: inherit;
+        cursor: pointer;
+        border-radius: 8px;
+        padding: 6px 10px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background: #1e293b;
+        color: #e2e8f0;
+      }
+      .mw-o-btn.primary {
+        border: none;
+        background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+        color: #fff;
+      }
+      .mw-o-link {
+        font-size: 12px;
+        color: #93c5fd;
+      }
+    `;
+    root.appendChild(style);
+    const box = document.createElement("div");
+    box.className = "box";
+    root.appendChild(box);
+  }
+  const root = host.shadowRoot;
+  const box = root?.querySelector(".box");
+  if (!box) return;
+  const badge = catalogOk ? "Supported" : "Unknown";
+  box.replaceChildren();
+
+  const titleNode = document.createElement("div");
+  titleNode.className = "t";
+  titleNode.textContent = `Manga Watchlist | ${badge}`;
+
+  const subNode = document.createElement("div");
+  subNode.className = "s";
+  subNode.textContent = `${overlayText}${sub ? ` -- ${sub}` : ""}`;
+
+  const rowNode = document.createElement("div");
+  rowNode.className = "row";
+  for (const item of actions) {
+    if (item.type === "button") {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `mw-o-btn${item.primary ? " primary" : ""}`;
+      btn.dataset.action = item.action;
+      btn.textContent = item.text;
+      rowNode.appendChild(btn);
+    } else if (item.type === "link") {
+      const a = document.createElement("a");
+      a.className = "mw-o-link";
+      a.href = item.href;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      a.textContent = item.text;
+      rowNode.appendChild(a);
+    }
+  }
+  box.appendChild(titleNode);
+  box.appendChild(subNode);
+  box.appendChild(rowNode);
+
+  box.querySelector("[data-action='mark']")?.addEventListener("click", async () => {
+    const data = await getTrackDataFromPage();
+    await pushProgressQuiet(data);
+    scheduleReaderOverlayRefresh();
+  });
+  box.querySelector("[data-action='add']")?.addEventListener("click", async () => {
+    const data = await getTrackDataFromPage();
+    await addSeriesQuiet(data);
+    scheduleReaderOverlayRefresh();
+  });
+}
+
+if (chrome.storage?.onChanged) {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && "readerOverlay" in changes) {
+      updateReaderOverlay().catch(() => {});
+    }
+  });
+}
+
+setInterval(() => {
+  if (document.hidden) return;
+  isReaderOverlayEnabled().then((en) => {
+    if (en) updateReaderOverlay().catch(() => {});
+  });
+}, 14000);
+
+updateReaderOverlay().catch(() => {});

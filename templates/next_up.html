@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en" class="">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{ site_description }}">
+  <title>Next up — Manga Watchlist</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f5f1e8;
+      --surface: #ffffff;
+      --text: #1a1a1a;
+      --muted: #6f6f6f;
+      --border: rgba(0, 0, 0, 0.15);
+      --accent: #6d5dfc;
+    }
+    .dark {
+      --bg: #0f0f10;
+      --surface: #1a1a1a;
+      --text: #eaeaea;
+      --muted: #9a9a9a;
+      --border: rgba(255, 255, 255, 0.18);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter", sans-serif;
+    }
+    h1, h2 { font-family: "Playfair Display", serif; }
+    .shell { max-width: 900px; margin: 0 auto; padding: 0 24px 48px; }
+    .glass {
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+    }
+    .dark .glass { background: rgba(255, 255, 255, 0.06); }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding: 16px 0;
+      margin: 16px 0 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar h1 { margin: 0; font-size: 1.35rem; }
+    .btn {
+      display: inline-block;
+      padding: 10px 16px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.35);
+      color: var(--text);
+      text-decoration: none;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .dark .btn { background: rgba(255,255,255,0.08); }
+    .card {
+      padding: 18px 20px;
+      margin-bottom: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .title { font-weight: 600; font-size: 1.05rem; margin: 0; }
+    .meta { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(109, 93, 252, 0.15);
+      color: var(--accent);
+    }
+    .flash {
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <h1>Next up</h1>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <a class="btn" href="{{ url_for('index') }}">Dashboard</a>
+        <a class="btn" href="{{ url_for('sources_page') }}">Sources</a>
+        <button class="btn" type="button" id="themeToggle">☾</button>
+      </div>
+    </header>
+
+    {% if insights and insights.get('hints') %}
+      {% for hint in insights.hints %}
+        <div class="flash">{{ hint }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <p class="meta" style="margin:0 0 20px;font-size:15px;">
+      Heuristic queue: unread chapters and new updates first; ties favor your usual genres. Not finding a title you expected? Merge duplicates from the dashboard (<strong>Edit</strong> → same story).
+    </p>
+
+    {% if not queue %}
+      <div class="glass card">
+        <p class="meta" style="margin:0;">Nothing in your library yet. Add a series from the dashboard.</p>
+      </div>
+    {% else %}
+      {% for b in queue %}
+      <article class="glass card">
+        <div>
+          <h2 class="title">{{ b.title }}</h2>
+          <p class="meta">
+            {% if b.read_chapter_num is not none %}
+              Last read: Ch. {{ b.read_chapter_num|clean }}
+            {% else %}
+              Last read: —
+            {% endif %}
+            ·
+            {% if b.latest_seen_num is not none %}
+              Latest: Ch. {{ b.latest_seen_num|clean }}
+            {% else %}
+              Latest: —
+            {% endif %}
+            {% if b.new_update %}<span class="pill" style="margin-left:8px;">New update</span>{% endif %}
+            {% if ui_show_source_hosts and b.source_hosts %}
+              · {{ b.source_hosts|join(', ') }}
+            {% endif %}
+          </p>
+        </div>
+        <div class="actions">
+          <a class="btn" href="{{ b.continue_url }}" target="_blank" rel="noreferrer">Continue</a>
+          {% if b.latest_seen_url %}
+          <a class="btn" href="{{ b.latest_seen_url }}" target="_blank" rel="noreferrer">Latest</a>
+          {% endif %}
+          <a class="btn" href="{{ url_for('edit_bookmark', bookmark_id=b.id) }}">Edit</a>
+        </div>
+      </article>
+      {% endfor %}
+    {% endif %}
+  </div>
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const key = "mw-theme";
+      const saved = localStorage.getItem(key);
+      if (saved === "dark") root.classList.add("dark");
+      const btn = document.getElementById("themeToggle");
+      if (btn) btn.addEventListener("click", () => {
+        root.classList.toggle("dark");
+        localStorage.setItem(key, root.classList.contains("dark") ? "dark" : "light");
+      });
+    })();
+  </script>
+</body>
+</html>

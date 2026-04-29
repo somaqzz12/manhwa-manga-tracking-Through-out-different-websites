@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: manga
+      POSTGRES_PASSWORD: manga
+      POSTGRES_DB: manga
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://manga:manga@db:5432/manga
+      SECRET_KEY: "${SECRET_KEY:-dev-docker-secret-change-me}"
+      FLASK_DEBUG: "1"
+      ALLOW_SQLITE_IN_PRODUCTION: "0"
+      DISABLE_AUTO_CHECK: "1"
+      INITIAL_AUTO_CHECK: "0"
+      SCHEDULER_ENABLED: "0"
+    depends_on:
+      - db
+
+volumes:
+  pgdata:

@@ -1,6 +1,8 @@
 import math
 import os
 import re
+import smtplib
+from collections import defaultdict
 import sqlite3
 import json
 import ipaddress
@@ -10,9 +12,12 @@ import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import quote, urljoin, urlparse
+from xml.sax.saxutils import escape as xml_escape
+
+from email.message import EmailMessage
 
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -23,6 +28,9 @@ from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import check_password_hash, generate_password_hash
 from services import chapter_parsing as chapter
+from services import reading_insights
+from services import source_registry
+from services import story_groups
 try:
     import psycopg2
     import psycopg2.extras
@@ -49,6 +57,11 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger(__name__)
+
+
+def _now_iso_z() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 # Session cookies: HttpOnly always; SameSite default flips by environment so the
 # Chrome extension (a chrome-extension:// origin) can still send the cookie back
@@ -126,6 +139,72 @@ INITIAL_AUTO_CHECK = os.getenv("INITIAL_AUTO_CHECK", "0") == "1"
 CHECK_STALE_MINUTES = max(1, int(os.getenv("CHECK_STALE_MINUTES", "45")))
 DEFAULT_BUG_REPORT_URL = "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites/issues"
 APP_DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
+
+_DEMO_STORY_MERGED = "sg-demomerged"
+
+
+DEMO_BOOKMARKS = [
+    {
+        "id": 101,
+        "title": "Demo: Same story, two sources (best chapter wins)",
+        "url": "https://asurascans.com/manga/demo-fake",
+        "story_id": _DEMO_STORY_MERGED,
+        "cover_url": None,
+        "new_update": 1,
+        "read_chapter_num": 170.0,
+        "read_chapter_label": "Ch 170",
+        "read_source_url": "https://asurascans.com/manga/demo-fake/ch/170",
+        "latest_seen_num": 174.0,
+        "latest_seen_url": "https://asurascans.com/manga/demo-fake/ch/174",
+        "latest_seen": "Ch 174",
+        "last_checked": "2026-04-01T00:00:00Z",
+        "last_error": None,
+        "latest_parser_version": "asurascans-selector",
+        "latest_error_flags": "",
+        "genre": "",
+        "series_key": None,
+    },
+    {
+        "id": 102,
+        "title": "Demo: Same story (alternate site farther ahead)",
+        "url": "https://mangadex.org/title/00000000-0000-0000-0000-000000000001",
+        "story_id": _DEMO_STORY_MERGED,
+        "cover_url": None,
+        "new_update": 1,
+        "read_chapter_num": 170.0,
+        "read_chapter_label": "Ch 170",
+        "read_source_url": "https://mangadex.org/chapter/demo",
+        "latest_seen_num": 176.0,
+        "latest_seen_url": "https://mangadex.org/chapter/demo176",
+        "latest_seen": "Ch 176",
+        "last_checked": "2026-04-01T00:00:00Z",
+        "last_error": None,
+        "latest_parser_version": "mangadex-api",
+        "latest_error_flags": "",
+        "genre": "",
+        "series_key": None,
+    },
+    {
+        "id": 103,
+        "title": "Demo: Solo leveling-style binge backlog",
+        "url": "https://example.com/manga/solo-demo",
+        "story_id": "sg-demosolo",
+        "cover_url": None,
+        "new_update": 1,
+        "read_chapter_num": 10.0,
+        "read_chapter_label": "Ch 10",
+        "read_source_url": "",
+        "latest_seen_num": 18.0,
+        "latest_seen_url": "https://example.com/manga/solo-demo/ch-18",
+        "latest_seen": "Ch 18",
+        "last_checked": "2026-04-01T00:00:00Z",
+        "last_error": None,
+        "latest_parser_version": "generic-heuristic",
+        "latest_error_flags": "",
+        "genre": "",
+        "series_key": None,
+    },
+]
 DB_READY = False
 DB_INIT_LOCK = threading.Lock()
 CHECK_SINGLE_LOCKS: dict[int, threading.Lock] = {}
@@ -150,11 +229,14 @@ ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "").strip()
 ADMIN_USERNAME = (os.getenv("ADMIN_USERNAME") or "").strip().lower()
 READ_PROGRESS_MAX_PER_USER = int(os.getenv("READ_PROGRESS_MAX_PER_USER", "20000"))
 BOOKMARKS_PAGE_SIZE = max(1, int(os.getenv("BOOKMARKS_PAGE_SIZE", "60")))
+UI_SHOW_SOURCE_HOSTS = os.getenv("UI_SHOW_SOURCE_HOSTS", "0") == "1"
 SORT_MODES = frozenset({"added", "title", "updated", "unread"})
 IMPORT_MAX_BYTES = int(os.getenv("IMPORT_MAX_BYTES", str(5 * 1024 * 1024)))
 IMPORT_MAX_ITEMS = int(os.getenv("IMPORT_MAX_ITEMS", "20000"))
 AUTH_RATE_LIMIT_PER_IP = os.getenv("AUTH_RATE_LIMIT_PER_IP", "10/minute;60/hour")
 AUTH_RATE_LIMIT_PER_USER = os.getenv("AUTH_RATE_LIMIT_PER_USER", "8/minute;30/hour")
+DEAD_SERIES_WARNING_DAYS = max(1, int(os.getenv("DEAD_SERIES_WARNING_DAYS", "120")))
+_PUBLIC_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,40}[a-z0-9])?$")
 if not APP_DEBUG and not os.getenv("SECRET_KEY"):
     raise RuntimeError("SECRET_KEY must be set in production")
 
@@ -187,12 +269,58 @@ def inject_template_globals():
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": USER_AGENT})
 
-SITE_PROFILES = {
-    "asurascans.com": {"chapter_selector": "ul li a, .chapters a"},
-    "mangakatana.com": {"chapter_selector": ".chapters a, .chapter-list a"},
-    "arenascan.com": {"chapter_selector": ".wp-manga-chapter a, .listing-chapters_wrap a, a"},
-    "mangadex.org": {"api": True},
-}
+
+def get_profile_for_url(url: str) -> Optional[dict]:
+    return source_registry.get_profile_for_url(url)
+
+
+@app.template_global("build_source_bug_report_url")
+def build_source_bug_report_url(
+    *,
+    source_id: str,
+    domain: str = "",
+    series_url: str = "",
+    last_error: str = "",
+    parser_version: str = "",
+) -> str:
+    report = (os.getenv("BUG_REPORT_URL") or DEFAULT_BUG_REPORT_URL or "").strip()
+    if not report:
+        return "#"
+    title = f"[Source] {source_id} broken or misparsed"
+    body = (
+        f"**Source id:** {source_id}\n\n"
+        f"**Domain:** {domain}\n\n"
+        f"**Series URL:** {series_url}\n\n"
+        f"**Last error:** {last_error or '_(none)_'}\n\n"
+        f"**Parser version:** {parser_version or '_(none)_'}\n"
+    )
+    if "github.com" in report.lower():
+        report = report.rstrip("/")
+        lower = report.lower()
+        if lower.endswith("/issues"):
+            report = report[: -len("/issues")]
+            lower = report.lower()
+        if not lower.endswith("/issues/new"):
+            report = report + "/issues/new"
+    sep = "&" if "?" in report else "?"
+    return report + sep + "title=" + quote(title) + "&body=" + quote(body)
+
+
+@app.template_global()
+def source_bug_report_href(bookmark) -> str:
+    if not bookmark:
+        return "#"
+    url = (bookmark.get("url") or "").strip()
+    prof = get_profile_for_url(url) or {}
+    sid = str(prof.get("id") or urlparse(url).netloc or "unknown")
+    return build_source_bug_report_url(
+        source_id=sid,
+        domain=urlparse(url).netloc,
+        series_url=url,
+        last_error=str(bookmark.get("last_error") or ""),
+        parser_version=str(bookmark.get("latest_parser_version") or ""),
+    )
+
 
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
 if DATABASE_URL.startswith("postgres://"):
@@ -281,7 +409,7 @@ def _bookmark_list_order_by(sort: str) -> str:
 
 def apply_manual_read_through(user_id: int, bookmark_id: int, chapter_num: float) -> None:
     """Insert reading progress for chapter_num and align bookmark latest_* / new_update like /api/progress."""
-    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    now = _now_iso_z()
     with get_conn() as conn:
         row = conn.execute(
             """
@@ -396,11 +524,16 @@ def add_cors_headers(response):
     return response
 
 
+_SKIP_DB_READY_ENDPOINTS = frozenset(
+    {"healthz", "sources_page", "privacy_page", "changelog_page", "demo_dashboard"}
+)
+
+
 @app.before_request
 def handle_preflight():
     # /healthz must stay free of DB and heavy work so uptime pings and free-tier
     # keep-alive cron jobs do not trigger init_db or migrations.
-    if request.endpoint != "healthz":
+    if request.endpoint not in _SKIP_DB_READY_ENDPOINTS:
         ensure_db_ready()
     if request.method == "OPTIONS":
         return Response(status=204)
@@ -460,6 +593,7 @@ def _migrate_sqlite_bookmarks_to_user_unique(conn) -> None:
             latest_confidence REAL,
             latest_parser_version TEXT,
             latest_error_flags TEXT,
+            story_id TEXT,
             UNIQUE(user_id, url)
         )
         """
@@ -467,8 +601,8 @@ def _migrate_sqlite_bookmarks_to_user_unique(conn) -> None:
     conn.execute(
         """
         INSERT OR IGNORE INTO bookmarks_new
-        (id, user_id, title, url, latest_seen, latest_seen_num, new_update, last_checked, last_error, series_key, latest_seen_url, cover_url, latest_confidence, latest_parser_version, latest_error_flags)
-        SELECT id, user_id, title, url, latest_seen, latest_seen_num, new_update, last_checked, last_error, series_key, latest_seen_url, cover_url, latest_confidence, latest_parser_version, latest_error_flags
+        (id, user_id, title, url, latest_seen, latest_seen_num, new_update, last_checked, last_error, series_key, latest_seen_url, cover_url, latest_confidence, latest_parser_version, latest_error_flags, story_id)
+        SELECT id, user_id, title, url, latest_seen, latest_seen_num, new_update, last_checked, last_error, series_key, latest_seen_url, cover_url, latest_confidence, latest_parser_version, latest_error_flags, NULL
         FROM bookmarks
         """
     )
@@ -478,6 +612,131 @@ def _migrate_sqlite_bookmarks_to_user_unique(conn) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_series_key ON bookmarks(series_key)")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_url_unique ON bookmarks(user_id, url)")
     conn.execute("PRAGMA foreign_keys = ON")
+
+
+def _ensure_bookmarks_story_id_column(conn) -> None:
+    if IS_POSTGRES:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS story_id TEXT")
+    else:
+        cols = conn.execute("PRAGMA table_info(bookmarks)").fetchall()
+        names = {c["name"] for c in cols}
+        if "story_id" not in names:
+            conn.execute("ALTER TABLE bookmarks ADD COLUMN story_id TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_story ON bookmarks(user_id, story_id)")
+
+
+def _ensure_bookmarks_created_at_column(conn) -> None:
+    now = _now_iso_z()
+    if IS_POSTGRES:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS created_at TEXT")
+        conn.execute(
+            """
+            UPDATE bookmarks
+            SET created_at = COALESCE(NULLIF(created_at, ''), last_checked, ?)
+            WHERE created_at IS NULL OR TRIM(created_at) = ''
+            """,
+            (now,),
+        )
+    else:
+        cols = conn.execute("PRAGMA table_info(bookmarks)").fetchall()
+        names = {c["name"] for c in cols}
+        if "created_at" not in names:
+            conn.execute("ALTER TABLE bookmarks ADD COLUMN created_at TEXT")
+        conn.execute(
+            """
+            UPDATE bookmarks
+            SET created_at = COALESCE(NULLIF(created_at, ''), last_checked, ?)
+            WHERE created_at IS NULL OR TRIM(created_at) = ''
+            """,
+            (now,),
+        )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at)")
+
+
+def _ensure_users_integration_columns(conn) -> None:
+    """RSS secret, optional webhooks, API token, optional public list slug."""
+    if IS_POSTGRES:
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS rss_feed_token TEXT")
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS webhook_url TEXT")
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS api_access_token TEXT")
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS public_list_slug TEXT")
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_email_chapters INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_rss_feed ON users (rss_feed_token) WHERE rss_feed_token IS NOT NULL"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_tok ON users (api_access_token) WHERE api_access_token IS NOT NULL"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_pub_slug ON users (public_list_slug) WHERE public_list_slug IS NOT NULL"
+        )
+        return
+    cols = {c["name"] for c in conn.execute("PRAGMA table_info(users)").fetchall()}
+    add = [
+        ("rss_feed_token", "TEXT"),
+        ("webhook_url", "TEXT"),
+        ("api_access_token", "TEXT"),
+        ("public_list_slug", "TEXT"),
+        ("notify_email_chapters", "INTEGER NOT NULL DEFAULT 0"),
+    ]
+    for name, typ in add:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {name} {typ}")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_rss_feed ON users(rss_feed_token) WHERE rss_feed_token IS NOT NULL"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_tok ON users(api_access_token) WHERE api_access_token IS NOT NULL"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_pub_slug ON users(public_list_slug) WHERE public_list_slug IS NOT NULL"
+    )
+
+
+def _ensure_source_requests_table(conn) -> None:
+    if IS_POSTGRES:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS source_requests (
+                id BIGSERIAL PRIMARY KEY,
+                domain TEXT NOT NULL,
+                title_hint TEXT NOT NULL,
+                url_example TEXT,
+                created_at TEXT NOT NULL,
+                votes INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
+        return
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS source_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain TEXT NOT NULL,
+            title_hint TEXT NOT NULL,
+            url_example TEXT,
+            created_at TEXT NOT NULL,
+            votes INTEGER NOT NULL DEFAULT 1
+        )
+        """
+    )
+
+
+def _backfill_bookmark_story_ids(conn) -> None:
+    if IS_POSTGRES:
+        rows = conn.execute(
+            "SELECT id, series_key, story_id FROM bookmarks WHERE story_id IS NULL OR TRIM(COALESCE(story_id, '')) = ''"
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, series_key, story_id FROM bookmarks WHERE story_id IS NULL OR IFNULL(TRIM(story_id), '') = ''"
+        ).fetchall()
+    for r in rows:
+        sk = (r["series_key"] or "").strip()
+        sid = story_groups.story_id_from_series_key(sk) if sk else story_groups.new_solo_story_id()
+        conn.execute("UPDATE bookmarks SET story_id = ? WHERE id = ?", (sid, r["id"]))
 
 
 def _bootstrap_default_user_password_hash() -> str:
@@ -535,7 +794,9 @@ def init_db() -> None:
                     cover_url TEXT,
                     latest_confidence DOUBLE PRECISION,
                     latest_parser_version TEXT,
-                    latest_error_flags TEXT
+                    latest_error_flags TEXT,
+                    story_id TEXT,
+                    created_at TEXT
                 )
                 """
             )
@@ -563,8 +824,11 @@ def init_db() -> None:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_url ON bookmarks(user_id, url)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_user_id ON reading_progress(user_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_bookmark ON reading_progress(bookmark_id)")
+            _ensure_bookmarks_story_id_column(conn)
+            _ensure_bookmarks_created_at_column(conn)
+            _backfill_bookmark_story_ids(conn)
 
-            now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+            now = _now_iso_z()
             conn.execute(
                 "INSERT OR IGNORE INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
                 (DEFAULT_USER_EMAIL, _bootstrap_default_user_password_hash(), now),
@@ -577,6 +841,8 @@ def init_db() -> None:
             conn.execute("UPDATE bookmarks SET user_id = ? WHERE user_id IS NULL", (default_user_id,))
             conn.execute("UPDATE reading_progress SET user_id = ? WHERE user_id IS NULL", (default_user_id,))
             _harden_legacy_default_user_password(conn)
+            _ensure_users_integration_columns(conn)
+            _ensure_source_requests_table(conn)
         return
 
     with get_conn() as conn:
@@ -607,7 +873,8 @@ def init_db() -> None:
                 latest_seen_num REAL,
                 new_update INTEGER NOT NULL DEFAULT 0,
                 last_checked TEXT,
-                last_error TEXT
+                last_error TEXT,
+                created_at TEXT
             )
             """
         )
@@ -630,8 +897,14 @@ def init_db() -> None:
             conn.execute("ALTER TABLE bookmarks ADD COLUMN latest_parser_version TEXT")
         if "latest_error_flags" not in col_names:
             conn.execute("ALTER TABLE bookmarks ADD COLUMN latest_error_flags TEXT")
+        if "story_id" not in col_names:
+            conn.execute("ALTER TABLE bookmarks ADD COLUMN story_id TEXT")
+        if "created_at" not in col_names:
+            conn.execute("ALTER TABLE bookmarks ADD COLUMN created_at TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_url ON bookmarks(user_id, url)")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_url_unique ON bookmarks(user_id, url)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_story ON bookmarks(user_id, story_id)")
+        _ensure_bookmarks_created_at_column(conn)
 
         conn.execute(
             """
@@ -656,7 +929,7 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_bookmark ON reading_progress(bookmark_id)")
 
         # Ensure a default local user exists so extension flow keeps working.
-        now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        now = _now_iso_z()
         conn.execute(
             "INSERT OR IGNORE INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
             (DEFAULT_USER_EMAIL, _bootstrap_default_user_password_hash(), now),
@@ -672,6 +945,9 @@ def init_db() -> None:
             (default_user_id,),
         )
         _harden_legacy_default_user_password(conn)
+        _backfill_bookmark_story_ids(conn)
+        _ensure_users_integration_columns(conn)
+        _ensure_source_requests_table(conn)
 
 
 def ensure_db_ready() -> None:
@@ -770,6 +1046,287 @@ def _bookmark_title_search_clause(needle: str) -> tuple[str, list]:
     return " AND instr(lower(b.title), lower(?)) > 0", [n_lower]
 
 
+def _normalize_title_duplicate_key(title: str) -> str:
+    t = (title or "").lower()
+    t = re.sub(r"[^a-z0-9]+", " ", t)
+    return " ".join(t.split()).strip()
+
+
+def _load_duplicate_hints(user_id: int, limit: int = 40) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, title, story_id, url, series_key FROM bookmarks WHERE user_id = ? ORDER BY id ASC",
+            (user_id,),
+        ).fetchall()
+    by_key: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        key = _normalize_title_duplicate_key(str(r["title"] or ""))
+        if len(key) < 4:
+            continue
+        by_key[key].append(
+            {
+                "id": int(r["id"]),
+                "title": r["title"],
+                "story_id": r["story_id"],
+                "url": r["url"],
+                "series_key": r["series_key"],
+            }
+        )
+    hints: list[dict] = []
+    for key, items in by_key.items():
+        if len(items) < 2:
+            continue
+        sids = {story_groups.effective_story_id(x) for x in items}
+        if len(sids) < 2:
+            continue
+        ids_sorted = sorted(int(x["id"]) for x in items)
+        keeper_id = ids_sorted[0]
+        merge_ids = ids_sorted[1:]
+        hints.append(
+            {
+                "normalized_title": key,
+                "items": items,
+                "keeper_id": keeper_id,
+                "merge_ids": merge_ids,
+            }
+        )
+    hints.sort(key=lambda h: (-len(h["items"]), h["normalized_title"]))
+    return hints[:limit]
+
+
+def _days_since_iso_optional(ts: Optional[str]) -> Optional[float]:
+    if not ts:
+        return None
+    try:
+        tsi = str(ts).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(tsi)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt).total_seconds() / 86400.0
+    except Exception:
+        return None
+
+
+def _fetch_user_story_rows(user_id: int, search_q: str = "") -> tuple[list[dict], dict[int, dict]]:
+    title_clause, title_params = _bookmark_title_search_clause(search_q)
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT b.*,
+                   rp.chapter_num AS read_chapter_num,
+                   rp.chapter_label AS read_chapter_label,
+                   rp.source_url AS read_source_url
+            FROM bookmarks b
+            LEFT JOIN (
+                SELECT x.bookmark_id, x.chapter_num, x.chapter_label, x.source_url
+                FROM reading_progress x
+                INNER JOIN (
+                    SELECT bookmark_id, MAX(id) AS max_id
+                    FROM reading_progress
+                    WHERE user_id = ?
+                    GROUP BY bookmark_id
+                ) y ON y.bookmark_id = x.bookmark_id AND y.max_id = x.id
+                WHERE x.user_id = ?
+            ) rp ON rp.bookmark_id = b.id
+            WHERE b.user_id = ?
+            {title_clause}
+            """,
+            (user_id, user_id, user_id, *title_params),
+        ).fetchall()
+    raw_rows = [dict(r) for r in rows]
+    raw_by_id = {int(r["id"]): r for r in raw_rows}
+    return raw_rows, raw_by_id
+
+
+def _build_sorted_story_cards(raw_rows: list[dict], raw_by_id: dict[int, dict], sort: str) -> list[dict]:
+    story_cards = story_groups.group_and_aggregate(raw_rows)
+    story_groups.attach_sort_keys(story_cards, raw_by_id)
+    return story_groups.sort_story_cards(story_cards, sort)
+
+
+def _notify_discord_new_chapter(series_title: str, chapter_label: Optional[str], chapter_url: Optional[str]) -> None:
+    webhook = (os.getenv("DISCORD_WEBHOOK_URL") or "").strip()
+    if not webhook:
+        return
+    line = f"**New chapter:** {series_title}\n{(chapter_label or '').strip() or '—'}"
+    if chapter_url:
+        line += f"\n{chapter_url}"
+    try:
+        requests.post(webhook, json={"content": line[:1900]}, timeout=6)
+    except Exception:
+        log.exception("discord webhook post failed")
+
+
+def _notify_user_webhook(user_id: int, series_title: str, chapter_label: Optional[str], chapter_url: Optional[str]) -> None:
+    with get_conn() as conn:
+        row = conn.execute("SELECT webhook_url FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not row or not (row["webhook_url"] or "").strip():
+        return
+    wh = row["webhook_url"].strip()
+    if not is_public_http_url(wh):
+        return
+    payload = {
+        "event": "chapter_update",
+        "title": series_title,
+        "chapter": chapter_label,
+        "url": chapter_url,
+    }
+    try:
+        requests.post(wh, json=payload, timeout=8)
+    except Exception:
+        log.exception("user webhook post failed")
+
+
+def _notify_user_email_new_chapter(
+    user_id: int, series_title: str, chapter_label: Optional[str], chapter_url: Optional[str]
+) -> None:
+    """SMTP optional (`SMTP_HOST`): notifies opted-in users when a scrape finds a newer chapter."""
+    smtp_host = (os.getenv("SMTP_HOST") or "").strip()
+    if not smtp_host:
+        return
+    try:
+        port = int(os.getenv("SMTP_PORT", "587"))
+    except ValueError:
+        port = 587
+    user_s = (os.getenv("SMTP_USER") or "").strip()
+    password = os.getenv("SMTP_PASSWORD") or ""
+    mail_from = (os.getenv("SMTP_FROM") or user_s or "").strip()
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT email, notify_email_chapters FROM users WHERE id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+
+    if not row:
+        return
+    try:
+        if int(row["notify_email_chapters"] or 0) != 1:
+            return
+    except (TypeError, ValueError):
+        return
+
+    to_addr = (row["email"] or "").strip()
+    if (
+        not to_addr
+        or to_addr.strip().lower() == DEFAULT_USER_EMAIL.strip().lower()
+    ):
+        return
+    if not mail_from:
+        return
+
+    lines = [
+        "Hello — your manga watchlist found a new chapter:",
+        "",
+        f"Series: {series_title}",
+        f"Chapter: {(chapter_label or '').strip() or '—'}",
+        f"Link: {(chapter_url or '').strip() or '—'}",
+    ]
+    msg = EmailMessage()
+    msg["Subject"] = f"New chapter: {series_title}"
+    msg["From"] = mail_from
+    msg["To"] = to_addr
+    msg.set_content("\n".join(lines))
+
+    try:
+        if port == 465:
+            context = __import__("ssl").create_default_context()
+            with smtplib.SMTP_SSL(smtp_host, port, context=context, timeout=12) as smtp:
+                if user_s:
+                    smtp.login(user_s, password)
+                smtp.send_message(msg)
+            return
+        with smtplib.SMTP(smtp_host, port, timeout=12) as smtp:
+            smtp.ehlo()
+            smtp.starttls(context=__import__("ssl").create_default_context())
+            smtp.ehlo()
+            if user_s:
+                smtp.login(user_s, password)
+            smtp.send_message(msg)
+    except Exception:
+        log.exception("SMTP notify failed")
+
+
+def _ensure_user_rss_token(conn, user_id: int) -> str:
+    row = conn.execute("SELECT rss_feed_token FROM users WHERE id = ?", (user_id,)).fetchone()
+    if row and (row["rss_feed_token"] or "").strip():
+        return str(row["rss_feed_token"]).strip()
+    tok = secrets.token_urlsafe(16)
+    conn.execute("UPDATE users SET rss_feed_token = ? WHERE id = ?", (tok, user_id))
+    return tok
+
+
+def _user_id_from_bearer_api_token(raw: str) -> Optional[int]:
+    t = (raw or "").strip()
+    if not t:
+        return None
+    with get_conn() as conn:
+        row = conn.execute("SELECT id FROM users WHERE api_access_token = ?", (t,)).fetchone()
+    return int(row["id"]) if row else None
+
+
+def _rss_item_date(iso_ts: Optional[str]) -> str:
+    if not iso_ts:
+        dt = datetime.now(timezone.utc)
+    else:
+        try:
+            dt = datetime.fromisoformat(str(iso_ts).replace("Z", "+00:00"))
+        except Exception:
+            dt = datetime.now(timezone.utc)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+
+def _render_user_rss_xml(user_id: int, base_url: str) -> str:
+    raw_rows, raw_by_id = _fetch_user_story_rows(user_id, "")
+    cards = _build_sorted_story_cards(raw_rows, raw_by_id, "updated")[:100]
+    base = (base_url or "").rstrip("/") or ""
+    chan_title = xml_escape("Manga Watchlist")
+    chan_link = xml_escape(base)
+    chan_desc = xml_escape("Tracked series — latest chapters from your library")
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<rss version="2.0">',
+        "<channel>",
+        f"<title>{chan_title}</title>",
+        f"<link>{chan_link}</link>",
+        f"<description>{chan_desc}</description>",
+        f"<lastBuildDate>{_rss_item_date(None)}</lastBuildDate>",
+    ]
+    for c in cards:
+        title = xml_escape(str(c.get("title") or "Untitled"))
+        href = (c.get("continue_url") or c.get("url") or base).strip()
+        link = xml_escape(href if href else base)
+        lbl = str(c.get("latest_seen") or "").strip()
+        desc_bits = []
+        if lbl:
+            desc_bits.append(f"Latest: {lbl}")
+        rc = c.get("read_chapter_num")
+        if rc is not None:
+            try:
+                rn = float(rc)
+                rn_s = str(int(rn)) if rn.is_integer() else f"{rn:g}"
+                desc_bits.append(f"Last read: Ch. {rn_s}")
+            except (TypeError, ValueError):
+                pass
+        desc = xml_escape(" · ".join(desc_bits) if desc_bits else "Tracked series")
+        ts = c.get("_last_checked") or ""
+        bid = int(c.get("id") or 0)
+        guid = xml_escape(f"{user_id}-{bid}-{ts}")
+        parts.append("<item>")
+        parts.append(f"<title>{title}</title>")
+        parts.append(f"<link>{link}</link>")
+        parts.append(f"<description>{desc}</description>")
+        parts.append(f"<pubDate>{_rss_item_date(str(ts) if ts else '')}</pubDate>")
+        parts.append(f'<guid isPermaLink="false">{guid}</guid>')
+        parts.append("</item>")
+    parts.extend(["</channel>", "</rss>"])
+    return "\n".join(parts)
+
+
 def resolve_scrape_chapter_fields(
     label: Optional[str], num: Optional[float], latest_url: Optional[str]
 ) -> Optional[tuple[float, str, Optional[str]]]:
@@ -832,34 +1389,39 @@ def api_session_user_id() -> Optional[int]:
         return None
 
 
+def _admin_secret_from_request() -> str:
+    """Read admin API token from headers only (never query strings — referrers/history leak)."""
+    auth = (request.headers.get("Authorization") or "").strip()
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return (request.headers.get("X-Admin-Token") or "").strip()
+
+
 def admin_api_authorized() -> bool:
-    """Gate destructive or scrape-proxy endpoints behind an explicit admin signal.
-
-    Allows the request when any of these is true:
-    - the caller is logged in (browser session), or
-    - an ADMIN_API_TOKEN is configured and matches the X-Admin-Token header, or
-    - the app is running with FLASK_DEBUG=1 (local development convenience).
-
-    This intentionally does NOT treat "open API" env flags as a reason to expose
-    scrape/maintenance tools without an admin signal.
-    """
+    """Destructive / scrape-proxy JSON routes: debug token, or admin username session, or FLASK_DEBUG."""
     if APP_DEBUG:
         return True
-    if login_required():
-        return True
     if ADMIN_API_TOKEN:
-        provided = (request.headers.get("X-Admin-Token") or "").strip()
+        provided = _admin_secret_from_request()
         if provided and provided == ADMIN_API_TOKEN:
             return True
+    if ADMIN_USERNAME:
+        current = get_current_user()
+        if current:
+            try:
+                if str(current.get("username") or "").strip().lower() == ADMIN_USERNAME.strip().lower():
+                    return True
+            except Exception:
+                pass
     return False
 
 
-def _provided_admin_token() -> str:
-    return (request.headers.get("X-Admin-Token") or request.args.get("admin_token") or "").strip()
-
-
 def admin_view_authorized() -> bool:
-    """Allow admin pages for configured admin user or valid admin token."""
+    """Allow admin HTML pages for configured admin user or the same header token as the API.
+
+    Browser navigation cannot safely carry secrets in query strings; use a normal
+    login as ``ADMIN_USERNAME`` or a reverse-proxy that injects ``X-Admin-Token``.
+    """
     if APP_DEBUG:
         return True
     current = get_current_user()
@@ -871,18 +1433,59 @@ def admin_view_authorized() -> bool:
         if current_username == ADMIN_USERNAME:
             return True
     if ADMIN_API_TOKEN:
-        provided = _provided_admin_token()
+        provided = _admin_secret_from_request()
         if provided and provided == ADMIN_API_TOKEN:
             return True
     return False
 
 
 def _admin_link_kw() -> dict:
-    if ADMIN_API_TOKEN:
-        provided = (request.args.get("admin_token") or "").strip()
-        if provided and provided == ADMIN_API_TOKEN:
-            return {"admin_token": provided}
+    """Reserved for backward-compatible templates; admin secrets are never embedded in URLs."""
     return {}
+
+
+def _public_slug_ok(candidate: Optional[str]) -> bool:
+    s = (candidate or "").strip().lower()
+    if len(s) < 3 or len(s) > 42:
+        return False
+    return bool(_PUBLIC_SLUG_RE.fullmatch(s))
+
+
+def _api_v1_rate_limit_key() -> str:
+    auth = (request.headers.get("Authorization") or "").strip()
+    if auth.lower().startswith("bearer "):
+        tok = auth[7:].strip()
+        if tok:
+            return f"api-v1:{tok}"
+    return get_remote_address()
+
+
+def _image_url_from_node(node, base_url: str) -> Optional[str]:
+    if node is None:
+        return None
+    src = ""
+    if getattr(node, "name", None) == "img":
+        src = (
+            (node.get("src") or node.get("data-src") or node.get("data-lazy-src") or node.get("data-original") or "")
+            .strip()
+        )
+    elif hasattr(node, "get"):
+        src = (node.get("src") or "").strip()
+        if not src:
+            style = (node.get("style") or "") or ""
+            m = re.search(r"url\(\s*['\"]?([^'\"()]+)['\"]?\s*\)", style, re.I)
+            if m:
+                src = m.group(1).strip()
+        if not src and node.get("content"):
+            src = (node.get("content") or "").strip()
+    if not src and hasattr(node, "select_one"):
+        inner = node.select_one("img")
+        if inner is not None:
+            return _image_url_from_node(inner, base_url)
+    if not src:
+        return None
+    candidate = urljoin(base_url, src)
+    return candidate if is_public_http_url(candidate) else None
 
 
 def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
@@ -910,7 +1513,24 @@ def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
             candidate = urljoin(fetched_url or url, value.strip())
             return candidate if is_public_http_url(candidate) else None
 
-    title_tokens = {t for t in re.split(r"[^a-z0-9]+", (series_title or "").lower()) if len(t) >= 3}
+    profile = get_profile_for_url(url)
+    merged_title = (series_title or "").strip()
+    if profile:
+        ts = (profile.get("title_selector") or "").strip()
+        if ts:
+            tnode = soup.select_one(ts)
+            if tnode:
+                ttext = tnode.get_text(" ", strip=True)
+                if ttext:
+                    merged_title = merged_title or ttext
+        cs = (profile.get("cover_selector") or "").strip()
+        if cs:
+            cnode = soup.select_one(cs)
+            cover_guess = _image_url_from_node(cnode, fetched_url or url)
+            if cover_guess:
+                return cover_guess
+
+    title_tokens = {t for t in re.split(r"[^a-z0-9]+", (merged_title or "").lower()) if len(t) >= 3}
     best_src: Optional[str] = None
     best_score = -10
     for img in soup.select("img"):
@@ -1031,15 +1651,19 @@ def pick_best_candidate(soup: BeautifulSoup, page_url: str) -> tuple[Optional[st
     return chapter.pick_best_candidate(soup, page_url)
 
 
-def get_profile_for_url(url: str) -> Optional[dict]:
-    host = urlparse(url).netloc.lower().replace("www.", "")
-    return SITE_PROFILES.get(host)
-
-
 def scrape_with_profile(soup: BeautifulSoup, page_url: str, profile: dict) -> dict:
-    selector = profile.get("chapter_selector")
+    selector = (profile.get("chapter_link_selector") or profile.get("chapter_selector") or "").strip()
+    sid = (profile.get("id") or "site").strip()
+    pv_base = f"{sid}-selector"
     if not selector:
-        return {"label": None, "chapter_num": None, "chapter_url": None, "confidence": 0.0, "parser_version": "profile-missing", "error_flags": ["missing_selector"]}
+        return {
+            "label": None,
+            "chapter_num": None,
+            "chapter_url": None,
+            "confidence": 0.0,
+            "parser_version": f"{pv_base}-missing",
+            "error_flags": ["missing_selector"],
+        }
 
     page_slug = extract_series_slug(page_url)
     best = None
@@ -1065,13 +1689,20 @@ def scrape_with_profile(soup: BeautifulSoup, page_url: str, profile: dict) -> di
             best = candidate
 
     if best is None:
-        return {"label": None, "chapter_num": None, "chapter_url": None, "confidence": 0.0, "parser_version": "profile-selector", "error_flags": ["profile_no_match"]}
+        return {
+            "label": None,
+            "chapter_num": None,
+            "chapter_url": None,
+            "confidence": 0.0,
+            "parser_version": pv_base,
+            "error_flags": ["profile_no_match"],
+        }
     return {
         "label": best["label"],
         "chapter_num": best["chapter_num"],
         "chapter_url": best["chapter_url"],
         "confidence": 0.95,
-        "parser_version": "profile-selector",
+        "parser_version": pv_base,
         "error_flags": [],
     }
 
@@ -1135,6 +1766,25 @@ def scrape_mangadex_api(url: str) -> tuple[Optional[str], Optional[float], Optio
     _log_scrape_timing("mangadex_api_fetch", api_url, t_fetch)
     data = payload.get("data") or []
     if not data:
+        # Fallback: title may lack English feeds; retry without translatedLanguage filter.
+        api_any = (
+            "https://api.mangadex.org/chapter"
+            f"?manga={manga_id}"
+            "&limit=1"
+            "&order[chapter]=desc"
+            "&contentRating[]=safe"
+            "&contentRating[]=suggestive"
+            "&contentRating[]=erotica"
+            "&contentRating[]=pornographic"
+        )
+        try:
+            res2 = SESSION.get(api_any, timeout=HTTP_TIMEOUT_SECONDS)
+            res2.raise_for_status()
+            payload2 = res2.json()
+            data = payload2.get("data") or []
+        except Exception:
+            pass
+    if not data:
         return None, None, None, "MangaDex API returned no chapters", {"parser_version": "mangadex-api", "error_flags": ["no_chapter_candidates"]}
     first = data[0] or {}
     attrs = first.get("attributes") or {}
@@ -1164,7 +1814,7 @@ def scrape_bs4(url: str) -> tuple[Optional[str], Optional[float], Optional[str],
     if not is_public_http_url(url):
         return None, None, None, "Blocked URL (private/internal host)", {}
     profile = get_profile_for_url(url)
-    if profile and profile.get("api") and "mangadex.org" in urlparse(url).netloc.lower():
+    if profile and profile.get("api"):
         return scrape_mangadex_api(url)
     t_fetch = time.perf_counter()
     try:
@@ -1277,7 +1927,10 @@ def _should_check_bookmark(last_checked: Optional[str], force: bool = False) -> 
         ts = datetime.fromisoformat(str(last_checked).replace("Z", "+00:00"))
     except Exception:
         return True
-    age_seconds = (datetime.utcnow() - ts.replace(tzinfo=None)).total_seconds()
+    now = datetime.now(timezone.utc)
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    age_seconds = (now - ts).total_seconds()
     return age_seconds >= CHECK_STALE_MINUTES * 60
 
 
@@ -1311,7 +1964,7 @@ def _check_single_locked(bookmark_id: int, user_id: int, force: bool = False) ->
                     if not err:
                         effective_url = resolved_once
         cover_url = row["cover_url"]
-        now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        now = _now_iso_z()
 
         if err:
             conn.execute(
@@ -1379,12 +2032,16 @@ def _check_single_locked(bookmark_id: int, user_id: int, force: bool = False) ->
                 bookmark_id,
             ),
         )
+        if new_update == 1:
+            _notify_discord_new_chapter(str(row["title"] or ""), str(label) if label else None, latest_url)
+            _notify_user_webhook(user_id, str(row["title"] or ""), str(label) if label else None, latest_url)
+            _notify_user_email_new_chapter(user_id, str(row["title"] or ""), str(label) if label else None, latest_url)
 
 
 def upsert_progress(user_id: int, bookmark_id: int, chapter_num: Optional[float], chapter_label: str, source_url: str) -> None:
     if chapter_num is None:
         chapter_num = parse_chapter_number(chapter_label) or parse_chapter_from_url(source_url)
-    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    now = _now_iso_z()
     with get_conn() as conn:
         conn.execute(
             """
@@ -1502,7 +2159,12 @@ def _format_relative_age(ts: Optional[datetime]) -> str:
     if ts is None:
         return "never"
     try:
-        seconds = max(0, int((datetime.utcnow() - ts).total_seconds()))
+        now = datetime.now(timezone.utc)
+        if ts.tzinfo is None:
+            tst = ts.replace(tzinfo=timezone.utc)
+        else:
+            tst = ts.astimezone(timezone.utc)
+        seconds = max(0, int((now - tst).total_seconds()))
     except Exception:
         return "unknown"
     if seconds < 60:
@@ -1554,7 +2216,7 @@ def auth_page():
                     if exists_username:
                         error = "Username already exists."
                     else:
-                        now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                        now = _now_iso_z()
                         synthetic_email = f"{username}@local.user"
                         insert_cur = conn.execute(
                             "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
@@ -1575,6 +2237,7 @@ def auth_page():
                         # carry attacker-controlled values from a fixated session.
                         session.clear()
                         session["user_id"] = new_user_id
+                        session["onboarding_pending"] = True
                         return redirect(url_for("index"))
             else:
                 with get_conn() as conn:
@@ -1600,11 +2263,300 @@ def logout():
     return redirect(url_for("auth_page"))
 
 
+@app.route("/sources")
+def sources_page():
+    sources = source_registry.sources_with_health()
+    counts = source_registry.aggregate_status_counts()
+    health = source_registry.load_health()
+    return render_template(
+        "sources.html",
+        sources=sources,
+        counts=counts,
+        health_updated_at=health.get("updated_at"),
+    )
+
+
+@app.route("/privacy")
+def privacy_page():
+    return render_template("privacy.html")
+
+
+@app.route("/changelog")
+def changelog_page():
+    return render_template("changelog.html")
+
+
+@app.route("/demo")
+def demo_dashboard():
+    demo_user = {"username": "demo", "email": "demo@local", "id": 0, "created_at": ""}
+    raw_demo = [dict(b) for b in DEMO_BOOKMARKS]
+    raw_by_id = {int(r["id"]): r for r in raw_demo}
+    story_cards = _build_sorted_story_cards(raw_demo, raw_by_id, "added")
+    tu = sum(float(c.get("unread_count") or 0) for c in story_cards)
+    bc = sum(1 for c in story_cards if float(c.get("unread_count") or 0) > 0)
+    tu_disp = int(tu) if float(tu).is_integer() else round(tu, 1)
+    insights = reading_insights.build_insights(story_cards)
+    all_caught_up_demo = len(story_cards) > 0 and bc == 0
+    return render_template(
+        "index.html",
+        bookmarks=story_cards,
+        current_user=demo_user,
+        total_unread=tu_disp,
+        behind_count=bc,
+        page=1,
+        total_pages=1,
+        total_count=len(story_cards),
+        page_size=BOOKMARKS_PAGE_SIZE,
+        search_q="",
+        sort="added",
+        index_link_kw={},
+        edit_link_kw={},
+        check_all_running=False,
+        check_all_status_text="Demo — data is fake",
+        demo_mode=True,
+        show_onboarding=False,
+        all_caught_up=all_caught_up_demo,
+        insights=insights,
+        ui_show_source_hosts=UI_SHOW_SOURCE_HOSTS,
+        duplicate_hints=[],
+        rss_feed_url=None,
+        stale_story_count=0,
+        dead_series_days=DEAD_SERIES_WARNING_DAYS,
+    )
+
+
+@app.route("/onboarding/dismiss", methods=["POST"])
+def onboarding_dismiss():
+    if login_required():
+        session.pop("onboarding_pending", None)
+    return redirect(request.referrer or url_for("index"))
+
+
+@app.route("/account/delete", methods=["GET", "POST"])
+def delete_account():
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
+    current_user = get_current_user()
+    if current_user is None:
+        session.pop("user_id", None)
+        return redirect(url_for("auth_page"))
+    if str(current_user["email"] or "").strip().lower() == DEFAULT_USER_EMAIL.strip().lower():
+        flash("The built-in local demo user cannot be deleted from this screen.", "error")
+        return redirect(url_for("index"))
+    if request.method == "GET":
+        return render_template("delete_account.html", current_user=current_user)
+    password = request.form.get("password") or ""
+    if not password:
+        flash("Enter your password to confirm account deletion.", "error")
+        return render_template("delete_account.html", current_user=current_user)
+    with get_conn() as conn:
+        row = conn.execute("SELECT id, password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row is None or not check_password_hash(row["password_hash"], password):
+            flash("Incorrect password.", "error")
+            return render_template("delete_account.html", current_user=current_user)
+        conn.execute("DELETE FROM reading_progress WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM bookmarks WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    session.clear()
+    flash("Your account and all bookmarks have been deleted.", "info")
+    return redirect(url_for("home"))
+
+
+@app.route("/account/settings", methods=["GET", "POST"])
+def account_settings():
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
+    current_user = get_current_user()
+    if current_user is None:
+        session.pop("user_id", None)
+        return redirect(url_for("auth_page"))
+
+    if request.method == "POST":
+        action = (request.form.get("action") or "").strip().lower()
+        if action == "issue_api_token":
+            tok = secrets.token_urlsafe(24)
+            with get_conn() as conn:
+                conn.execute("UPDATE users SET api_access_token = ? WHERE id = ?", (tok, user_id))
+            flash("New API token issued — copy it now; older tokens stop working.", "success")
+            return redirect(url_for("account_settings"))
+
+        wh = (request.form.get("webhook_url") or "").strip()
+        if wh and not is_public_http_url(wh):
+            flash("Webhook URL must be empty or a public http(s) URL.", "error")
+            return redirect(url_for("account_settings"))
+        slug_in = (request.form.get("public_list_slug") or "").strip().lower()
+        if slug_in and not _public_slug_ok(slug_in):
+            flash(
+                "Public list slug must be 3–42 chars: lowercase letters, digits, and hyphens only.",
+                "error",
+            )
+            return redirect(url_for("account_settings"))
+        notify_em = 1 if request.form.get("notify_email_chapters") == "1" else 0
+        with get_conn() as conn:
+            if slug_in:
+                taken = conn.execute(
+                    "SELECT id FROM users WHERE lower(public_list_slug) = ? AND id != ?",
+                    (slug_in, user_id),
+                ).fetchone()
+                if taken:
+                    flash("That public list slug is already taken.", "error")
+                    return redirect(url_for("account_settings"))
+            conn.execute(
+                """
+                UPDATE users
+                SET webhook_url = ?, public_list_slug = ?, notify_email_chapters = ?
+                WHERE id = ?
+                """,
+                (wh or None, slug_in or None, notify_em, user_id),
+            )
+        flash("Settings saved.", "success")
+        return redirect(url_for("account_settings"))
+
+    row = None
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT webhook_url, api_access_token, public_list_slug, notify_email_chapters
+            FROM users WHERE id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+    rss_feed_url = None
+    try:
+        with get_conn() as conn:
+            tok = _ensure_user_rss_token(conn, user_id)
+        rss_feed_url = url_for("user_rss_feed", token=tok, _external=True)
+    except Exception:
+        pass
+
+    tok_preview = ""
+    raw_tok = (row["api_access_token"] or "").strip() if row else ""
+    if raw_tok:
+        tok_preview = raw_tok[:6] + "…" + raw_tok[-4:]
+
+    public_url = None
+    if row and (row["public_list_slug"] or "").strip():
+        try:
+            public_url = url_for("public_library", slug=(row["public_list_slug"] or "").strip(), _external=True)
+        except Exception:
+            public_url = None
+
+    return render_template(
+        "account_settings.html",
+        current_user=current_user,
+        rss_feed_url=rss_feed_url,
+        webhook_url=(row["webhook_url"] if row else "") or "",
+        public_list_slug=(row["public_list_slug"] if row else "") or "",
+        notify_email_chapters=int(row["notify_email_chapters"] or 0) if row else 0,
+        api_token_preview=tok_preview,
+        public_list_url=public_url,
+    )
+
+
+@app.route("/list/<slug>")
+def public_library(slug: str):
+    slug_clean = (slug or "").strip().lower()
+    if not _public_slug_ok(slug_clean):
+        abort(404)
+    with get_conn() as conn:
+        urow = conn.execute(
+            "SELECT id FROM users WHERE lower(public_list_slug) = ?",
+            (slug_clean,),
+        ).fetchone()
+    if not urow:
+        abort(404)
+    user_id = int(urow["id"])
+    raw_rows, raw_by_id = _fetch_user_story_rows(user_id, "")
+    story_cards = _build_sorted_story_cards(raw_rows, raw_by_id, "title")
+    return render_template("public_list.html", slug=slug_clean, bookmarks=story_cards)
+
+
+@app.route("/source-requests", methods=["GET", "POST"])
+@limiter.limit("12/hour", methods=["POST"], key_func=get_remote_address)
+def source_requests_page():
+    if request.method == "POST":
+        domain = (request.form.get("domain") or "").strip().lower()
+        title_hint = (request.form.get("title_hint") or "").strip()
+        url_example = (request.form.get("url_example") or "").strip()
+        if not domain or not title_hint:
+            flash("Domain and title are required.", "error")
+        elif len(title_hint) > 200 or len(domain) > 120:
+            flash("Inputs are too long.", "error")
+        else:
+            if url_example and not is_public_http_url(url_example):
+                flash("Example URL must be a public http(s) link or empty.", "error")
+            else:
+                with get_conn() as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO source_requests (domain, title_hint, url_example, created_at, votes)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (domain[:120], title_hint[:200], (url_example or None)[:500] if url_example else None, _now_iso_z(), 1),
+                    )
+                flash("Request submitted. Thank you.", "success")
+                return redirect(url_for("source_requests_page"))
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, domain, title_hint, url_example, created_at, votes
+            FROM source_requests
+            ORDER BY votes DESC, id DESC
+            LIMIT 200
+            """
+        ).fetchall()
+    return render_template("source_requests.html", rows=rows)
+
+
+@app.route("/source-requests/<int:req_id>/vote", methods=["POST"])
+@limiter.limit("40/hour", methods=["POST"], key_func=get_remote_address)
+def source_requests_vote(req_id: int):
+    with get_conn() as conn:
+        conn.execute("UPDATE source_requests SET votes = votes + 1 WHERE id = ?", (req_id,))
+    flash("Vote recorded.", "info")
+    return redirect(url_for("source_requests_page"))
+
+
+@csrf.exempt
+@app.route("/api/import/mal", methods=["POST"])
+def api_import_mal_stub():
+    return jsonify({"ok": False, "error": "MyAnimeList import is not implemented yet"}), 501
+
+
 @app.route("/healthz")
 def healthz():
     """Liveness probe only: no database, scraping, or scheduler work."""
     resp = jsonify({"ok": True, "status": "healthy"})
     resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/feeds/rss/<token>")
+def user_rss_feed(token: str):
+    tok = (token or "").strip()
+    if not tok:
+        abort(404)
+    with get_conn() as conn:
+        row = conn.execute("SELECT id FROM users WHERE rss_feed_token = ?", (tok,)).fetchone()
+    if not row:
+        abort(404)
+    user_id = int(row["id"])
+    root = (os.getenv("PUBLIC_BASE_URL") or "").strip()
+    if not root:
+        root = request.url_root.rstrip("/")
+    body = _render_user_rss_xml(user_id, root)
+    resp = Response(body, mimetype="application/rss+xml; charset=utf-8")
+    resp.headers["Cache-Control"] = "private, max-age=120"
+    return resp
+
+
+@app.route("/api/registry/public", methods=["GET"])
+def api_registry_public():
+    snap = source_registry.public_api_snapshot()
+    resp = jsonify({"ok": True, **snap})
+    resp.headers["Cache-Control"] = "public, max-age=300"
     return resp
 
 
@@ -1636,105 +2588,22 @@ def index():
     sort = (request.args.get("sort") or "added").strip().lower()
     if sort not in SORT_MODES:
         sort = "added"
-    title_clause, title_params = _bookmark_title_search_clause(search_q)
-    order_clause = _bookmark_list_order_by(sort)
     index_link_kw = _index_redirect_kwargs(search_q, sort)
     edit_link_kw = _index_redirect_kwargs(search_q, sort, page)
 
-    with get_conn() as conn:
-        # Library-wide aggregates (computed across all pages so the summary stays accurate).
-        agg_rows = conn.execute(
-            """
-            SELECT b.latest_seen_num AS latest_num,
-                   rp.chapter_num AS read_num
-            FROM bookmarks b
-            LEFT JOIN (
-                SELECT x.bookmark_id, x.chapter_num
-                FROM reading_progress x
-                INNER JOIN (
-                    SELECT bookmark_id, MAX(id) AS max_id
-                    FROM reading_progress
-                    WHERE user_id = ?
-                    GROUP BY bookmark_id
-                ) y ON y.bookmark_id = x.bookmark_id AND y.max_id = x.id
-                WHERE x.user_id = ?
-            ) rp ON rp.bookmark_id = b.id
-            WHERE b.user_id = ?
-            """,
-            (user_id, user_id, user_id),
-        ).fetchall()
+    raw_rows, raw_by_id = _fetch_user_story_rows(user_id, search_q)
+    story_cards = _build_sorted_story_cards(raw_rows, raw_by_id, sort)
 
-        if title_clause:
-            count_row = conn.execute(
-                f"SELECT COUNT(*) AS c FROM bookmarks b WHERE b.user_id = ?{title_clause}",
-                (user_id, *title_params),
-            ).fetchone()
-            total_count = int(count_row["c"] or 0) if count_row else 0
-        else:
-            total_count = len(agg_rows)
+    total_count = len(story_cards)
+    total_pages = max(1, (total_count + page_size - 1) // page_size) if total_count else 1
+    if page > total_pages:
+        page = total_pages
+    offset = (page - 1) * page_size
+    bookmarks = story_cards[offset : offset + page_size]
 
-        total_pages = max(1, (total_count + page_size - 1) // page_size) if total_count else 1
-        if page > total_pages:
-            page = total_pages
-        offset = (page - 1) * page_size
-
-        rows = conn.execute(
-            f"""
-            SELECT b.*,
-                   rp.chapter_num AS read_chapter_num,
-                   rp.chapter_label AS read_chapter_label,
-                   rp.source_url AS read_source_url
-            FROM bookmarks b
-            LEFT JOIN (
-                SELECT x.bookmark_id, x.chapter_num, x.chapter_label, x.source_url
-                FROM reading_progress x
-                INNER JOIN (
-                    SELECT bookmark_id, MAX(id) AS max_id
-                    FROM reading_progress
-                    WHERE user_id = ?
-                    GROUP BY bookmark_id
-                ) y ON y.bookmark_id = x.bookmark_id AND y.max_id = x.id
-                WHERE x.user_id = ?
-            ) rp ON rp.bookmark_id = b.id
-            WHERE b.user_id = ?
-            {title_clause}
-            {order_clause}
-            LIMIT ? OFFSET ?
-            """,
-            (user_id, user_id, user_id, *title_params, page_size, offset),
-        ).fetchall()
-
-    total_unread = 0.0
-    behind_count = 0
-    for agg in agg_rows:
-        latest_num = agg["latest_num"]
-        read_num = agg["read_num"]
-        if latest_num is None or read_num is None:
-            continue
-        try:
-            diff = float(latest_num) - float(read_num)
-        except (TypeError, ValueError):
-            continue
-        if diff > 0:
-            total_unread += diff
-            behind_count += 1
-
-    bookmarks = []
-    for row in rows:
-        item = dict(row)
-        latest_num = item.get("latest_seen_num")
-        read_num = item.get("read_chapter_num")
-        unread = 0.0
-        if latest_num is not None and read_num is not None:
-            try:
-                unread = max(0.0, float(latest_num) - float(read_num))
-            except Exception:
-                unread = 0.0
-        item["unread_count"] = unread
-        # Continue = resume where you left off (last-read chapter URL from progress),
-        # not the site's newest chapter (latest_seen_url), which skips the story ahead.
-        item["continue_url"] = item.get("read_source_url") or item.get("url")
-        bookmarks.append(item)
+    total_unread = sum(float(c.get("unread_count") or 0) for c in story_cards)
+    behind_count = sum(1 for c in story_cards if float(c.get("unread_count") or 0) > 0)
+    insights = reading_insights.build_insights(story_cards)
 
     with CHECK_ALL_STATUS_LOCK:
         check_all_running = CHECK_ALL_RUNNING
@@ -1744,6 +2613,23 @@ def index():
         if check_all_running
         else f"Last checked: {_format_relative_age(check_all_last_finished_at)}"
     )
+
+    show_onboarding = bool(session.get("onboarding_pending"))
+    all_caught_up = total_count > 0 and behind_count == 0
+
+    duplicate_hints = _load_duplicate_hints(user_id, limit=10)
+    stale_story_count = 0
+    for c in story_cards:
+        dd = _days_since_iso_optional(c.get("_last_checked"))
+        if dd is not None and dd >= DEAD_SERIES_WARNING_DAYS:
+            stale_story_count += 1
+    rss_feed_url = None
+    try:
+        with get_conn() as conn:
+            tok = _ensure_user_rss_token(conn, user_id)
+        rss_feed_url = url_for("user_rss_feed", token=tok)
+    except Exception:
+        pass
 
     return render_template(
         "index.html",
@@ -1761,6 +2647,46 @@ def index():
         edit_link_kw=edit_link_kw,
         check_all_running=check_all_running,
         check_all_status_text=check_all_status_text,
+        show_onboarding=show_onboarding,
+        all_caught_up=all_caught_up,
+        demo_mode=False,
+        insights=insights,
+        ui_show_source_hosts=UI_SHOW_SOURCE_HOSTS,
+        duplicate_hints=duplicate_hints,
+        rss_feed_url=rss_feed_url,
+        stale_story_count=stale_story_count,
+        dead_series_days=DEAD_SERIES_WARNING_DAYS,
+    )
+
+
+@app.route("/next")
+def next_up():
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
+    current_user = get_current_user()
+    if current_user is None:
+        session.pop("user_id", None)
+        return redirect(url_for("auth_page"))
+
+    raw_rows, raw_by_id = _fetch_user_story_rows(user_id, "")
+    if not raw_rows:
+        return render_template(
+            "next_up.html",
+            queue=[],
+            current_user=current_user,
+            insights={},
+            ui_show_source_hosts=UI_SHOW_SOURCE_HOSTS,
+        )
+    story_cards = _build_sorted_story_cards(raw_rows, raw_by_id, "unread")
+    insights = reading_insights.build_insights(story_cards)
+    queue = reading_insights.rank_next_up(story_cards, insights)
+    return render_template(
+        "next_up.html",
+        queue=queue,
+        current_user=current_user,
+        insights=insights,
+        ui_show_source_hosts=UI_SHOW_SOURCE_HOSTS,
     )
 
 
@@ -1774,7 +2700,7 @@ def export_data():
         progress = conn.execute("SELECT * FROM reading_progress WHERE user_id = ? ORDER BY id ASC", (user_id,)).fetchall()
     payload = {
         "version": 1,
-        "exported_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "exported_at": _now_iso_z(),
         "bookmarks": [dict(b) for b in bookmarks],
         "reading_progress": [dict(p) for p in progress],
     }
@@ -1865,8 +2791,8 @@ def import_data():
             cur = conn.execute(
                 """
                 INSERT OR IGNORE INTO bookmarks
-                (user_id, title, url, latest_seen, latest_seen_num, latest_seen_url, cover_url, new_update, last_checked, last_error, series_key)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (user_id, title, url, latest_seen, latest_seen_num, latest_seen_url, cover_url, new_update, last_checked, last_error, series_key, story_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     user_id,
@@ -1880,6 +2806,8 @@ def import_data():
                     b.get("last_checked"),
                     b.get("last_error"),
                     b.get("series_key"),
+                    b.get("story_id"),
+                    b.get("created_at") or _now_iso_z(),
                 ),
             )
             if getattr(cur, "rowcount", 0) == 1:
@@ -1914,13 +2842,15 @@ def import_data():
                     p.get("chapter_num"),
                     p.get("chapter_label"),
                     p.get("source_url"),
-                    p.get("seen_at") or datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                    p.get("seen_at") or _now_iso_z(),
                 ),
             )
             if getattr(cur, "rowcount", 0) == 1:
                 inserted_progress += 1
 
     pruned = maybe_prune_reading_progress_for_user(user_id)
+    with get_conn() as conn:
+        _backfill_bookmark_story_ids(conn)
 
     parts = [
         f"Import finished. Added {inserted_bookmarks} series and {inserted_progress} reading progress rows."
@@ -1956,10 +2886,12 @@ def add_bookmark():
         return redirect_index_preserve_search()
 
     bookmark_id: Optional[int] = None
+    sid = story_groups.new_solo_story_id()
+    now = _now_iso_z()
     with get_conn() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO bookmarks (user_id, title, url, cover_url) VALUES (?, ?, ?, ?)",
-            (user_id, title, url, None),
+            "INSERT OR IGNORE INTO bookmarks (user_id, title, url, cover_url, story_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, title, url, None, sid, now),
         )
         row = conn.execute(
             "SELECT id FROM bookmarks WHERE user_id = ? AND url = ?",
@@ -1990,6 +2922,25 @@ def check_bookmark(bookmark_id: int):
     return redirect_index_preserve_search()
 
 
+@app.route("/check-story", methods=["POST"])
+def check_story_group():
+    """Re-scrape every physical bookmark URL that belongs to the same logical story."""
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    user_id = get_actor_user_id()
+    story_id = (request.form.get("story_id") or "").strip()
+    if not story_id:
+        return redirect_index_preserve_search()
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id FROM bookmarks WHERE user_id = ? AND story_id = ?",
+            (user_id, story_id),
+        ).fetchall()
+    for r in rows:
+        check_single(int(r["id"]), user_id, force=True)
+    return redirect_index_preserve_search()
+
+
 @app.route("/check-all", methods=["POST"])
 def check_all_route():
     if not login_required():
@@ -2012,7 +2963,7 @@ def check_all_route():
             with CHECK_ALL_STATUS_LOCK:
                 CHECK_ALL_RUNNING = False
                 if ran:
-                    CHECK_ALL_LAST_FINISHED_AT = datetime.utcnow()
+                    CHECK_ALL_LAST_FINISHED_AT = datetime.now(timezone.utc)
 
     threading.Thread(
         target=_run_check_all,
@@ -2029,7 +2980,7 @@ def check_all_status_api():
         return jsonify({"ok": False, "error": "authentication required"}), 401
     with CHECK_ALL_STATUS_LOCK:
         running = CHECK_ALL_RUNNING
-        finished_at = CHECK_ALL_LAST_FINISHED_AT.isoformat(timespec="seconds") + "Z" if CHECK_ALL_LAST_FINISHED_AT else None
+        finished_at = CHECK_ALL_LAST_FINISHED_AT.strftime("%Y-%m-%dT%H:%M:%SZ") if CHECK_ALL_LAST_FINISHED_AT else None
     return jsonify({"ok": True, "running": running, "finished_at": finished_at})
 
 
@@ -2097,13 +3048,58 @@ def edit_bookmark(bookmark_id: int):
         return_page = 1
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT id, title, url FROM bookmarks WHERE id = ? AND user_id = ?",
+            "SELECT id, title, url, story_id FROM bookmarks WHERE id = ? AND user_id = ?",
             (bookmark_id, user_id),
         ).fetchone()
+        merge_choices = conn.execute(
+            """
+            SELECT id, title FROM bookmarks
+            WHERE user_id = ? AND id != ?
+            ORDER BY LOWER(title) ASC
+            LIMIT 200
+            """,
+            (user_id, bookmark_id),
+        ).fetchall()
     if not row:
         flash("Series not found.", "error")
         return redirect(url_for("index", **_index_redirect_kwargs(return_q, return_sort, return_page)))
     if request.method == "POST":
+        merge_only = (request.form.get("merge_only") or "").strip() == "1"
+        merge_with = (request.form.get("merge_with_bookmark_id") or "").strip()
+        if merge_only and not merge_with:
+            flash("Pick a series to link as an alternate source.", "warning")
+            return render_template(
+                "edit_bookmark.html",
+                bookmark=dict(row),
+                merge_choices=merge_choices,
+                return_q=return_q,
+                return_sort=return_sort,
+                return_page=return_page,
+                edit_back_kw=_index_redirect_kwargs(return_q, return_sort, return_page),
+            )
+        if merge_with:
+            try:
+                mid = int(merge_with)
+            except ValueError:
+                mid = 0
+            if mid:
+                with get_conn() as conn:
+                    other = conn.execute(
+                        "SELECT id, story_id FROM bookmarks WHERE id = ? AND user_id = ?",
+                        (mid, user_id),
+                    ).fetchone()
+                    if other and int(other["id"]) != int(bookmark_id):
+                        target_sid = (other["story_id"] or "").strip() or story_groups.new_solo_story_id()
+                        conn.execute(
+                            "UPDATE bookmarks SET story_id = ? WHERE id = ? AND user_id = ?",
+                            (target_sid, int(other["id"]), user_id),
+                        )
+                        conn.execute(
+                            "UPDATE bookmarks SET story_id = ? WHERE id = ? AND user_id = ?",
+                            (target_sid, bookmark_id, user_id),
+                        )
+                flash("Linked as an alternate source — your dashboard merges chapter counts across these URLs.", "success")
+                return redirect(url_for("index", **_index_redirect_kwargs(return_q, return_sort, return_page)))
         title = request.form.get("title", "").strip()
         url = request.form.get("url", "").strip()
         if not title or not is_public_http_url(url):
@@ -2111,6 +3107,7 @@ def edit_bookmark(bookmark_id: int):
             return render_template(
                 "edit_bookmark.html",
                 bookmark=dict(row),
+                merge_choices=merge_choices,
                 return_q=return_q,
                 return_sort=return_sort,
                 return_page=return_page,
@@ -2130,6 +3127,7 @@ def edit_bookmark(bookmark_id: int):
                 return render_template(
                     "edit_bookmark.html",
                     bookmark=dict(row),
+                    merge_choices=merge_choices,
                     return_q=return_q,
                     return_sort=return_sort,
                     return_page=return_page,
@@ -2161,6 +3159,7 @@ def edit_bookmark(bookmark_id: int):
     return render_template(
         "edit_bookmark.html",
         bookmark=dict(row),
+        merge_choices=merge_choices,
         return_q=return_q,
         return_sort=return_sort,
         return_page=return_page,
@@ -2194,16 +3193,18 @@ def ensure_series():
         return jsonify({"ok": False, "error": "blocked URL"}), 400
     canonical_url = resolve_series_listing_url(url)
     cover_url = scrape_series_cover(canonical_url, title)
+    sk_norm = series_key.strip().lower() if series_key else ""
+    story_ident = story_groups.story_id_from_series_key(sk_norm) if sk_norm else story_groups.new_solo_story_id()
     with get_conn() as conn:
         existing = None
         if series_key:
             existing = conn.execute(
-                "SELECT id, title, url, series_key FROM bookmarks WHERE user_id = ? AND series_key = ?",
+                "SELECT id, title, url, series_key, story_id FROM bookmarks WHERE user_id = ? AND series_key = ?",
                 (user_id, series_key),
             ).fetchone()
         if existing is None:
             existing = conn.execute(
-                "SELECT id, title, url, series_key FROM bookmarks WHERE user_id = ? AND url = ?",
+                "SELECT id, title, url, series_key, story_id FROM bookmarks WHERE user_id = ? AND url = ?",
                 (user_id, canonical_url),
             ).fetchone()
 
@@ -2212,18 +3213,21 @@ def ensure_series():
             row = existing
             if cover_url:
                 conn.execute("UPDATE bookmarks SET cover_url = COALESCE(cover_url, ?) WHERE id = ?", (cover_url, row["id"]))
-                row = conn.execute(
-                    "SELECT id, title, url, series_key, cover_url FROM bookmarks WHERE id = ?",
-                    (row["id"],),
-                ).fetchone()
+            if sk_norm:
+                conn.execute("UPDATE bookmarks SET series_key = ?, story_id = ? WHERE id = ?", (sk_norm, story_ident, row["id"]))
+            row = conn.execute(
+                "SELECT id, title, url, series_key, cover_url, story_id FROM bookmarks WHERE id = ?",
+                (row["id"],),
+            ).fetchone()
         else:
+            now = _now_iso_z()
             cursor = conn.execute(
-                "INSERT OR IGNORE INTO bookmarks (user_id, title, url, series_key, cover_url) VALUES (?, ?, ?, ?, ?)",
-                (user_id, title, canonical_url, series_key or None, cover_url),
+                "INSERT OR IGNORE INTO bookmarks (user_id, title, url, series_key, cover_url, story_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_id, title, canonical_url, series_key or None, cover_url, story_ident, now),
             )
             created = cursor.rowcount == 1
             row = conn.execute(
-                "SELECT id, title, url, series_key, cover_url FROM bookmarks WHERE user_id = ? AND url = ?",
+                "SELECT id, title, url, series_key, cover_url, story_id FROM bookmarks WHERE user_id = ? AND url = ?",
                 (user_id, canonical_url),
             ).fetchone()
             if row is None:
@@ -2291,7 +3295,7 @@ def save_progress():
                     chapter_label,
                     parsed_num,
                     chapter_url or None,
-                    datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                    _now_iso_z(),
                     bookmark_id,
                 ),
             )
@@ -2314,14 +3318,20 @@ def api_unread_count():
         rows = conn.execute(
             """
             SELECT b.id AS bookmark_id,
+                   b.story_id AS story_id,
                    b.title AS title,
                    b.series_key AS series_key,
+                   b.url AS url,
                    b.latest_seen_num AS latest_num,
+                   b.latest_seen AS latest_seen,
+                   b.latest_seen_url AS latest_seen_url,
                    b.new_update AS new_update,
-                   rp.chapter_num AS read_num
+                   rp.chapter_num AS read_num,
+                   rp.chapter_label AS read_chapter_label,
+                   rp.source_url AS read_source_url
             FROM bookmarks b
             LEFT JOIN (
-                SELECT x.bookmark_id, x.chapter_num
+                SELECT x.bookmark_id, x.chapter_num, x.chapter_label, x.source_url
                 FROM reading_progress x
                 INNER JOIN (
                     SELECT bookmark_id, MAX(id) AS max_id
@@ -2336,38 +3346,52 @@ def api_unread_count():
             (user_id, user_id, user_id),
         ).fetchall()
 
-    total_unread = 0.0
-    behind_count = 0
-    series = []
-    tracked_keys = []
+    mapped = []
+    tracked_keys: list[str] = []
+    tracked_url_norms: list[str] = []
     for row in rows:
-        latest_num = row["latest_num"]
-        read_num = row["read_num"]
         sk = row["series_key"]
         if sk:
             tracked_keys.append(sk)
-        unread = 0.0
-        if latest_num is not None and read_num is not None:
-            try:
-                unread = max(0.0, float(latest_num) - float(read_num))
-            except (TypeError, ValueError):
-                unread = 0.0
-        elif latest_num is not None and read_num is None and row["new_update"]:
-            try:
-                unread = max(0.0, float(latest_num))
-            except (TypeError, ValueError):
-                unread = 0.0
-        if unread > 0:
-            total_unread += unread
-            behind_count += 1
-            series.append(
-                {
-                    "bookmark_id": row["bookmark_id"],
-                    "title": row["title"],
-                    "series_key": sk,
-                    "unread": int(unread) if float(unread).is_integer() else round(unread, 1),
-                }
-            )
+        raw_url = (row["url"] or "").strip()
+        if raw_url:
+            tracked_url_norms.append(normalize_bookmark_url(raw_url))
+        mapped.append(
+            {
+                "id": int(row["bookmark_id"]),
+                "story_id": row["story_id"],
+                "title": row["title"],
+                "series_key": sk,
+                "url": row["url"],
+                "latest_seen_num": row["latest_num"],
+                "latest_seen": row["latest_seen"],
+                "latest_seen_url": row["latest_seen_url"],
+                "read_chapter_num": row["read_num"],
+                "read_chapter_label": row["read_chapter_label"],
+                "read_source_url": row["read_source_url"],
+                "new_update": row["new_update"],
+                "cover_url": None,
+                "last_error": None,
+                "latest_parser_version": None,
+            }
+        )
+    cards = story_groups.group_and_aggregate(mapped)
+    total_unread = sum(float(c.get("unread_count") or 0) for c in cards)
+    behind_count = sum(1 for c in cards if float(c.get("unread_count") or 0) > 0)
+    series = []
+    for c in cards:
+        ur = float(c.get("unread_count") or 0)
+        if ur <= 0:
+            continue
+        series.append(
+            {
+                "bookmark_id": c["id"],
+                "title": c["title"],
+                "series_key": c.get("series_key"),
+                "story_id": c.get("story_id"),
+                "unread": int(ur) if ur.is_integer() else round(ur, 1),
+            }
+        )
 
     return jsonify(
         {
@@ -2376,6 +3400,282 @@ def api_unread_count():
             "behind": behind_count,
             "series": series,
             "tracked_keys": tracked_keys,
+            "tracked_url_norms": tracked_url_norms,
+        }
+    )
+
+
+@app.route("/api/library/duplicate-hints", methods=["GET"])
+def api_duplicate_hints():
+    user_id = api_session_user_id()
+    if user_id is None:
+        return jsonify({"ok": False, "error": "authentication required"}), 401
+    hints = _load_duplicate_hints(user_id, limit=40)
+    return jsonify({"ok": True, "hints": hints})
+
+
+@csrf.exempt
+@app.route("/api/library/merge-bookmarks", methods=["POST"])
+def api_merge_bookmarks():
+    user_id = api_session_user_id()
+    if user_id is None:
+        return jsonify({"ok": False, "error": "authentication required"}), 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        keeper_id = int(payload.get("keeper_id") or 0)
+    except (TypeError, ValueError):
+        keeper_id = 0
+    raw_ids = payload.get("merge_ids") or payload.get("other_ids") or []
+    other_ids: list[int] = []
+    for x in raw_ids:
+        try:
+            oid = int(x)
+        except (TypeError, ValueError):
+            continue
+        if oid != keeper_id:
+            other_ids.append(oid)
+    if keeper_id <= 0 or not other_ids:
+        return jsonify({"ok": False, "error": "keeper_id and merge_ids required"}), 400
+
+    target_sid: str = ""
+    with get_conn() as conn:
+        k = conn.execute(
+            "SELECT id, story_id FROM bookmarks WHERE id = ? AND user_id = ?",
+            (keeper_id, user_id),
+        ).fetchone()
+        if not k:
+            return jsonify({"ok": False, "error": "keeper not found"}), 404
+        target_sid = (k["story_id"] or "").strip() or story_groups.new_solo_story_id()
+        conn.execute(
+            "UPDATE bookmarks SET story_id = ? WHERE id = ? AND user_id = ?",
+            (target_sid, keeper_id, user_id),
+        )
+        for oid in other_ids:
+            o = conn.execute(
+                "SELECT id FROM bookmarks WHERE id = ? AND user_id = ?",
+                (oid, user_id),
+            ).fetchone()
+            if not o:
+                continue
+            conn.execute(
+                "UPDATE bookmarks SET story_id = ? WHERE id = ? AND user_id = ?",
+                (target_sid, oid, user_id),
+            )
+    return jsonify({"ok": True, "story_id": target_sid})
+
+
+@app.route("/api/library/chapter-map", methods=["GET"])
+def api_chapter_map():
+    user_id = api_session_user_id()
+    if user_id is None:
+        return jsonify({"ok": False, "error": "authentication required"}), 401
+    raw_rows, _raw_by_id = _fetch_user_story_rows(user_id, "")
+    by_sid: dict[str, list[dict]] = defaultdict(list)
+    for r in raw_rows:
+        d = dict(r)
+        sid = story_groups.effective_story_id(d)
+        host = urlparse((d.get("url") or "").strip()).netloc.replace("www.", "")
+        by_sid[sid].append(
+            {
+                "bookmark_id": int(d["id"]),
+                "title": d.get("title"),
+                "url": d.get("url"),
+                "host": host,
+                "latest_seen_num": d.get("latest_seen_num"),
+                "last_checked": d.get("last_checked"),
+                "last_error": d.get("last_error"),
+            }
+        )
+    stories_out = [{"story_id": k, "sources": v} for k, v in by_sid.items()]
+    stories_out.sort(key=lambda x: x["story_id"])
+    return jsonify({"ok": True, "stories": stories_out})
+
+
+@app.route("/api/library/alt-sources", methods=["GET"])
+def api_alt_sources():
+    user_id = api_session_user_id()
+    if user_id is None:
+        return jsonify({"ok": False, "error": "authentication required"}), 401
+    raw = (request.args.get("url") or "").strip()
+    if not raw or not is_public_http_url(raw):
+        return jsonify({"ok": False, "error": "valid url required"}), 400
+    prof = source_registry.get_profile_for_url(raw)
+    curr_id = (prof or {}).get("id")
+    health = source_registry.load_health()
+    by_h = health.get("by_id") if isinstance(health.get("by_id"), dict) else {}
+    alternatives: list[dict] = []
+    for src in source_registry.list_sources():
+        if curr_id and src.get("id") == curr_id:
+            continue
+        hid = src.get("id")
+        row = by_h.get(hid) if hid else {}
+        st = str((row or {}).get("status") or "partial").lower()
+        if st == "broken":
+            continue
+        alternatives.append(
+            {
+                "id": hid,
+                "display_name": src.get("display_name"),
+                "domains": src.get("domains"),
+                "sample_series_url": src.get("sample_series_url"),
+                "health_status": st,
+            }
+        )
+    return jsonify({"ok": True, "current_source_id": curr_id, "alternatives": alternatives[:40]})
+
+
+@csrf.exempt
+@app.route("/api/v1/bookmarks", methods=["GET"])
+@limiter.limit("60/minute", methods=["GET"], key_func=_api_v1_rate_limit_key)
+def api_v1_bookmarks():
+    auth = (request.headers.get("Authorization") or "").strip()
+    token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    user_id = _user_id_from_bearer_api_token(token)
+    if user_id is None:
+        return jsonify({"ok": False, "error": "invalid or missing bearer token"}), 401
+    raw_rows, raw_by_id = _fetch_user_story_rows(user_id, "")
+    cards = _build_sorted_story_cards(raw_rows, raw_by_id, "added")
+    out = []
+    for c in cards:
+        out.append(
+            {
+                "id": c.get("id"),
+                "title": c.get("title"),
+                "story_id": c.get("story_id"),
+                "url": c.get("url"),
+                "latest_seen": c.get("latest_seen"),
+                "latest_seen_num": c.get("latest_seen_num"),
+                "latest_seen_url": c.get("latest_seen_url"),
+                "read_chapter_num": c.get("read_chapter_num"),
+                "unread_count": c.get("unread_count"),
+                "new_update": c.get("new_update"),
+                "source_count": c.get("source_count"),
+            }
+        )
+    return jsonify({"ok": True, "bookmarks": out})
+
+
+@csrf.exempt
+@app.route("/api/account/api-token", methods=["POST"])
+def api_account_issue_token():
+    user_id = api_session_user_id()
+    if user_id is None:
+        return jsonify({"ok": False, "error": "authentication required"}), 401
+    tok = secrets.token_urlsafe(24)
+    with get_conn() as conn:
+        conn.execute("UPDATE users SET api_access_token = ? WHERE id = ?", (tok, user_id))
+    return jsonify({"ok": True, "token": tok, "usage": "Authorization: Bearer <token> on GET /api/v1/bookmarks"})
+
+
+@csrf.exempt
+@app.route("/api/reader-overlay", methods=["GET"])
+def api_reader_overlay():
+    user_id = api_session_user_id()
+    if user_id is None:
+        return jsonify({"ok": False, "error": "authentication required"}), 401
+    series_url = (request.args.get("series_url") or "").strip()
+    series_key = (request.args.get("series_key") or "").strip().lower()
+    page_url = (request.args.get("page_url") or "").strip()
+    probe_url = page_url or series_url
+    registry_supported = bool(source_registry.get_profile_for_url(probe_url)) if probe_url else False
+
+    canonical: Optional[str] = None
+    if series_url and is_public_http_url(series_url):
+        try:
+            canonical = resolve_series_listing_url(series_url)
+        except Exception:
+            canonical = series_url
+
+    with get_conn() as conn:
+        row = None
+        if series_key:
+            row = conn.execute(
+                "SELECT * FROM bookmarks WHERE user_id = ? AND lower(trim(coalesce(series_key, ''))) = ?",
+                (user_id, series_key),
+            ).fetchone()
+        if row is None and canonical:
+            row = conn.execute(
+                "SELECT * FROM bookmarks WHERE user_id = ? AND url = ?",
+                (user_id, canonical),
+            ).fetchone()
+        if row is None and canonical:
+            cand_norm = normalize_bookmark_url(canonical)
+            for candidate in conn.execute("SELECT * FROM bookmarks WHERE user_id = ?", (user_id,)).fetchall():
+                if normalize_bookmark_url(candidate["url"] or "") == cand_norm:
+                    row = candidate
+                    break
+
+        if row is None:
+            return jsonify(
+                {
+                    "ok": True,
+                    "tracked": False,
+                    "registry_supported": registry_supported,
+                    "series_url": canonical or series_url or "",
+                    "series_key": series_key or None,
+                }
+            )
+
+        bookmark_id = int(row["id"])
+        prog = conn.execute(
+            """
+            SELECT x.chapter_num, x.chapter_label, x.source_url
+            FROM reading_progress x
+            INNER JOIN (
+                SELECT bookmark_id, MAX(id) AS max_id
+                FROM reading_progress
+                WHERE user_id = ?
+                GROUP BY bookmark_id
+            ) y ON y.bookmark_id = x.bookmark_id AND y.max_id = x.id
+            WHERE x.user_id = ? AND x.bookmark_id = ?
+            """,
+            (user_id, user_id, bookmark_id),
+        ).fetchone()
+
+    read_num: Optional[float] = None
+    if prog and prog["chapter_num"] is not None:
+        try:
+            read_num = float(prog["chapter_num"])
+        except (TypeError, ValueError):
+            read_num = None
+    read_lbl = (prog["chapter_label"] if prog else None) or None
+    read_url = (prog["source_url"] if prog else None) or None
+
+    latest_f: Optional[float] = None
+    if row["latest_seen_num"] is not None:
+        try:
+            latest_f = float(row["latest_seen_num"])
+        except (TypeError, ValueError):
+            latest_f = None
+    new_update = int(row["new_update"] or 0)
+    unread = 0.0
+    if latest_f is not None and read_num is not None:
+        unread = max(0.0, float(latest_f) - float(read_num))
+    elif latest_f is not None and read_num is None and new_update:
+        try:
+            unread = max(0.0, float(latest_f))
+        except (TypeError, ValueError):
+            pass
+
+    continue_url = (read_url or "").strip() or (row["url"] or "")
+
+    return jsonify(
+        {
+            "ok": True,
+            "tracked": True,
+            "registry_supported": registry_supported,
+            "bookmark_id": bookmark_id,
+            "title": row["title"],
+            "series_key": row["series_key"],
+            "series_url": row["url"],
+            "read_chapter_num": read_num,
+            "read_chapter_label": read_lbl,
+            "latest_seen_num": latest_f,
+            "latest_seen": row["latest_seen"],
+            "latest_seen_url": row["latest_seen_url"],
+            "continue_url": continue_url,
+            "unread": int(unread) if float(unread).is_integer() else round(unread, 1),
+            "new_update": new_update,
         }
     )
 
@@ -2622,6 +3922,15 @@ def admin_user_detail(user_id: int):
     )
 
 
+def _scheduled_source_health() -> None:
+    try:
+        from services import source_health_job
+
+        source_health_job.run_and_write_health(print_summary=False)
+    except Exception:
+        log.exception("source catalog health job failed")
+
+
 def setup_scheduler() -> Optional[BackgroundScheduler]:
     global _SCHEDULER
     with _SCHEDULER_LOCK:
@@ -2646,6 +3955,16 @@ def setup_scheduler() -> Optional[BackgroundScheduler]:
                 "interval",
                 hours=prune_interval,
                 id="progress-prune",
+                max_instances=1,
+                coalesce=True,
+            )
+        health_hours = int(os.getenv("SOURCE_HEALTH_INTERVAL_HOURS", "24"))
+        if health_hours > 0:
+            scheduler.add_job(
+                _scheduled_source_health,
+                "interval",
+                hours=max(health_hours, 1),
+                id="source-catalog-health",
                 max_instances=1,
                 coalesce=True,
             )

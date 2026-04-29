@@ -203,6 +203,22 @@
     </section>
 
     <section class="card">
+      <h2>Reader overlay</h2>
+      <p class="help">Floating panel on supported manga pages: catalog support, sync status when signed in, quick mark-read and add-series. Turn off if it gets in the way.</p>
+      <label class="toggle" for="readerOverlay">
+        <input id="readerOverlay" type="checkbox">
+        <span>
+          <span class="label">Show reader overlay</span><br>
+          <span class="hint">Bottom-right on chapter pages (requires content script).</span>
+        </span>
+      </label>
+      <div class="toolbar" style="margin-top: 12px;">
+        <button id="saveOverlay">Save</button>
+      </div>
+      <div id="overlayStatus" class="status"></div>
+    </section>
+
+    <section class="card">
       <h2>Local data</h2>
       <p class="help">Wipes the extension's locally stored settings, debug log, and snooze records. Does not touch your account or library on the server.</p>
       <div class="toolbar">

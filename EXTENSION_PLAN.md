@@ -19,16 +19,21 @@ flowchart LR
 
 ---
 
-## 1. Bugs to fix first
+## 1. Baseline vs this document (maintain parity)
 
-These are pre-existing issues in the current extension that should be resolved before piling on new features.
+Companion **v0.5.5** and `app.py` have moved ahead of older bullets archived below:
 
-- **SPA polling is too aggressive.** [`extension/content.js`](extension/content.js) ends with `setInterval(maybeTrackOnRouteChange, 1200)`. Raise the interval to **2.5 seconds** and **skip work when the tab is hidden** (`document.hidden` / `visibilitychange`). The `__lastUrl` short-circuit already prevents redundant work when nothing changed, but the interval still fires every 1.2s on every tab.
-- **No `MutationObserver` for content-swap SPAs.** Sites like MangaDex swap chapter content without a URL change. Add a single observer on `document.body` (or the reader root) with `subtree: true, childList: true`, debounced (~500 ms), that calls `maybeTrackOnRouteChange()` when key signals change (title, breadcrumb, chapter heading).
-- **Modal is vulnerable to host CSS resets.** The track-prompt modal in `content.js` is built as plain DOM under `#manga-tracker-track-modal`. Move it inside a Shadow DOM root attached to a single host `<div>` so site stylesheets cannot override layout, fonts, or z-index.
-- **Snooze key uses URL fallback.** `seriesPromptStableKey = data.seriesKey || data.seriesUrl` means the snooze localStorage entry is keyed by the full URL when `seriesKey` is missing, which fragments snoozes across query strings and trailing slashes. Always derive and require a **stable `seriesKey`** before writing the snooze record; if one cannot be computed, do not snooze (and log a debug event).
-- **Popup has no loading state.** [`extension/popup.js`](extension/popup.js) calls `sendMessage({ type: "GET_SETTINGS" })` with no spinner, so the popup briefly shows empty inputs and a default-looking status. Render an explicit loading state until both settings and active-tab detection resolve.
-- **Unused `notifications` permission.** The current [`extension/manifest.json`](extension/manifest.json) requests `notifications`, but no code uses `chrome.notifications`. Either remove it now, or keep it and ship the opt-in desktop notifications described in Section 4. Do not ship to the store with an unused sensitive permission.
+- SPA polling runs at **2.5s**, skips work when **`document.hidden`**, debounced **`MutationObserver`** covers content-swap navigations (`extension/content.js`).
+- Track modal lives inside a **`ShadowRoot`** (`extension/content.js`).
+- **`notifications`** is **not** in [`extension/manifest.json`](extension/manifest.json) anymore — remove from any remaining copy-paste checklist; desktop notifications remain a future optional feature (Section 4).
+- **`GET /api/unread-count`** is implemented server-side (`app.py`), including **`tracked_url_norms`** for the extension badge.
+- Duplicate rows in this section that are clearly fixed should be edited out periodically so the checklist stays actionable.
+
+---
+
+## ~~1~~ Archived — bugs to fix first (mostly resolved)
+
+_Stale headings kept for grep; prefer Section 1 above._
 
 ## 2. Popup redesign
 
@@ -74,11 +79,9 @@ Settings to expose:
 
 ## 6. Backend changes
 
-Only one new endpoint is required.
+The extension uses session-based JSON routes: `/api/series/ensure`, `/api/progress`, `/healthz`, and **`GET /api/unread-count`** (with `tracked_url_norms`). The web app also exposes optional RSS (**`/feeds/rss/<token>`**) and Bearer-token **`GET /api/v1/bookmarks`** for tooling — not required by the MV3 companion.
 
-- **`GET /api/unread-count`** in [`app.py`](app.py). Returns the number of unread chapters across the signed-in user's tracked series, e.g. `{"unread": 7, "series": [{"series_key": "...", "unread": 3}, ...]}`. Reuse the existing per-series unread logic (the dashboard already computes "new updates" — see the bookmark `new_update` flag referenced near line 213 of `app.py`). Honor the same session requirement as the other `/api/*` user routes in `app.py`.
-
-Everything else the extension needs already exists: `/api/series/ensure`, `/api/progress`, `/healthz`. Do **not** introduce new write endpoints for the extension; reuse what the dashboard uses.
+Prefer reusing dashboard flows for any new writes; avoid adding parallel write endpoints unless there is a clear security boundary (CSRF/session vs bearer token vs admin token).
 
 ## 7. Icons
 

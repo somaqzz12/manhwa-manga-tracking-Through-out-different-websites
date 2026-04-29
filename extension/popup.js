@@ -68,6 +68,20 @@ function openOptionsPage() {
   else chrome.tabs.create({ url: chrome.runtime.getURL("options.html") });
 }
 
+/** Match dashboard `normalize_bookmark_url`: trim, strip trailing slash, lower. */
+function normListingUrl(u) {
+  return String(u || "")
+    .trim()
+    .replace(/\/+$/, "")
+    .toLowerCase();
+}
+
+function isSeriesTracked(data, trackedKeys, trackedUrlNorms) {
+  if (data.seriesKey && trackedKeys.has(data.seriesKey)) return true;
+  if (data.seriesUrl && trackedUrlNorms.has(normListingUrl(data.seriesUrl))) return true;
+  return false;
+}
+
 async function init() {
   setLoading(true);
   setConnectionDot(null, "Checking...");
@@ -103,6 +117,7 @@ async function init() {
   }
 
   const trackedKeys = new Set(unreadRes?.data?.tracked_keys || []);
+  const trackedUrlNorms = new Set(unreadRes?.data?.tracked_url_norms || []);
   const totalUnread = Number(unreadRes?.data?.unread || 0);
 
   if (!pageRes?.ok || !pageRes?.data) {
@@ -141,7 +156,7 @@ async function init() {
     : data.chapterLabel || "Detected chapter";
   $("chapterMeta").textContent = chapterText;
 
-  const isTracked = data.seriesKey ? trackedKeys.has(data.seriesKey) : false;
+  const isTracked = isSeriesTracked(data, trackedKeys, trackedUrlNorms);
   const trackBtn = $("trackButton");
   if (isTracked) {
     $("trackedBadge").classList.remove("hidden");

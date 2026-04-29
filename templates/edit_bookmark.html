@@ -223,6 +223,27 @@
         <input id="edit-url" class="input" name="url" type="text" value="{{ bookmark['url'] }}" placeholder="https://…" aria-label="Series URL" required>
         <button id="editSubmit" class="btn btn-primary" type="submit" data-loading-text="">Save changes</button>
       </form>
+      {% if merge_choices %}
+      <form method="post" id="mergeStoryForm" style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(0,0,0,0.08);" data-loading-form="true">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="title" value="{{ bookmark['title'] }}">
+        <input type="hidden" name="url" value="{{ bookmark['url'] }}">
+        <input type="hidden" name="q" value="{{ return_q or '' }}">
+        <input type="hidden" name="sort" value="{{ return_sort }}">
+        <input type="hidden" name="page" value="{{ return_page }}">
+        <input type="hidden" name="merge_only" value="1">
+        <h2 style="font-size:1rem;margin:0 0 10px;font-family:inherit;font-weight:600;">Same story, different site</h2>
+        <p style="font-size:0.85rem;color:var(--muted);margin:0 0 12px;line-height:1.45;">Pick another entry to merge. The dashboard shows one card and uses the <strong>highest</strong> reported latest chapter across linked URLs.</p>
+        <label for="merge-with">Link with</label>
+        <select id="merge-with" name="merge_with_bookmark_id" class="input" style="border-radius:14px;">
+          <option value="">Choose a series…</option>
+          {% for o in merge_choices %}
+            <option value="{{ o['id'] }}">{{ o['title'] }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-primary" type="submit" style="margin-top:10px;">Link alternate source</button>
+      </form>
+      {% endif %}
     </div>
   </div>
   <script>

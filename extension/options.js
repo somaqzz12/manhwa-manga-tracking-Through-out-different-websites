@@ -30,12 +30,14 @@ async function loadSettings() {
     "apiBase",
     "autoTrack",
     "cooldownHours",
+    "readerOverlay",
   ]);
   $("apiBase").value = (stored.apiBase || DEFAULT_API_BASE).trim();
   $("autoTrack").checked = Boolean(stored.autoTrack);
   $("cooldownHours").value = Number.isFinite(stored.cooldownHours)
     ? stored.cooldownHours
     : DEFAULT_COOLDOWN_HOURS;
+  if ($("readerOverlay")) $("readerOverlay").checked = stored.readerOverlay === true;
 }
 
 async function ensureBackendHostPermission(origin) {
@@ -107,6 +109,12 @@ async function saveBehavior() {
     `Saved. Auto-track ${autoTrack ? "on" : "off"}, cooldown ${cooldownHours}h.`,
     "ok"
   );
+}
+
+async function saveOverlay() {
+  const readerOverlay = $("readerOverlay")?.checked === true;
+  await chrome.storage.local.set({ readerOverlay });
+  setStatus($("overlayStatus"), readerOverlay ? "Overlay enabled." : "Overlay disabled.", "ok");
 }
 
 async function clearLocalData() {
@@ -193,6 +201,7 @@ async function init() {
   $("saveApiBase").addEventListener("click", saveApiBase);
   $("testConnection").addEventListener("click", testConnection);
   $("saveBehavior").addEventListener("click", saveBehavior);
+  $("saveOverlay")?.addEventListener("click", saveOverlay);
   $("clearData").addEventListener("click", clearLocalData);
   $("refreshLog").addEventListener("click", renderDebugLog);
   $("copyLog").addEventListener("click", copyDebugLog);

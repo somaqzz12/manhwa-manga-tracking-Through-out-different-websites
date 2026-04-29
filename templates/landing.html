@@ -271,6 +271,14 @@
       </div>
     </div>
     <p class="foot-links">
+      <a href="{{ url_for('sources_page') }}">Supported sources</a>
+      <span class="dot">·</span>
+      <a href="{{ url_for('demo_dashboard') }}">Demo</a>
+      <span class="dot">·</span>
+      <a href="{{ url_for('privacy_page') }}">Privacy</a>
+      <span class="dot">·</span>
+      <a href="{{ url_for('changelog_page') }}">Changelog</a>
+      <span class="dot">·</span>
       <a href="{{ bug_report_href }}" rel="noopener noreferrer">Report an issue</a>
       {% if contact_email %}
         <span class="dot">·</span>

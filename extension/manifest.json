@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Manga Watchlist Companion",
-  "version": "0.5.3",
+  "version": "0.5.5",
   "description": "Sign in to Manga Watchlist and your manga and manhwa reading progress syncs from any reader. Optional prompts, badge, and shortcuts.",
   "homepage_url": "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites",
   "permissions": ["storage", "activeTab", "tabs", "alarms", "contextMenus", "scripting"],

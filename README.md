@@ -80,7 +80,8 @@ All configuration is via environment variables. The `Required?` column is what t
 | `PORT` | Optional | `5000` | Port the dev server binds to. Render injects this automatically. |
 | `LOG_LEVEL` | Optional | `INFO` | Standard Python log level. |
 | `CHROME_EXTENSION_ID` | Optional | _(unset)_ | Published extension id; if set, `chrome-extension://<id>` is appended to the CORS allowlist. |
-| `ADMIN_API_TOKEN` | Optional | _(unset)_ | Bearer token that gates `/api/debug/scrape` and `/api/maintenance/merge-duplicates`. Routes return 404 when unset. |
+| `ADMIN_API_TOKEN` | Optional | _(unset)_ | Secret for `/api/debug/scrape`, `/api/maintenance/merge-duplicates`, and optional header-only access to `/admin/*`. Send as **`Authorization: Bearer &lt;token&gt;`** or **`X-Admin-Token`**. Routes return **404** when unset. **Query-string tokens are not accepted** (they leak via browser history and `Referer`). |
+| `ADMIN_USERNAME` | Optional | _(unset)_ | If set, that **username** may open `/admin/users` after a normal dashboard login (recommended for the HTML admin UI in production). |
 | `CORS_ALLOW_ORIGINS` | **Strongly required in production** | _(unset)_ | Comma-separated **exact** origins allowed to receive `Access-Control-Allow-Origin` with credentials. Must include your dashboard origin (e.g. `https://app.example.com`) and, unless you rely on `CHROME_EXTENSION_ID`, the full `chrome-extension://<id>` origin. With `FLASK_DEBUG=1` and an empty list, dev mode allows unpacked extensions and localhost only — not production-safe. |
 | `SESSION_COOKIE_SECURE` | Optional | `1` in prod, `0` in debug | Forces the session cookie to HTTPS-only. |
 | `HTTP_TIMEOUT_SECONDS` | Optional | `15` | Per-request timeout for the chapter scraper. |
@@ -102,6 +103,20 @@ All configuration is via environment variables. The `Required?` column is what t
 | `BUG_REPORT_URL`, `CONTACT_EMAIL`, `GITHUB_URL` | Optional | Defaults baked into the templates | Strings used in the footer. |
 | `EXTENSION_ZIP_DOWNLOAD_URL` | Optional | _(built from `GITHUB_URL`)_ | Direct link for “Download extension (ZIP)” on the Flask dashboard/landing. Defaults to a one-click ZIP of `extension/` via [download-directory.github.io](https://download-directory.github.io/). Set this to a GitHub Release asset URL if you prefer. |
 | `DEFAULT_USER_EMAIL` | Optional | `local@tracker` | Email for the auto-created **system** user used to attach legacy rows with `user_id` NULL. A **random** password hash is stored (not login-capable). Older DBs created before this change are rotated off the historical `local-only` password on startup. |
+| `SOURCE_HEALTH_INTERVAL_HOURS` | Optional | `24` | How often the background job re-probes every `sample_series_url` in the catalog and writes `sources/_health.json`. Set to `0` to disable. Also run `python scripts/check_sources.py` manually or in CI after catalog edits. |
+| `PUBLIC_BASE_URL` | Optional | _(unset)_ | Canonical public site URL used for RSS `<link>` when the app sits behind a reverse proxy; if unset, each request falls back to `request.url_root`. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Optional | _(unset)_ | When `SMTP_HOST` is set and a user opts in (`notify_email_chapters` on the account settings page), new-chapter notifications are sent via SMTP (port `465` SSL or `587` STARTTLS). |
+| `DEAD_SERIES_WARNING_DAYS` | Optional | `120` | Dashboard flag when aggregating stale “last checked” ages (not a hard drop from the library). |
+
+## Source catalog and health checks
+
+- **Validate structure:** `python scripts/validate_catalog.py` — fails if any source is missing `sample_series_url` or domains (use in CI).
+- **Probe all samples:** `python scripts/check_sources.py` — writes `sources/_health.json` used by `/sources` and `GET /api/registry/public`.
+- **Scheduler:** When `SOURCE_HEALTH_INTERVAL_HOURS` is greater than `0`, the same probe runs on that interval in-process (single leader; see `SCHEDULER_LEADER`).
+
+## Docker Compose (sketch)
+
+The repo ships [`docker-compose.yml`](docker-compose.yml) with Postgres and the Flask app on port **8000**. Export a strong `SECRET_KEY` before running `docker compose up --build` — tune environment for production (CORS, `DATABASE_URL`, scheduler flags, TLS in front).
 
 ## Browser extension
 
@@ -168,7 +183,7 @@ The extension’s `homepage_url` in the manifest points at this GitHub repositor
 
 ## API endpoints
 
-Routes the extension and external clients can rely on. User JSON routes (`/api/series/ensure`, `/api/progress`, `/api/unread-count`) are CSRF-exempt and **always require a signed-in dashboard session** (no anonymous default user). Configure production CORS with `CORS_ALLOW_ORIGINS` / `CHROME_EXTENSION_ID` so the extension can send cookies. Admin routes additionally require `ADMIN_API_TOKEN` or a logged-in browser session.
+Routes the extension and external clients can rely on. User JSON routes (`/api/series/ensure`, `/api/progress`, `/api/unread-count`) are CSRF-exempt and **always require a signed-in dashboard session** (no anonymous default user). Configure production CORS with `CORS_ALLOW_ORIGINS` / `CHROME_EXTENSION_ID` so the extension can send cookies. Admin **JSON** routes (`/api/debug/scrape`, `/api/maintenance/merge-duplicates`) require **`FLASK_DEBUG=1`**, or the **`ADMIN_API_TOKEN`** via **`Authorization: Bearer`** / **`X-Admin-Token`**, or a signed-in user whose **username** matches **`ADMIN_USERNAME`** (not any logged-in user). Admin **HTML** pages (`/admin/*`) require signing in as `ADMIN_USERNAME` or the same headers (e.g. via a reverse proxy).
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
@@ -176,13 +191,22 @@ Routes the extension and external clients can rely on. User JSON routes (`/api/s
 | `POST` | `/api/series/ensure` | Session (required) | Idempotently create or look up a bookmark by `series_key` or `url`. |
 | `POST` | `/api/progress` | Session | Record reading progress for a chapter and bump `latest_seen_*` if the user is ahead of the scraper. |
 | `GET` | `/api/unread-count` | Session | Returns total unread, behind-count, per-series unread, and the user's `tracked_keys`. Used by the extension badge. |
-| `POST` | `/api/debug/scrape` | Admin token | Returns candidate links, chosen latest, parser version, confidence, and error flags for a given URL. |
-| `POST` | `/api/maintenance/merge-duplicates` | Admin token | Coalesces bookmarks that point at the same canonical series URL. |
+| `GET` | `/api/registry/public` | None | Registry snapshot for clients (short `Cache-Control`). |
+| `GET` | `/feeds/rss/<token>` | Per-user RSS secret | Private RSS feed (`PUBLIC_BASE_URL` helps behind reverse proxies). Manage from `/account/settings`. |
+| `GET` | `/api/library/duplicate-hints` | Session | Duplicate-title hint groups (merge candidates). |
+| `POST` | `/api/library/merge-bookmarks` | Session JSON | `{keeper_id, merge_ids}` — unify `story_id`s like the Edit flow. |
+| `GET` | `/api/library/chapter-map` | Session | Per-`story_id` source rows (multi-site diagnostics). |
+| `GET` | `/api/library/alt-sources` | Session (`?url=`) | Suggests other catalog entries that appear healthy (`_health.json`). |
+| `GET` | `/api/v1/bookmarks` | Bearer API token (`/account/settings`) | Aggregate bookmarks JSON (`POST /api/account/api-token` rotates the token while logged in). |
+| `POST` | `/api/import/mal` | Session JSON | **`501`** — stub for future imports. |
+| `POST` | `/api/debug/scrape` | Session **or** Bearer / `X-Admin-Token` | Returns candidate links, chosen latest, parser version, confidence, and error flags for a given URL. |
+| `POST` | `/api/maintenance/merge-duplicates` | Session **or** Bearer / `X-Admin-Token` | Coalesces bookmarks that point at the same canonical series URL. |
 
 Example request bodies are in `app.py` near each route, and the extension's call sites in [`extension/background.js`](extension/background.js) are the canonical clients.
 
 ## Known limitations
 
+- **Local verification needs dependencies.** `python -m unittest` and running Flask require packages from `requirements.txt` (e.g. Flask, BeautifulSoup). Sandboxed or offline shells may block `pip install`. **Windows:** `npm run build` can fail with `spawn EPERM` if policy or antivirus blocks child processes; try another directory, an exemption, or WSL.
 - **Cover images are best-effort.** Covers are scraped from Open Graph metadata and the largest visible image on the listing page. Sites that lazy-load behind JavaScript or hotlink-block requests will show a placeholder until you point the parser at a different URL.
 - **Selenium is opt-in and heavy.** When `USE_SELENIUM_FALLBACK=1`, the server starts ChromeDriver to retry pages that defeat plain HTTP scraping. This adds significant memory pressure on small Render plans and requires Chrome + ChromeDriver installed in the environment. Keep it disabled unless you are on a host with enough memory.
 - **SQLite is for local dev only.** The bundled `tracker.db` is fine on your laptop, but on any cloud host the disk is ephemeral and you will lose data on every redeploy. Production refuses to boot without `DATABASE_URL` unless `ALLOW_SQLITE_IN_PRODUCTION=1`.
@@ -193,6 +217,8 @@ Example request bodies are in `app.py` near each route, and the extension's call
 ## Issues and contributions
 
 Bug reports and feature requests live on the GitHub issues page: <https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites/issues>.
+
+Continuous integration (`.github/workflows/ci.yml`) validates the source catalog, runs `python -m unittest`, and builds the `landing/` Next.js site on every push / pull request.
 
 ## License
 

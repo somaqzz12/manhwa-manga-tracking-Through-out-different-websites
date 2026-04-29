@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Reading list — {{ slug }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#f5f1e8; --text:#151515; --muted:#6b6b6b; --border:rgba(0,0,0,.12); --card:#fff;}
+    body { margin:0; font-family:Inter,system-ui,sans-serif; background:var(--bg); color:var(--text); padding:28px 20px;}
+    .shell { max-width: 900px; margin: 0 auto; }
+    h1 { font-family:"Playfair Display",serif; font-size:1.5rem; margin:0 0 6px; }
+    p.lead { color: var(--muted); font-size:0.95rem; margin:0 0 22px;}
+    .grid { display:grid; gap:14px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px 16px; display:flex; flex-direction:column; gap:8px;}
+    .title { font-weight:600; font-size:1rem;}
+    .row { display:flex; justify-content:space-between; gap:12px; font-size:0.88rem; flex-wrap:wrap;}
+    .muted { color: var(--muted); }
+    .tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.75rem; border:1px solid var(--border);}
+    footer { margin-top:28px; text-align:center; font-size:0.85rem; color:var(--muted);}
+    footer a { color:#5b52e6;}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <h1>Reading list</h1>
+    <p class="lead">Public page — slug <strong>{{ slug }}</strong>. Updates when the owner checks their library.</p>
+    <div class="grid">
+      {% for b in bookmarks %}
+      <article class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+          <span class="title">{{ b.title }}</span>
+          {% if b.new_update %}<span class="tag">NEW</span>{% endif %}
+        </div>
+        <div class="row">
+          <span class="muted">Last read</span>
+          {% if b.read_chapter_num is not none %}
+          <strong>Ch. {{ b.read_chapter_num|clean }}</strong>
+          {% else %}
+          <strong>Not started</strong>
+          {% endif %}
+        </div>
+        <div class="row">
+          <span class="muted">Latest</span>
+          {% if b.latest_seen_num is not none %}
+          <strong>Ch. {{ b.latest_seen_num|clean }}</strong>
+          {% else %}
+          <strong>Unknown</strong>
+          {% endif %}
+        </div>
+        {% if (b.source_count or 1) > 1 %}
+        <div class="muted" style="font-size:0.82rem;">{{ b.source_count }} linked sources</div>
+        {% endif %}
+      </article>
+      {% else %}
+      <p class="muted">Nothing listed yet.</p>
+      {% endfor %}
+    </div>
+    <footer>
+      Powered by <a href="{{ url_for('home') }}">Manga Watchlist</a>
+    </footer>
+  </div>
+</body>
+</html>

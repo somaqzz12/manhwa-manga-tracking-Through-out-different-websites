@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Changelog — Manga Watchlist</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: #080b14; --text: #e2e8f0; --muted: #94a3b8; }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 32px 20px 48px; line-height: 1.55; max-width: 640px; margin-left: auto; margin-right: auto; }
+    a { color: #a5b4fc; }
+    h1 { margin-top: 0; }
+    h2 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; color: #f1f5f9; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    ul { color: #cbd5e1; }
+  </style>
+</head>
+<body>
+  <p><a href="{{ url_for('home') }}">← Home</a></p>
+  <h1>Changelog</h1>
+  <p class="muted">High-level updates. Source additions are tracked in <code>sources/catalog.json</code> and health in <code>sources/_health.json</code> after running the checker.</p>
+
+  <h2>2026-04 — Stories, not websites</h2>
+  <ul>
+    <li><strong>story_id</strong> groups alternate URLs; dashboard merges cards and uses the <strong>best</strong> latest chapter across linked sources.</li>
+    <li>Edit → <strong>Link alternate source</strong> to attach MangaDex + aggregator rows for the same series.</li>
+    <li>Lightweight <strong>For you</strong> suggestions from reading patterns (genres/heuristics).</li>
+    <li>Extension stores a <strong>local progress backup</strong> in <code>chrome.storage</code> after each successful save.</li>
+  </ul>
+  <h2>2026-04 — Source engine &amp; launch readiness</h2>
+  <ul>
+    <li>JSON-driven <strong>source registry</strong> (<code>services/source_registry.py</code>, <code>sources/catalog.json</code>).</li>
+    <li>Public <strong>/sources</strong> page with catalog vs health stats.</li>
+    <li><strong>scripts/check_sources.py</strong> probes sample URLs and writes <code>sources/_health.json</code>.</li>
+    <li><strong>/privacy</strong>, <strong>/changelog</strong>, <strong>/demo</strong> (read-only fake dashboard).</li>
+    <li><strong>Report broken source</strong> on dashboard cards (prefills GitHub issue fields).</li>
+    <li><strong>Delete account</strong> flow (password confirmed).</li>
+    <li>Onboarding banner after signup; clearer empty / caught-up states; backup import visible on dashboard.</li>
+  </ul>
+
+  <p><a href="{{ url_for('sources_page') }}">Supported sources</a></p>
+</body>
+</html>

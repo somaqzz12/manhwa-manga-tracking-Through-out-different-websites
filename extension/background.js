@@ -21,6 +21,7 @@ async function getSettings() {
     "apiBase",
     "autoTrack",
     "cooldownHours",
+    "readerOverlay",
   ]);
   const originalApiBase = stored.apiBase || DEFAULT_API_BASE;
   const apiBaseRaw = normalizeApiBase(originalApiBase);
@@ -33,6 +34,7 @@ async function getSettings() {
     cooldownHours: Number.isFinite(stored.cooldownHours)
       ? stored.cooldownHours
       : DEFAULT_COOLDOWN_HOURS,
+    readerOverlay: stored.readerOverlay === true,
   };
 }
 
@@ -76,6 +78,48 @@ async function getJson(path) {
       throw new Error("Not signed in.");
     }
     throw new Error(data.error || `Request failed: ${res.status}`);
+  }
+  return data;
+}
+
+const REGISTRY_PUBLIC_TTL_MS = 6 * 60 * 60 * 1000;
+
+async function fetchRegistryPublic() {
+  const prev = await chrome.storage.local.get(["registryPublicAt", "registryPublic"]);
+  if (
+    prev.registryPublic &&
+    prev.registryPublicAt &&
+    Date.now() - prev.registryPublicAt < REGISTRY_PUBLIC_TTL_MS
+  ) {
+    return prev.registryPublic;
+  }
+  const apiBase = await getApiBase();
+  try {
+    const res = await fetch(`${apiBase}/api/registry/public`, {
+      method: "GET",
+      credentials: "omit",
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok && Array.isArray(data.domains)) {
+      await chrome.storage.local.set({ registryPublic: data, registryPublicAt: Date.now() });
+      return data;
+    }
+  } catch (_e) {}
+  return prev.registryPublic || { ok: true, domains: [], sources: [] };
+}
+
+async function fetchReaderOverlay(params) {
+  const apiBase = await getApiBase();
+  const qs = new URLSearchParams(params || {});
+  const res = await fetch(`${apiBase}/api/reader-overlay?${qs}`, {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    return { ok: false, error: "authentication required", status: 401, ...data };
   }
   return data;
 }
@@ -273,6 +317,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
       if (msg?.type === "SAVE_PROGRESS") {
         const data = await postJson("/api/progress", msg.payload);
+        try {
+          await chrome.storage.local.set({
+            progressBackupAt: Date.now(),
+            progressBackup: JSON.stringify({
+              at: new Date().toISOString(),
+              payload: msg.payload,
+              result: data,
+            }),
+          });
+        } catch (_e) {}
         fetchUnreadAndUpdateBadge().catch(() => {});
         sendResponse({ ok: true, data });
         return;
@@ -280,6 +334,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       if (msg?.type === "GET_SETTINGS") {
         const settings = await getSettings();
         sendResponse({ ok: true, data: settings });
+        return;
+      }
+      if (msg?.type === "GET_REGISTRY_PUBLIC") {
+        const data = await fetchRegistryPublic();
+        sendResponse({ ok: true, data });
+        return;
+      }
+      if (msg?.type === "GET_READER_OVERLAY") {
+        try {
+          const data = await fetchReaderOverlay(msg.payload || {});
+          sendResponse({ ok: true, data });
+        } catch (err) {
+          sendResponse({ ok: false, error: String(err?.message || err) });
+        }
         return;
       }
       if (msg?.type === "SET_API_BASE") {

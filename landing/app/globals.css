@@ -3,6 +3,8 @@
 @tailwind utilities;
 
 :root {
+  --font-inter: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: Georgia, "Times New Roman", serif;
   --color-background: #f5f1e8;
   --color-surface: #ffffff;
   --color-text: #1a1a1a;

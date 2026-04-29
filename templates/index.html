@@ -310,7 +310,7 @@
 <body>
   <div class="shell">
     <header class="topbar glass">
-      <h1>Manga Watchlist</h1>
+      <h1>Manga Watchlist{% if demo_mode %} <span class="muted" style="font-size:0.75rem;font-weight:400;">(demo)</span>{% endif %}</h1>
       <div class="top-controls">
         <form method="get" action="{{ url_for('index') }}" style="display:inline-flex;gap:8px;align-items:center;">
           <input name="q" value="{{ search_q }}" placeholder="Search..." class="input" />
@@ -325,12 +325,21 @@
           <option value="comedy">Comedy</option>
           <option value="drama">Drama</option>
         </select>
+        <a class="btn" href="{{ url_for('sources_page') }}">Sources</a>
+        <a class="btn" href="{{ url_for('source_requests_page') }}">Source requests</a>
+        {% if not demo_mode %}<a class="btn" href="{{ url_for('next_up') }}">Next up</a>{% endif %}
+        <a class="btn" href="{{ url_for('demo_dashboard') }}">Demo</a>
+        <a class="btn" href="{{ url_for('privacy_page') }}">Privacy</a>
         <a class="btn" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Extension ZIP</a>
         <button id="themeToggle" class="btn" type="button">☾</button>
+        {% if not demo_mode %}
+        <a class="btn" href="{{ url_for('account_settings') }}">Settings</a>
+        <a class="btn" href="{{ url_for('delete_account') }}">Account</a>
         <form action="/logout" method="post" data-loading-form="true" style="display:inline;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn" type="submit" data-loading-text="...">Logout</button>
         </form>
+        {% endif %}
       </div>
     </header>
 
@@ -343,10 +352,87 @@
         {% endif %}
       {% endwith %}
 
+      {% if demo_mode %}
+      <div class="flash" style="grid-column:1/-1;margin-bottom:16px;">
+        Demo mode: sample data only. <a href="{{ url_for('auth_page') }}">Sign in</a> for your real library.
+      </div>
+      {% endif %}
+
+      {% if show_onboarding and not demo_mode %}
+      <div class="flash" style="margin-bottom:20px;">
+        <strong>Welcome.</strong> Quick start:
+        (1) Install the <a href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">extension</a>,
+        (2) Add a series URL below,
+        (3) Use this dashboard to track updates.
+        <form action="{{ url_for('onboarding_dismiss') }}" method="post" style="display:inline;margin-left:12px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn" style="padding:4px 12px;font-size:12px;">Dismiss</button>
+        </form>
+      </div>
+      {% endif %}
+
+      {% if not demo_mode and stale_story_count is defined and stale_story_count and stale_story_count > 0 %}
+      <div class="flash" style="margin-bottom:16px;">
+        {{ stale_story_count }} series have not been checked in {{ dead_series_days }}+ days — consider a
+        <strong>Check stale</strong> or pausing long-dropped titles.
+      </div>
+      {% endif %}
+
+      {% if not demo_mode and rss_feed_url %}
+      <details class="glass" style="padding:14px 18px;margin-bottom:16px;">
+        <summary style="cursor:pointer;font-size:0.95rem;">Private RSS feed</summary>
+        <p class="muted" style="margin:10px 0 6px;font-size:13px;">Treat as a secret URL (anyone with it can read titles). Paste into Feedly or similar.</p>
+        <input class="input" readonly style="width:100%;max-width:none;font-size:13px;" value="{{ rss_feed_url }}">
+      </details>
+      {% endif %}
+
+      {% if not demo_mode and duplicate_hints %}
+      <details class="glass" style="padding:14px 18px;margin-bottom:20px;">
+        <summary style="cursor:pointer;font-size:0.95rem;">Possible duplicate listings</summary>
+        <p class="muted" style="margin:10px 0 14px;font-size:14px;">
+          Same normalized title on different sites but not yet linked — merge to one story card
+          (lowest bookmark id is the merge target).
+        </p>
+        {% for hint in duplicate_hints %}
+        <div style="margin:12px 0;padding-top:12px;border-top:1px solid var(--border);">
+          <div style="font-size:14px;margin-bottom:8px;"><strong>{{ hint.normalized_title }}</strong></div>
+          <ul style="margin:0;padding-left:18px;font-size:14px;line-height:1.5;">
+            {% for it in hint.items %}
+            <li>
+              {{ it.title }}
+              — <a href="{{ url_for('edit_bookmark', bookmark_id=it.id, **edit_link_kw) }}">Edit</a>
+            </li>
+            {% endfor %}
+          </ul>
+          {% if hint.merge_ids and hint.merge_ids|length > 0 %}
+          <button type="button"
+            class="btn merge-dup-btn"
+            style="margin-top:10px;"
+            data-keeper="{{ hint.keeper_id }}"
+            data-merge="{{ hint.merge_ids | join(',') }}">
+            Merge into bookmark #{{ hint.keeper_id }}
+          </button>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </details>
+      {% endif %}
+
+      {% if insights and insights.get('hints') %}
+      <section class="section" style="margin-bottom:0;">
+        <h2 class="headline" style="font-size:1.35rem;">For you</h2>
+        {% for hint in insights.hints %}
+          <div class="flash" style="font-size:14px;font-weight:400;line-height:1.45;">{{ hint }}</div>
+        {% endfor %}
+      </section>
+      {% endif %}
+
       <section class="section">
-      <h2 class="headline">Your collection</h2>
+      <h2 class="headline">Your stories</h2>
+      <p class="muted" style="margin:-12px 0 20px;font-size:14px;">Tracking the series, not the website — alternate URLs merge into one card when you link them (Edit → same story).</p>
 
       <div class="bar glass">
+        {% if not demo_mode %}
         <form class="add-inline input-row" action="/add" method="post" data-loading-form="true">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="q" value="{{ search_q or '' }}">
@@ -356,6 +442,8 @@
           <input class="input" name="url" placeholder="Series URL" required>
           <button class="btn btn-primary" type="submit" data-loading-text="...">Add</button>
         </form>
+        {% endif %}
+        {% if not demo_mode %}
         <form action="/check-all" method="post" data-loading-form="true" id="check-stale-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="q" value="{{ search_q or '' }}">
@@ -372,9 +460,24 @@
           <button id="force-check-all-btn" class="btn" type="submit" data-loading-text="...">Force check</button>
         </form>
         <span id="check-all-status-label" class="muted">{{ check_all_status_text }}</span>
-        <a class="btn" href="/export">Backup JSON</a>
+        <a class="btn" href="/export">Export backup</a>
+        <form action="/import" method="post" enctype="multipart/form-data" data-loading-form="true" style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="q" value="{{ search_q or '' }}">
+          <input type="hidden" name="sort" value="{{ sort }}">
+          <input type="hidden" name="page" value="{{ page }}">
+          <label class="muted" style="font-size:13px;">Restore:</label>
+          <input type="file" name="backup_file" accept="application/json,.json" required style="max-width:200px;font-size:13px;">
+          <button class="btn" type="submit" data-loading-text="...">Import JSON</button>
+        </form>
+        {% endif %}
       </div>
+      <p class="muted" style="margin:0 0 20px;font-size:14px;">{% if not demo_mode %}Import merges into your library (skips duplicates by URL). Keep an export before large imports.{% endif %}</p>
       </section>
+
+      {% if all_caught_up and not demo_mode and total_count > 0 %}
+      <p class="flash" style="margin-bottom:20px;">You are caught up — no unread chapters across tracked series.</p>
+      {% endif %}
 
       <div class="grid section" id="series-grid">
         {% for b in bookmarks %}
@@ -390,6 +493,9 @@
             <div class="card-meta">
               <p class="title">{{ b["title"] }}</p>
               <span class="tag">{% if b["new_update"] %}NEW{% else %}OK{% endif %}</span>
+              {% if (b.get('source_count') or 1) > 1 %}
+              <span class="tag" title="{% if ui_show_source_hosts and b.get('source_hosts') %}{{ b.source_hosts | join(', ') }}{% else %}Multiple sources; chapter numbers use the highest reported latest.{% endif %}">{{ b.source_count }} sources</span>
+              {% endif %}
             </div>
             <div class="chapter-progress">
               <div class="progress-row">
@@ -429,18 +535,29 @@
               {% endif %}
               <a class="btn" href="{{ b['latest_seen_url'] if (b.latest_seen_url or '')|trim else b['url'] }}" target="_blank" rel="noreferrer">Open Latest</a>
               <a class="btn" href="{{ b['url'] }}" target="_blank" rel="noreferrer">Open</a>
+              {% if not demo_mode %}
               <a class="btn" href="{{ url_for('edit_bookmark', bookmark_id=b['id'], **edit_link_kw) }}">Edit</a>
-              <form action="/check/{{ b['id'] }}" method="post" data-loading-form="true">
+              {% endif %}
+              {% if not demo_mode %}
+              <form action="{{ url_for('check_story_group') }}" method="post" data-loading-form="true">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="story_id" value="{{ b['story_id'] }}">
                 <input type="hidden" name="q" value="{{ search_q or '' }}">
                 <input type="hidden" name="sort" value="{{ sort }}">
                 <input type="hidden" name="page" value="{{ page }}">
-                <button class="btn" type="submit" data-loading-text="...">Check</button>
+                <button class="btn" type="submit" data-loading-text="...">Check{% if (b.get('source_count') or 1) > 1 %} all sources{% endif %}</button>
               </form>
+              {% endif %}
+              {% set report_href = source_bug_report_href(b) %}
+              {% if not demo_mode and report_href and report_href != '#' %}
+              <a class="btn" href="{{ report_href }}" target="_blank" rel="noopener noreferrer">Report source</a>
+              {% endif %}
             </div>
           </article>
         {% else %}
-          <div class="flash" style="grid-column:1 / -1;">No bookmarks yet.</div>
+          <div class="flash" style="grid-column:1 / -1;">
+            {% if demo_mode %}No demo cards (unexpected).{% else %}Add your first series: paste a <a href="{{ url_for('sources_page') }}">supported</a> series URL above with a title, then check for updates.{% endif %}
+          </div>
         {% endfor %}
       </div>
 
@@ -459,6 +576,13 @@
           {% endif %}
         </div>
       {% endif %}
+
+      <footer class="muted" style="margin-top:32px;font-size:13px;text-align:center;">
+        <a href="{{ url_for('sources_page') }}">Supported sources</a> ·
+        <a href="{{ url_for('privacy_page') }}">Privacy</a> ·
+        <a href="{{ url_for('changelog_page') }}">Changelog</a> ·
+        <a href="{{ url_for('demo_dashboard') }}">Demo</a>
+      </footer>
     </main>
   </div>
 
@@ -552,6 +676,33 @@
         sessionStorage.removeItem("mt-check-all-poll");
       }
     })();
+
+    document.querySelectorAll(".merge-dup-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!window.confirm("Merge these bookmarks into one story card?")) return;
+        const keeper = parseInt(btn.getAttribute("data-keeper") || "0", 10);
+        const raw = (btn.getAttribute("data-merge") || "").split(",");
+        const merge_ids = raw
+          .map((s) => parseInt(s.trim(), 10))
+          .filter((n) => n > 0 && n !== keeper);
+        try {
+          const res = await fetch("/api/library/merge-bookmarks", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ keeper_id: keeper, merge_ids }),
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok || !j.ok) {
+            alert((j && j.error) || "Merge failed");
+            return;
+          }
+          window.location.reload();
+        } catch (_) {
+          alert("Merge failed");
+        }
+      });
+    });
   </script>
 </body>
 </html>
