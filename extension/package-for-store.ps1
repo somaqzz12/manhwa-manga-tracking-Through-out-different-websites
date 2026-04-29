@@ -23,6 +23,7 @@ New-Item -ItemType Directory -Force -Path $staging | Out-Null
 try {
   $files = @(
     "manifest.json",
+    "config.js",
     "background.js",
     "content.js",
     "popup.html",
