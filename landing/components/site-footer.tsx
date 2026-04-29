@@ -40,7 +40,7 @@ export function SiteFooter() {
         </div>
         <p className="flex items-center gap-2 text-sm text-slate-500">
           <Heart className="h-4 w-4 shrink-0 text-indigo-500/80" aria-hidden />
-          Built by {authorName} · © {year} Zero Hour
+          Built by {authorName} · © {year} Manga Watchlist
         </p>
       </div>
       <p className="mx-auto mt-8 max-w-2xl text-center text-xs leading-relaxed text-slate-600">

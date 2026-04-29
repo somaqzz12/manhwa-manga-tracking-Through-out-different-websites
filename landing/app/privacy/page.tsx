@@ -6,9 +6,9 @@ import { SiteHeader } from "@/components/site-header";
 import { githubUrl } from "@/lib/site-config";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — Zero Hour Companion",
+  title: "Privacy Policy — Manga Watchlist Companion",
   description:
-    "What the Zero Hour browser extension stores, what it sends, and the permissions it uses.",
+    "What the Manga Watchlist browser extension stores, what it sends, and the permissions it uses.",
 };
 
 export default function PrivacyPage() {
@@ -28,17 +28,17 @@ export default function PrivacyPage() {
             Privacy Policy
           </h1>
           <p className="mt-3 text-sm text-slate-500">
-            Zero Hour Companion (Chrome extension) · Last updated April 29, 2026
+            Manga Watchlist Companion (Chrome extension) · Last updated April 29, 2026
           </p>
 
           <div className="prose-content mt-10 space-y-8 text-slate-300">
             <Section title="What the extension does">
               <p>
                 The extension helps you sync manga and manhwa <strong>reading progress</strong>{" "}
-                to your Zero Hour account. By default it talks to the official
-                Zero Hour server at{" "}
+                to your Manga Watchlist account. By default it talks to the
+                official Manga Watchlist server at{" "}
                 <code className="text-indigo-200">
-                  https://manhwa-manga-tracking-through-out.onrender.com
+                  https://app.mangawatchlist.space
                 </code>
                 . Advanced users can point the extension at a different deployment
                 from the options page. The extension does not host manga content
@@ -73,7 +73,7 @@ export default function PrivacyPage() {
               </h3>
               <ul className="mt-2 list-disc space-y-1 pl-6">
                 <li>
-                  <strong>Your Zero Hour server only.</strong> When you save
+                  <strong>Your Manga Watchlist server only.</strong> When you save
                   progress or refresh the unread badge, requests go to the
                   configured backend URL (default: the official server above).
                   These requests include chapter URLs, series titles, and numeric
@@ -84,7 +84,7 @@ export default function PrivacyPage() {
                   <code>mangadex.org</code> chapter pages, the extension may call
                   the public <code>api.mangadex.org</code> endpoint to read
                   chapter and series metadata. No MangaDex account is required;
-                  no Zero Hour credentials are sent to MangaDex.
+                  no Manga Watchlist credentials are sent to MangaDex.
                 </li>
               </ul>
 
@@ -121,15 +121,15 @@ export default function PrivacyPage() {
                   manga and manhwa are read on hundreds of independent domains and
                   mirrors. The content script only inspects the page you are on
                   for chapter cues; the extension itself only requests host
-                  permission for the configured Zero Hour server (and, on MangaDex
-                  pages, the public MangaDex API via CORS).
+                  permission for the configured Manga Watchlist server (and, on
+                  MangaDex pages, the public MangaDex API via CORS).
                 </li>
               </ul>
             </Section>
 
             <Section title="Sign-in and session">
               <p>
-                You sign in <strong>in the browser</strong> on the Zero Hour
+                You sign in <strong>in the browser</strong> on the Manga Watchlist
                 website. The extension reuses that session cookie when calling
                 the API, the same way the dashboard would. The extension author
                 cannot access your password or session.

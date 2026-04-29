@@ -14,7 +14,7 @@ if (-not $version) { $version = "0.0.0" }
 
 $dist = Join-Path $root "dist"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
-$zipName = "zero-hour-companion-v$version.zip"
+$zipName = "manga-watchlist-companion-v$version.zip"
 $zipPath = Join-Path $dist $zipName
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 

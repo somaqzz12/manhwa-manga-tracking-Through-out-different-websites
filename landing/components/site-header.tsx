@@ -32,9 +32,9 @@ export function SiteHeader() {
             className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-indigo-400 to-indigo-600 text-sm font-bold shadow-accent"
             aria-hidden
           >
-            ZH
+            MW
           </span>
-          <span className="tracking-tight">Zero Hour</span>
+          <span className="tracking-tight">Manga Watchlist</span>
         </Link>
         <div className="flex items-center gap-3">
           <Link

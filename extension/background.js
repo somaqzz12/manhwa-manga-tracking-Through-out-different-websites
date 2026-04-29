@@ -2,9 +2,9 @@
 // Edit extension/config.js to point the companion at a different deployment.
 importScripts("config.js");
 const DEFAULT_COOLDOWN_HOURS = 24;
-const UNREAD_ALARM_NAME = "zero-hour-unread-poll";
+const UNREAD_ALARM_NAME = "manga-watchlist-unread-poll";
 const UNREAD_POLL_PERIOD_MINUTES = 30;
-const CONTEXT_MENU_ID = "zero-hour-track-chapter";
+const CONTEXT_MENU_ID = "manga-watchlist-track-chapter";
 const TRACK_COMMAND = "track-current-chapter";
 const DEBUG_LOG_LIMIT = 25;
 
@@ -31,7 +31,7 @@ async function getApiBase() {
 
 async function postJson(path, payload) {
   const apiBase = await getApiBase();
-  // credentials: "include" forwards the Zero Hour session cookie when the
+  // credentials: "include" forwards the Manga Watchlist session cookie when the
   // server runs with REQUIRE_API_AUTH=1; without it the API rejects extension
   // requests as unauthenticated even when the user is logged into the dashboard.
   const res = await fetch(`${apiBase}${path}`, {

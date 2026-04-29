@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Zero Hour — Settings</title>
+  <title>Manga Watchlist — Settings</title>
   <style>
     :root {
       color-scheme: dark;
@@ -163,18 +163,18 @@
 <body>
   <div class="wrap">
     <div class="brand">
-      <div class="logo">ZH</div>
+      <div class="logo">MW</div>
       <div>
-        <h1>Zero Hour — Settings</h1>
-        <div class="sub">By default the companion talks to the official Zero Hour server. Override the URL only if you run your own deployment.</div>
+        <h1>Manga Watchlist — Settings</h1>
+        <div class="sub">By default the companion talks to the official Manga Watchlist server. Override the URL only if you run your own deployment.</div>
       </div>
     </div>
 
     <section class="card">
       <h2>Backend URL</h2>
-      <p class="help">The Zero Hour site this extension syncs to. Leave the default to use the official server; only change it if you're hosting your own copy. The popup pings <code>/healthz</code> here and the badge polls <code>/api/unread-count</code>.</p>
+      <p class="help">The Manga Watchlist site this extension syncs to. Leave the default to use the official server; only change it if you're hosting your own copy. The popup pings <code>/healthz</code> here and the badge polls <code>/api/unread-count</code>.</p>
       <label class="field" for="apiBase">Backend URL</label>
-      <input id="apiBase" type="text" placeholder="https://manhwa-manga-tracking-through-out.onrender.com">
+      <input id="apiBase" type="text" placeholder="https://app.mangawatchlist.space">
       <div class="toolbar">
         <button id="saveApiBase">Save backend URL</button>
         <button class="secondary" id="testConnection">Test connection</button>

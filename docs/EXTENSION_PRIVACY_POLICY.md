@@ -1,13 +1,13 @@
-# Privacy policy — Zero Hour Companion (Chrome extension)
+# Privacy policy — Manga Watchlist Companion (Chrome extension)
 
 **Last updated:** April 29, 2026
 
-This policy describes the **Zero Hour Companion** browser extension published from the open-source project at  
+This policy describes the **Manga Watchlist Companion** browser extension published from the open-source project at  
 https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites
 
 ## What the extension does
 
-The extension helps you sync manga and manhwa **reading progress** to your **Zero Hour** account. By default it talks to the official Zero Hour server at `https://manhwa-manga-tracking-through-out.onrender.com`. Advanced users can point the extension at a different deployment from the options page. The extension does not replace a publisher’s website and does not host manga content.
+The extension helps you sync manga and manhwa **reading progress** to your **Manga Watchlist** account. By default it talks to the official Manga Watchlist server at `https://app.mangawatchlist.space`. Advanced users can point the extension at a different deployment from the options page. The extension does not replace a publisher’s website and does not host manga content.
 
 ## Data the extension collects
 
@@ -20,8 +20,8 @@ The extension **does not** sell, rent, or trade personal data. It **does not** i
 
 ### Sent to servers
 
-- **Your Zero Hour server only.** When you save progress or refresh the unread badge, the extension sends HTTP requests **only to the configured backend URL** (default: `https://manhwa-manga-tracking-through-out.onrender.com`). Those requests may include chapter URLs, series titles, and numeric chapter identifiers your tracker needs to update bookmarks.
-- **MangaDex (optional, read-only metadata).** On `mangadex.org` chapter pages, the extension may call the public MangaDex API (`api.mangadex.org`) to read chapter and series metadata (titles, chapter numbers). No MangaDex account is required for that call, and the extension does not send your Zero Hour credentials to MangaDex.
+- **Your Manga Watchlist server only.** When you save progress or refresh the unread badge, the extension sends HTTP requests **only to the configured backend URL** (default: `https://app.mangawatchlist.space`). Those requests may include chapter URLs, series titles, and numeric chapter identifiers your tracker needs to update bookmarks.
+- **MangaDex (optional, read-only metadata).** On `mangadex.org` chapter pages, the extension may call the public MangaDex API (`api.mangadex.org`) to read chapter and series metadata (titles, chapter numbers). No MangaDex account is required for that call, and the extension does not send your Manga Watchlist credentials to MangaDex.
 
 The extension **does not** send your reading activity to the extension author or to any other third party.
 

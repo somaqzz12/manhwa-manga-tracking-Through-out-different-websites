@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: zero-hour
+    name: manga-watchlist
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -20,11 +20,11 @@ services:
         value: "1"
       - key: DATABASE_URL
         fromDatabase:
-          name: zero-hour-db
+          name: manga-watchlist-db
           property: connectionString
       - key: SECRET_KEY
         generateValue: true
 
 databases:
-  - name: zero-hour-db
+  - name: manga-watchlist-db
     plan: free

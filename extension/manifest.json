@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Zero Hour Companion",
-  "version": "0.4.0",
-  "description": "Sign in to Zero Hour and your manga and manhwa reading progress syncs from any reader. Optional prompts, badge, and shortcuts.",
+  "name": "Manga Watchlist Companion",
+  "version": "0.5.0",
+  "description": "Sign in to Manga Watchlist and your manga and manhwa reading progress syncs from any reader. Optional prompts, badge, and shortcuts.",
   "homepage_url": "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites",
   "permissions": ["storage", "activeTab", "tabs", "alarms", "contextMenus"],
   "host_permissions": [
+    "https://app.mangawatchlist.space/*",
     "https://manhwa-manga-tracking-through-out.onrender.com/*",
     "http://127.0.0.1:5000/*"
   ],
@@ -20,7 +21,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Zero Hour",
+    "default_title": "Manga Watchlist",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",

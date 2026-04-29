@@ -21,7 +21,7 @@ export const extensionPrivacyHref =
 export const authorName =
   process.env.NEXT_PUBLIC_AUTHOR_NAME?.trim() || "Osamah";
 
-/** Public web app URL where users register and sign in (your Render/Fly deployment). */
+/** Public web app URL where users register and sign in. */
 export const dashboardUrl =
   process.env.NEXT_PUBLIC_DASHBOARD_URL?.trim() ||
-  "https://manhwa-manga-tracking-through-out.onrender.com";
+  "https://app.mangawatchlist.space";

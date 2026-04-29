@@ -19,13 +19,14 @@ export function Hero() {
             Web app · Chrome extension
           </p>
           <h1 className="bg-gradient-to-b from-white to-slate-300 bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl lg:text-[3.25rem] lg:leading-[1.1]">
-            Hit zero unread, anywhere you read.
+            Your manga watchlist, everywhere you read.
           </h1>
           <p className="mt-5 text-lg text-slate-400 sm:text-xl">
-            Zero Hour is a manga and manhwa tracker. Sign up with a username and
-            password, add series from any listing URL, and open your dashboard from
-            anywhere. The Chrome extension captures the chapter you’re reading so
-            unread counts and one-click Continue stay accurate on your account.
+            Manga Watchlist is a manga and manhwa tracker. Sign up with a
+            username and password, add series from any listing URL, and open
+            your watchlist from anywhere. The Chrome extension captures the
+            chapter you’re reading so unread counts and one-click Continue stay
+            accurate on your account.
           </p>
           <div className="mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:justify-start">
             <Link
@@ -33,7 +34,7 @@ export function Hero() {
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex min-h-[3.25rem] items-center justify-center gap-2 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 px-8 py-3.5 text-base font-semibold text-white shadow-accentLg outline-none ring-1 ring-white/15 transition hover:from-indigo-400 hover:to-violet-500 focus-visible:ring-2 focus-visible:ring-indigo-400"
-              aria-label={isStore ? "Add Zero Hour to Chrome" : "Open extension source on GitHub"}
+              aria-label={isStore ? "Add Manga Watchlist to Chrome" : "Open extension source on GitHub"}
             >
               <ChromeIcon className="h-7 w-7 shrink-0 text-white" />
               {isStore ? "Add to Chrome" : "Get extension (GitHub)"}
@@ -85,9 +86,9 @@ function HeroVisual() {
           <div className="mb-3 flex items-center justify-between border-b border-slate-700/60 pb-3">
           <div className="flex items-center gap-2">
             <span className="grid size-8 place-items-center rounded-lg bg-gradient-to-br from-indigo-400 to-indigo-600 text-xs font-bold text-white">
-              ZH
+              MW
             </span>
-            <span className="text-sm font-semibold text-white">Zero Hour</span>
+            <span className="text-sm font-semibold text-white">Manga Watchlist</span>
           </div>
           <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
             <span className="size-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />

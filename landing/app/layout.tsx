@@ -9,14 +9,16 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Zero Hour — Hit zero on every series",
+  title: "Manga Watchlist — Track every chapter",
   description:
-    "Zero Hour is a manga and manhwa tracker. Sign in from anywhere, build your library, and use the Chrome extension to sync the chapter you read. Unread counts and one-click Continue.",
+    "Manga Watchlist is a manga and manhwa tracker. Sign in from anywhere, build your watchlist, and use the Chrome extension to sync the chapter you read. Unread counts and one-click Continue.",
+  metadataBase: new URL("https://mangawatchlist.space"),
   openGraph: {
-    title: "Zero Hour",
+    title: "Manga Watchlist",
     description:
-      "Manga & manhwa tracker. Hit zero unread on every series — dashboard plus Chrome extension keep your account in sync.",
+      "Manga & manhwa watchlist. Sign in anywhere — dashboard plus Chrome extension keep every chapter in sync.",
     type: "website",
+    url: "https://mangawatchlist.space",
   },
   verification: {
     google: "MDvTaEaXcUEc4wPBYIvZpWAgwXVuK12chNDMNF-eUbc",

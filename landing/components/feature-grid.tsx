@@ -16,7 +16,7 @@ const features = [
   {
     icon: RefreshCw,
     title: "Scheduled checks",
-    body: "Zero Hour checks listing pages on a timer so “latest chapter” and behind counts stay fresh without you refreshing anything.",
+    body: "Manga Watchlist checks listing pages on a timer so “latest chapter” and behind counts stay fresh without you refreshing anything.",
   },
   {
     icon: BookMarked,
