@@ -16,8 +16,7 @@ export const bugReportUrl =
 
 /** Privacy notes for Chrome Web Store (extension disclosure). */
 export const extensionPrivacyHref =
-  process.env.NEXT_PUBLIC_EXTENSION_PRIVACY_URL?.trim() ||
-  `${githubUrl}/blob/main/docs/EXTENSION_PRIVACY_POLICY.md`;
+  process.env.NEXT_PUBLIC_EXTENSION_PRIVACY_URL?.trim() || "/privacy";
 
 export const authorName =
   process.env.NEXT_PUBLIC_AUTHOR_NAME?.trim() || "Osamah";

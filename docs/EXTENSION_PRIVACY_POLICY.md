@@ -7,7 +7,7 @@ https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-website
 
 ## What the extension does
 
-The extension helps you sync manga and manhwa **reading progress** to a **self-hosted** Manga Tracker instance that **you** run (for example on your own computer or on a host such as Render). It does not replace a publisher’s website and does not host manga content.
+The extension helps you sync manga and manhwa **reading progress** to your **Manga Tracker** account. By default it talks to the official Manga Tracker server at `https://manhwa-manga-tracking-through-out.onrender.com`. Advanced users can point the extension at a different deployment from the options page. The extension does not replace a publisher’s website and does not host manga content.
 
 ## Data the extension collects
 
@@ -20,7 +20,7 @@ The extension **does not** sell, rent, or trade personal data. It **does not** i
 
 ### Sent to servers
 
-- **Your Manga Tracker server only.** When you save progress or refresh the unread badge, the extension sends HTTP requests **only to the backend URL you configure** (default example: `http://127.0.0.1:5000`). Those requests may include chapter URLs, series titles, and numeric chapter identifiers your tracker needs to update bookmarks.
+- **Your Manga Tracker server only.** When you save progress or refresh the unread badge, the extension sends HTTP requests **only to the configured backend URL** (default: `https://manhwa-manga-tracking-through-out.onrender.com`). Those requests may include chapter URLs, series titles, and numeric chapter identifiers your tracker needs to update bookmarks.
 - **MangaDex (optional, read-only metadata).** On `mangadex.org` chapter pages, the extension may call the public MangaDex API (`api.mangadex.org`) to read chapter and series metadata (titles, chapter numbers). No MangaDex account is required for that call, and the extension does not send your Manga Tracker credentials to MangaDex.
 
 The extension **does not** send your reading activity to the extension author or to any other third party.
