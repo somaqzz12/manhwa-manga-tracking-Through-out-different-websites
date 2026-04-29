@@ -8,19 +8,24 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#030712",
-        card: "#111827",
+        background: "var(--color-background)",
+        card: "var(--color-surface)",
+        text: "var(--color-text)",
+        muted: "var(--color-muted)",
+        accent: "var(--color-accent)",
+        border: "var(--color-border)",
       },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+        serif: ["var(--font-display)", "Georgia", "serif"],
       },
       backgroundImage: {
         "grid-fade":
-          "radial-gradient(ellipse 900px 520px at 92% -8%, rgba(99, 102, 241, 0.12), transparent 55%), radial-gradient(ellipse 600px 400px at 100% 12%, rgba(56, 189, 248, 0.05), transparent 50%)",
+          "radial-gradient(ellipse 920px 540px at 94% -8%, rgba(124, 92, 255, 0.16), transparent 56%), radial-gradient(ellipse 620px 380px at 8% 100%, rgba(167, 139, 250, 0.09), transparent 52%)",
       },
       boxShadow: {
-        accent: "0 8px 32px rgba(99, 102, 241, 0.25)",
-        accentLg: "0 24px 64px rgba(99, 102, 241, 0.15)",
+        accent: "0 10px 28px rgba(124, 92, 255, 0.22)",
+        accentLg: "0 24px 54px rgba(124, 92, 255, 0.16)",
       },
     },
   },

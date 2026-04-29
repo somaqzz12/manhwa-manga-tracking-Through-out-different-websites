@@ -16,13 +16,13 @@ export function ExtensionPreview() {
   const [tab, setTab] = useState<TabId>("popup");
 
   return (
-    <section className="border-t border-white/[0.06] px-4 py-20 sm:px-6">
+    <section className="border-t border-[var(--color-border)] px-4 py-20 sm:px-6">
       <div className="mx-auto max-w-6xl">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h2 className="font-serif text-3xl font-bold tracking-tight text-[var(--color-text)] sm:text-4xl">
             Extension preview
           </h2>
-          <p className="mt-4 text-lg text-slate-400">
+          <p className="mt-4 text-lg text-[var(--color-muted)]">
             Pop the tray for status and unread totals, then manage everything from
             the web dashboard — same bold dark UI end to end.
           </p>
@@ -34,10 +34,10 @@ export function ExtensionPreview() {
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
                 tab === t.id
-                  ? "bg-indigo-600 text-white shadow-accent"
-                  : "border border-slate-600 bg-card text-slate-300 hover:border-indigo-500/40 hover:text-white"
+                  ? "bg-[var(--color-accent)] text-white shadow-accent"
+                  : "border border-[var(--color-border)] bg-card text-[var(--color-muted)] hover:border-[var(--color-accent)]/40 hover:text-[var(--color-text)]"
               }`}
             >
               {t.label}

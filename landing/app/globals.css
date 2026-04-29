@@ -3,13 +3,28 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  --color-background: #f5f1e8;
+  --color-surface: #ffffff;
+  --color-text: #1a1a1a;
+  --color-muted: #6f6f6f;
+  --color-border: #1a1a1a;
+  --color-accent: #6d5dfc;
+}
+
+.dark {
+  --color-background: #0f0f10;
+  --color-surface: #1a1a1a;
+  --color-text: #eaeaea;
+  --color-muted: #9a9a9a;
+  --color-border: #eaeaea;
 }
 
 body {
-  @apply antialiased text-slate-200 bg-background min-h-screen;
+  @apply antialiased bg-background min-h-screen;
+  color: var(--color-text);
 }
 
 ::selection {
-  @apply bg-indigo-500/40 text-white;
+  background: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  color: #ffffff;
 }

@@ -42,13 +42,13 @@ const features = [
 
 export function FeatureGrid() {
   return (
-    <section className="border-t border-white/[0.06] px-4 py-20 sm:px-6">
+    <section className="border-t border-[var(--color-border)] px-4 py-20 sm:px-6">
       <div className="mx-auto max-w-6xl">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h2 className="font-serif text-3xl font-bold tracking-tight text-[var(--color-text)] sm:text-4xl">
             Built for heavy readers
           </h2>
-          <p className="mt-4 text-lg text-slate-400">
+          <p className="mt-4 text-lg text-[var(--color-muted)]">
             Everything you need to stay current without spreadsheets or fragile
             bookmarks.
           </p>
@@ -57,13 +57,13 @@ export function FeatureGrid() {
           {features.map(({ icon: Icon, title, body }) => (
             <article
               key={title}
-              className="group rounded-2xl border border-white/[0.07] bg-card p-6 shadow-sm ring-1 ring-white/[0.03] transition hover:border-indigo-500/30 hover:ring-indigo-500/20"
+              className="group rounded-2xl border border-[var(--color-border)] bg-card p-6 shadow-sm ring-1 ring-black/5 transition hover:border-[var(--color-accent)]/40"
             >
-              <div className="mb-4 inline-flex size-11 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-300 transition group-hover:bg-indigo-500/25 group-hover:text-indigo-200">
+              <div className="mb-4 inline-flex size-11 items-center justify-center rounded-xl bg-[var(--color-accent)]/15 text-[var(--color-accent)] transition group-hover:bg-[var(--color-accent)]/25">
                 <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden />
               </div>
-              <h3 className="text-lg font-semibold text-white">{title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">{body}</p>
+              <h3 className="font-serif text-lg font-semibold text-[var(--color-text)]">{title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--color-muted)]">{body}</p>
             </article>
           ))}
         </div>
