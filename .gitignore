@@ -5,4 +5,10 @@ landing/out/
 __pycache__/
 *.pyc
 tracker.db
+*.db
+.env
+.env.*
+*.env
+secrets.*
+*.pem
 extension/dist/

@@ -4,6 +4,7 @@ import re
 import sqlite3
 import json
 import logging
+import secrets
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -431,6 +432,30 @@ def _migrate_sqlite_bookmarks_to_user_unique(conn) -> None:
     conn.execute("PRAGMA foreign_keys = ON")
 
 
+def _bootstrap_default_user_password_hash() -> str:
+    """Random password hash so the synthetic default user is not login-capable."""
+    return generate_password_hash(secrets.token_hex(32))
+
+
+def _harden_legacy_default_user_password(conn) -> None:
+    """Replace the historical known password (username `local`, password `local-only`) if still stored."""
+    row = conn.execute(
+        "SELECT id, password_hash FROM users WHERE email = ?",
+        (DEFAULT_USER_EMAIL,),
+    ).fetchone()
+    if not row:
+        return
+    try:
+        ph = row["password_hash"]
+        if ph and check_password_hash(ph, "local-only"):
+            conn.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (_bootstrap_default_user_password_hash(), row["id"]),
+            )
+    except Exception:
+        log.exception("harden legacy default user password failed")
+
+
 def init_db() -> None:
     if IS_POSTGRES:
         with get_conn() as conn:
@@ -494,7 +519,7 @@ def init_db() -> None:
             now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
             conn.execute(
                 "INSERT OR IGNORE INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-                (DEFAULT_USER_EMAIL, generate_password_hash("local-only"), now),
+                (DEFAULT_USER_EMAIL, _bootstrap_default_user_password_hash(), now),
             )
             conn.execute(
                 "UPDATE users SET username = COALESCE(username, split_part(email, '@', 1)) WHERE username IS NULL"
@@ -503,6 +528,7 @@ def init_db() -> None:
             default_user_id = default_user["id"]
             conn.execute("UPDATE bookmarks SET user_id = ? WHERE user_id IS NULL", (default_user_id,))
             conn.execute("UPDATE reading_progress SET user_id = ? WHERE user_id IS NULL", (default_user_id,))
+            _harden_legacy_default_user_password(conn)
         return
 
     with get_conn() as conn:
@@ -585,7 +611,7 @@ def init_db() -> None:
         now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
         conn.execute(
             "INSERT OR IGNORE INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-            (DEFAULT_USER_EMAIL, generate_password_hash("local-only"), now),
+            (DEFAULT_USER_EMAIL, _bootstrap_default_user_password_hash(), now),
         )
         conn.execute(
             "UPDATE users SET username = COALESCE(username, substr(email, 1, instr(email, '@') - 1)) WHERE username IS NULL"
@@ -597,6 +623,7 @@ def init_db() -> None:
             "UPDATE reading_progress SET user_id = ? WHERE user_id IS NULL",
             (default_user_id,),
         )
+        _harden_legacy_default_user_password(conn)
 
 
 def ensure_db_ready() -> None:

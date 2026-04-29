@@ -96,7 +96,7 @@ All configuration is via environment variables. The `Required?` column is what t
 | `AUTH_RATE_LIMIT_PER_USER` | Optional | `8/minute;30/hour` | Flask-Limiter rule applied per username. |
 | `RATELIMIT_STORAGE_URI` | Optional | `memory://` (debug), Redis recommended in prod | Storage backend for Flask-Limiter. |
 | `BUG_REPORT_URL`, `CONTACT_EMAIL`, `GITHUB_URL` | Optional | Defaults baked into the templates | Strings used in the footer. |
-| `DEFAULT_USER_EMAIL` | Optional | `local@tracker` | Email used for the auto-created default user when no users exist. |
+| `DEFAULT_USER_EMAIL` | Optional | `local@tracker` | Email for the auto-created **system** user used to attach legacy rows with `user_id` NULL. A **random** password hash is stored (not login-capable). Older DBs created before this change are rotated off the historical `local-only` password on startup. |
 
 ## Browser extension
 
