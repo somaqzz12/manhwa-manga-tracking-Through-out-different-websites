@@ -1,7 +1,7 @@
 # Build a Chrome Web Store–ready .zip of the extension (root of the zip = extension root).
 # Run from the extension folder:
 #   powershell -ExecutionPolicy Bypass -File .\package-for-store.ps1
-# Output: extension/dist/manga-tracker-companion-v<version>.zip
+# Output: extension/dist/manga-watchlist-companion-v<version>.zip
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
