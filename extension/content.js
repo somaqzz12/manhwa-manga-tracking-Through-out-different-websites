@@ -1,3 +1,5 @@
+const MANGA_PATH_KEYWORD_RE = /(manga|manhwa|manhua|webtoon|series|comic|read|title|chap|toon|view|episode|reader)/i;
+
 function normalizeSeriesUrl(url, options = {}) {
   try {
     const u = new URL(url);
@@ -14,6 +16,13 @@ function normalizeSeriesUrl(url, options = {}) {
       if (lastLooksChapter || splitLooksChapter) {
         parts.pop();
         if (splitLooksChapter) parts.pop();
+      } else if (/^\d+(?:\.\d+)?$/.test(last)) {
+        // /manga/<slug>/<num>, /read/<slug>/<num>, /series/<id>/45.5, etc.
+        // Drop just the chapter number so the series URL stays at /manga/<slug>.
+        const earlier = parts.slice(0, -1).join(" ");
+        if (MANGA_PATH_KEYWORD_RE.test(earlier)) {
+          parts.pop();
+        }
       }
     }
     // Reader pages that encode chapter as trailing "-<num>" in series slug.
@@ -67,6 +76,17 @@ const SUPPORTED_HOST_HINTS = [
   "tcb",
   "zinmanga",
   "earlymanga",
+  "weeb",
+  "aqua",
+  "lily",
+  "harem",
+  "void",
+  "omega",
+  "realm",
+  "demon",
+  "shiba",
+  "lunar",
+  "chap",
 ];
 
 // Per-host extractors that override the generic title/chapter heuristics. Each
@@ -200,11 +220,36 @@ function parseChapterFromUrl(url) {
 }
 
 function pathHasChapterSignal(path) {
-  return (
+  if (
     /\/c\d+(?:\.\d+)?(?:\/|$)/i.test(path) ||
     /\/(?:chapter|ch|episode|ep)\/\d+(?:\.\d+)?(?:\/|$)/i.test(path) ||
     /\/(?:chapter|ch|episode|ep)[^/]*\d+(?:\.\d+)?(?:\/|$)/i.test(path)
-  );
+  ) {
+    return true;
+  }
+  // /manga/<slug>/<num>, /read/<slug>/<num>, /series/<id>/<num>, /title/<id>/45.5
+  const parts = (path || "").split("/").filter(Boolean);
+  if (parts.length >= 2) {
+    const tail = parts[parts.length - 1];
+    if (/^\d+(?:\.\d+)?$/.test(tail)) {
+      const earlier = parts.slice(0, -1).join(" ");
+      if (MANGA_PATH_KEYWORD_RE.test(earlier)) return true;
+    }
+  }
+  return false;
+}
+
+function pathHasBareNumericTail(path) {
+  // /<slug>/<num> with NO manga keyword in earlier segments. We still treat
+  // this as a chapter signal when paired with a manga-host hint or a
+  // chapter-shaped <title>; on its own it would be too noisy.
+  const parts = (path || "").split("/").filter(Boolean);
+  if (parts.length < 2) return false;
+  const tail = parts[parts.length - 1];
+  if (!/^\d+(?:\.\d+)?$/.test(tail)) return false;
+  const num = Number(tail);
+  if (!Number.isFinite(num) || num < 1 || num > 5000) return false;
+  return true;
 }
 
 function pageLooksLikeReader() {
@@ -325,6 +370,7 @@ function looksLikeMangaSite(url, title) {
     const hostHasHint = SUPPORTED_HOST_HINTS.some((hint) => host.includes(hint));
     const pathHasChapter = pathHasChapterSignal(path);
     const pathHasSlugChapter = pathLooksLikeSeriesChapterSlug(path);
+    const pathHasBareNum = pathHasBareNumericTail(path);
     const titleHasChapter = /(?:chapter|ch\.?|episode|ep\.?)\s*[:#-]?\s*\d+/i.test(t);
     const bodyText = document.body?.innerText || "";
     const readerLikeDom = pageLooksLikeReader();
@@ -332,13 +378,14 @@ function looksLikeMangaSite(url, title) {
     const listingPage = isLikelyListingPage(path, bodyText);
 
     // Reject obvious browse / latest / genre listing pages with no chapter
-    // signal at all. Reader DOM or chapter-shaped URL can still rescue a page
+    // signal at all. Reader DOM or any chapter-shaped URL still rescues a page
     // that looks like a listing on the surface (e.g. infinite-scroll readers
     // that surface chapter lists in the footer).
     if (
       listingPage &&
       !pathHasChapter &&
       !pathHasSlugChapter &&
+      !pathHasBareNum &&
       !titleHasChapter &&
       !readerLikeDom
     ) {
@@ -353,7 +400,7 @@ function looksLikeMangaSite(url, title) {
     // signal, works even on hosts not in SUPPORTED_HOST_HINTS.
     if (pathHasChapter && titleHasChapter) return true;
 
-    // Explicit /chapter/N (or /cN) URL on a known manga host.
+    // Explicit /chapter/N (or /manga/<slug>/<num>) URL on a known manga host.
     if (pathHasChapter && hostHasHint) return true;
 
     // Series-slug-with-trailing-number URL on a manga host (Asura family etc).
@@ -363,8 +410,26 @@ function looksLikeMangaSite(url, title) {
     // is hash-only or pinned at the series root).
     if (titleHasChapter && hostHasHint) return true;
 
+    // Bare /<slug>/<num> URL on a known manga host (huge class of sites that
+    // don't put "chapter"/"c" in the URL). Require a corroborating signal —
+    // chapter-shaped title, reader DOM, or reader controls — to avoid prompting
+    // on random numbered pages like /search/2 or /tag/2.
+    if (
+      pathHasBareNum &&
+      hostHasHint &&
+      (titleHasChapter || readerLikeDom || readerControls)
+    ) {
+      return true;
+    }
+
+    // Bare /<slug>/<num> with a chapter-shaped <title> on any host.
+    if (pathHasBareNum && titleHasChapter) return true;
+
     // Reader-shaped DOM (long stack of large images) plus any chapter signal.
-    if (readerLikeDom && (pathHasChapter || pathHasSlugChapter || titleHasChapter)) {
+    if (
+      readerLikeDom &&
+      (pathHasChapter || pathHasSlugChapter || pathHasBareNum || titleHasChapter)
+    ) {
       return true;
     }
 
@@ -373,7 +438,7 @@ function looksLikeMangaSite(url, title) {
     if (
       readerControls &&
       hostHasHint &&
-      (pathHasChapter || pathHasSlugChapter || titleHasChapter)
+      (pathHasChapter || pathHasSlugChapter || pathHasBareNum || titleHasChapter)
     ) {
       return true;
     }
@@ -392,6 +457,7 @@ async function detectPageData() {
   const path = u.pathname.toLowerCase();
   const pathHasSlugChapter = pathLooksLikeSeriesChapterSlug(path);
   const readerControls = pageHasReaderControls();
+  const hostHasHint = SUPPORTED_HOST_HINTS.some((hint) => host.includes(hint));
 
   // MangaDex chapter pages are React-rendered and unstable to scrape, so we
   // detour through the public REST API for a clean series title and chapter
@@ -410,7 +476,9 @@ async function detectPageData() {
   const overrideChapter = hostExtractor?.chapterNum;
 
   const cleanedTitle = cleanSeriesTitle(overrideTitle || title);
-  const seriesUrl = normalizeSeriesUrl(url, { dropTrailingSlugNumber: pathHasSlugChapter && readerControls });
+  const seriesUrl = normalizeSeriesUrl(url, {
+    dropTrailingSlugNumber: pathHasSlugChapter && (readerControls || hostHasHint),
+  });
   const seriesKey = buildSeriesKey(seriesUrl, cleanedTitle);
   const chapterNum =
     overrideChapter != null
@@ -482,13 +550,15 @@ function buildRawTrackData() {
     const url = window.location.href;
     const u = new URL(url);
     if (/^(chrome|edge|about|chrome-extension):/i.test(u.protocol)) return null;
+    const host = u.hostname.replace(/^www\./, "").toLowerCase();
+    const hostHasHint = SUPPORTED_HOST_HINTS.some((hint) => host.includes(hint));
     const title = document.title || u.hostname;
     const path = u.pathname.toLowerCase();
     const pathHasSlugChapter = pathLooksLikeSeriesChapterSlug(path);
     const readerControls = pageHasReaderControls();
     const cleanedTitle = cleanSeriesTitle(title);
     const seriesUrl = normalizeSeriesUrl(url, {
-      dropTrailingSlugNumber: pathHasSlugChapter && readerControls,
+      dropTrailingSlugNumber: pathHasSlugChapter && (readerControls || hostHasHint),
     });
     const seriesKey = buildSeriesKey(seriesUrl, cleanedTitle);
     const chapterNum = parseChapterFromText(title) ?? parseChapterFromUrl(url);
