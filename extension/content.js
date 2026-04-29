@@ -462,13 +462,13 @@ async function getTrackDataFromPage() {
 
 function showTrackPrompt(data) {
   return new Promise((resolve) => {
-    const existing = document.getElementById("manga-tracker-track-modal");
+    const existing = document.getElementById("zero-hour-track-modal");
     if (existing) existing.remove();
 
     // Host element lives in the page; everything visible lives inside its closed
     // Shadow DOM so site stylesheets cannot reach the modal markup.
     const host = document.createElement("div");
-    host.id = "manga-tracker-track-modal";
+    host.id = "zero-hour-track-modal";
     host.style.all = "initial";
     host.style.position = "fixed";
     host.style.inset = "0";

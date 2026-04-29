@@ -99,11 +99,11 @@ function PreviewMedia({ tab }: { tab: TabId }) {
   const map: Record<TabId, { src: string; alt: string }> = {
     popup: {
       src: "/screenshots/extension-popup.png",
-      alt: "Manga Tracker browser extension popup showing connection status and unread count",
+      alt: "Zero Hour browser extension popup showing connection status and unread count",
     },
     dashboard: {
       src: "/screenshots/dashboard.png",
-      alt: "Manga Tracker web dashboard with search and statistics",
+      alt: "Zero Hour web dashboard with search and statistics",
     },
     series: {
       src: "/screenshots/series-cards.png",
@@ -158,9 +158,9 @@ function FallbackPreview({ tab }: { tab: TabId }) {
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="grid size-8 place-items-center rounded-lg bg-gradient-to-br from-indigo-400 to-indigo-600 text-xs font-bold text-white">
-                MT
+                ZH
               </span>
-              <span className="text-sm font-semibold text-white">Manga Tracker</span>
+              <span className="text-sm font-semibold text-white">Zero Hour</span>
             </div>
             <span className="text-xs text-emerald-400">● Connected</span>
           </div>

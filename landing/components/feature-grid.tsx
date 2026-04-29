@@ -16,7 +16,7 @@ const features = [
   {
     icon: RefreshCw,
     title: "Scheduled checks",
-    body: "Manga Tracker checks listing pages on a timer so “latest chapter” and behind counts stay fresh without you refreshing anything.",
+    body: "Zero Hour checks listing pages on a timer so “latest chapter” and behind counts stay fresh without you refreshing anything.",
   },
   {
     icon: BookMarked,

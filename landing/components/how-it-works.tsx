@@ -11,13 +11,13 @@ const steps = [
     n: "02",
     icon: Link2,
     title: "Add series URLs",
-    text: "Paste each series listing URL; Manga Tracker pulls cover art and checks for new chapters on a schedule.",
+    text: "Paste each series listing URL; Zero Hour pulls cover art and checks for new chapters on a schedule.",
   },
   {
     n: "03",
     icon: Puzzle,
     title: "Install the companion",
-    text: "Add the Chrome extension. It’s pre-pointed at the Manga Tracker site, so it just connects once you’re signed in there.",
+    text: "Add the Chrome extension. It’s pre-pointed at the Zero Hour site, so it just connects once you’re signed in there.",
   },
   {
     n: "04",

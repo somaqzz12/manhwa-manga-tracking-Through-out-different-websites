@@ -1,5 +1,5 @@
 """One-off script to generate the four extension icon PNGs from a single
-indigo-gradient design that matches the Manga Tracker web favicon palette.
+indigo-gradient design that matches the Zero Hour web favicon palette.
 
 Run from the repo root:
 

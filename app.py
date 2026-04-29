@@ -1599,7 +1599,7 @@ def export_data():
     return Response(
         body,
         mimetype="application/json",
-        headers={"Content-Disposition": 'attachment; filename="manga-tracker-backup.json"'},
+        headers={"Content-Disposition": 'attachment; filename="zero-hour-backup.json"'},
     )
 
 
@@ -1609,7 +1609,7 @@ def import_data():
         return redirect(url_for("auth_page"))
     file = request.files.get("backup_file")
     if file is None or not (file.filename or "").strip():
-        flash("No backup file selected. Choose a Manga Tracker backup JSON to import.", "warning")
+        flash("No backup file selected. Choose a Zero Hour backup JSON to import.", "warning")
         return redirect_index_preserve_search()
 
     raw = file.read(IMPORT_MAX_BYTES + 1)

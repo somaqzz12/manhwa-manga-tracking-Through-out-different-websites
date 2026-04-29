@@ -1,4 +1,6 @@
-# Manga Tracker
+# Zero Hour
+
+> **Note:** repository directory name is still `manga-tracker` for historical reasons. The product brand is **Zero Hour**.
 
 A self-hosted manga and manhwa tracker. Add a series listing URL, the server scrapes the latest chapter every 30 minutes, the dashboard shows what you're behind on, and an optional Chrome extension picks up the chapter you're currently reading and syncs progress automatically.
 
@@ -98,7 +100,7 @@ A Chromium MV3 companion lives in [`extension/`](extension/). It detects chapter
 
 1. Build is not required — the extension is plain JS.
 2. Visit `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select the [`extension/`](extension/) folder.
-3. Click the puzzle piece in the toolbar, pin **Manga Tracker**, and open the popup.
+3. Click the puzzle piece in the toolbar, pin **Zero Hour**, and open the popup.
 4. Open the options page (right-click the toolbar icon → **Options**) and set the backend URL to your tracker (e.g. `https://your-app.onrender.com` or `http://127.0.0.1:5000`).
 5. Sign in to the dashboard once in the same browser profile so the session cookie is available; the extension forwards it on every API call.
 
@@ -143,7 +145,7 @@ Google charges a **one-time $5 USD** registration fee per developer account. Aft
 
    If you run the script from the wrong folder you get *manifest.json not found*. If Windows blocks scripts, the `.cmd` file bypasses that.
 
-   The artifact is `extension/dist/manga-tracker-companion-v<version>.zip`. Upload that zip as a **new item** (or new version) in the dashboard.
+   The artifact is `extension/dist/zero-hour-companion-v<version>.zip`. Upload that zip as a **new item** (or new version) in the dashboard.
 
 4. **Store listing assets**: short description (≤132 characters), detailed description, **128×128** icon (you can reuse `extension/icons/icon-128.png`), and **screenshots** (1280×800 or 640×400 are common sizes). Show the popup on a chapter page, the options screen, and the connection states reviewers care about.
 5. **Permission justifications**: explain `storage`, `tabs`, `activeTab`, `alarms`, `contextMenus`, and **why** `<all_urls>` is needed (many independent reader domains; network traffic only goes to the user’s configured backend plus optional MangaDex API metadata — mirror [`docs/EXTENSION_PRIVACY_POLICY.md`](docs/EXTENSION_PRIVACY_POLICY.md)).

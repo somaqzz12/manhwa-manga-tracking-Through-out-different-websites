@@ -1,4 +1,4 @@
-// Single source of truth for the Manga Tracker backend URL the companion talks to.
+// Single source of truth for the Zero Hour backend URL the companion talks to.
 // Loaded by background.js (importScripts), popup.html, and options.html.
 //
 // Update PUBLIC_API_BASE here if you redeploy the Flask app under a new URL.

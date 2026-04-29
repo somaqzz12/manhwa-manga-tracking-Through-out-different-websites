@@ -6,9 +6,9 @@ import { SiteHeader } from "@/components/site-header";
 import { githubUrl } from "@/lib/site-config";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — Manga Tracker Companion",
+  title: "Privacy Policy — Zero Hour Companion",
   description:
-    "What the Manga Tracker browser extension stores, what it sends, and the permissions it uses.",
+    "What the Zero Hour browser extension stores, what it sends, and the permissions it uses.",
 };
 
 export default function PrivacyPage() {
@@ -28,15 +28,15 @@ export default function PrivacyPage() {
             Privacy Policy
           </h1>
           <p className="mt-3 text-sm text-slate-500">
-            Manga Tracker Companion (Chrome extension) · Last updated April 29, 2026
+            Zero Hour Companion (Chrome extension) · Last updated April 29, 2026
           </p>
 
           <div className="prose-content mt-10 space-y-8 text-slate-300">
             <Section title="What the extension does">
               <p>
                 The extension helps you sync manga and manhwa <strong>reading progress</strong>{" "}
-                to your Manga Tracker account. By default it talks to the official
-                Manga Tracker server at{" "}
+                to your Zero Hour account. By default it talks to the official
+                Zero Hour server at{" "}
                 <code className="text-indigo-200">
                   https://manhwa-manga-tracking-through-out.onrender.com
                 </code>
@@ -73,7 +73,7 @@ export default function PrivacyPage() {
               </h3>
               <ul className="mt-2 list-disc space-y-1 pl-6">
                 <li>
-                  <strong>Your Manga Tracker server only.</strong> When you save
+                  <strong>Your Zero Hour server only.</strong> When you save
                   progress or refresh the unread badge, requests go to the
                   configured backend URL (default: the official server above).
                   These requests include chapter URLs, series titles, and numeric
@@ -84,7 +84,7 @@ export default function PrivacyPage() {
                   <code>mangadex.org</code> chapter pages, the extension may call
                   the public <code>api.mangadex.org</code> endpoint to read
                   chapter and series metadata. No MangaDex account is required;
-                  no Manga Tracker credentials are sent to MangaDex.
+                  no Zero Hour credentials are sent to MangaDex.
                 </li>
               </ul>
 
@@ -117,22 +117,22 @@ export default function PrivacyPage() {
                   chapter&rdquo; right-click action.
                 </li>
                 <li>
-                  <strong>Host access (<code>&lt;all_urls&gt;</code>)</strong> —
+                  <strong>Host access (content script <code>&lt;all_urls&gt;</code>)</strong> —
                   manga and manhwa are read on hundreds of independent domains and
                   mirrors. The content script only inspects the page you are on
-                  for chapter cues; outbound requests go only to your configured
-                  Manga Tracker server (and, on MangaDex pages, the public
-                  MangaDex API).
+                  for chapter cues; the extension itself only requests host
+                  permission for the configured Zero Hour server (and, on MangaDex
+                  pages, the public MangaDex API via CORS).
                 </li>
               </ul>
             </Section>
 
             <Section title="Sign-in and session">
               <p>
-                If your tracker requires login, you sign in <strong>in the browser</strong>{" "}
-                on the Manga Tracker website. The extension reuses that session
-                cookie when calling the API, the same way the dashboard would.
-                The extension author cannot access your password or session.
+                You sign in <strong>in the browser</strong> on the Zero Hour
+                website. The extension reuses that session cookie when calling
+                the API, the same way the dashboard would. The extension author
+                cannot access your password or session.
               </p>
             </Section>
 
