@@ -52,7 +52,7 @@ Then open <http://127.0.0.1:5000>, register a user, and paste a series listing U
 
 The repo ships with a [`render.yaml`](render.yaml) blueprint that provisions:
 
-- a free web service running `python app.py`,
+- a free web service running **gunicorn** (`render.yaml` `startCommand`) — not Flask’s dev server,
 - a free managed Postgres instance,
 - environment defaults that lock down production (`FLASK_DEBUG=0`, `ALLOW_SQLITE_IN_PRODUCTION=0`),
   `CORS_ALLOW_ORIGINS` for the app host, and an optional `CHROME_EXTENSION_ID` so the extension
