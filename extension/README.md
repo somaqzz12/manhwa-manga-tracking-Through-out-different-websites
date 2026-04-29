@@ -2,6 +2,8 @@
 
 This folder is the full **Chrome / Edge (Chromium) MV3** extension. There is no build step: load it as-is or zip it for the store.
 
+**License:** the whole repository (including this folder) is under the [PolyForm Noncommercial License 1.0.0](../LICENSE). Share copies only together with that license and the `Required Notice` in the LICENSE file.
+
 ## Quick install (use the hosted app)
 
 **Fastest:** download **only this folder** as a ZIP (GitHub serves it via [download-directory](https://download-directory.github.io/)) — use the same link as on [mangawatchlist.space](https://mangawatchlist.space) (“Download extension (ZIP)”), or open your repo’s `main` branch tree at `extension/` and use the green **Code** button if you prefer.

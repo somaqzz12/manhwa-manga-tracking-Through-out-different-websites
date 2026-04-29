@@ -192,4 +192,10 @@ Bug reports and feature requests live on the GitHub issues page: <https://github
 
 ## License
 
-MIT.
+Copyright (c) Osamah. **Manga Watchlist** (code, docs, and extension in this repository) is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE) (SPDX: `PolyForm-Noncommercial-1.0.0`).
+
+In plain language: you may **use, study, change, and share** this project for **noncommercial** purposes (personal use, learning, hobby projects, and similar). Uses that are primarily **commercial**—for example selling access, running a paid competing hosted service based on this codebase, or redistributing as part of a paid product—are **not** covered by that license; you need **separate written permission** from the copyright holder.
+
+The **Manga Watchlist** name and branding are not a grant to use the same product name or logo for someone else’s product. Forks should keep the license and notices intact (see the `Required Notice` line in [LICENSE](LICENSE)).
+
+This is not legal advice. For commercial licensing questions, open a GitHub issue or use the contact route you publish in the app footer.
