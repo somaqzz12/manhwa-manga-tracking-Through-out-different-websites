@@ -16,7 +16,7 @@ function primaryCta() {
   return (
     <Link
       href={href}
-      className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[var(--color-accent)] to-[#9a80ff] px-4 py-2 text-sm font-semibold text-white shadow-accent outline-none ring-1 ring-white/15 transition hover:brightness-105 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+      className="btn-primary inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white outline-none transition duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
       {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
       aria-label={label}
     >
@@ -44,7 +44,7 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[var(--color-border)] bg-background/85 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-[color-mix(in_srgb,var(--color-border)_25%,transparent)] bg-[rgba(255,255,255,0.25)] backdrop-blur-[14px] dark:bg-[rgba(255,255,255,0.06)]">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 font-semibold text-[var(--color-text)]">
           <span
@@ -59,7 +59,7 @@ export function SiteHeader() {
           <button
             type="button"
             onClick={toggleTheme}
-            className="rounded-full border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text)] transition hover:translate-y-[-1px]"
+            className="btn-glass rounded-full px-4 py-2 text-sm text-[var(--color-text)] transition duration-200 hover:-translate-y-0.5"
             aria-label="Toggle theme"
           >
             {isDark ? "☾" : "☀"}

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,59 +7,120 @@
   <title>Edit series - Manga Watchlist</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
   <style>
     :root {
-      --bg: #080b14;
-      --primary: #6366f1;
-      --primary-hi: #818cf8;
-      --text: #e2e8f0;
-      --muted: #94a3b8;
-      --card-border: rgba(255, 255, 255, 0.07);
+      --bg: #f5f1e8;
+      --text: #1a1a1a;
+      --muted: #6f6f6f;
+      --border: #1a1a1a;
+    }
+    .dark {
+      --bg: #0f0f10;
+      --text: #eaeaea;
+      --muted: #9a9a9a;
+      --border: #eaeaea;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      display: grid;
-      place-items: center;
-      font-family: Inter, system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: "Inter", system-ui, sans-serif;
       background: var(--bg);
-      background-image:
-        radial-gradient(ellipse 720px 420px at 88% -6%, rgba(99, 102, 241, 0.12), transparent 52%),
-        radial-gradient(ellipse 500px 360px at 8% 100%, rgba(56, 189, 248, 0.05), transparent 45%);
       color: var(--text);
-      padding: 24px 16px;
+      padding: 48px 20px 32px;
+      transition: background 220ms ease, color 220ms ease;
+      background-image:
+        radial-gradient(ellipse 880px 460px at 92% -8%, rgba(124, 92, 255, 0.09), transparent 52%),
+        radial-gradient(ellipse 560px 380px at 6% 100%, rgba(167, 139, 250, 0.06), transparent 48%);
+    }
+    .page-tools {
+      position: fixed;
+      top: 20px;
+      right: 24px;
+      z-index: 10;
+    }
+    .btn {
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-size: 14px;
+      background: rgba(255, 255, 255, 0.35);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      color: #1a1a1a;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      font: inherit;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      background: rgba(255, 255, 255, 0.55);
+    }
+    .dark .btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #eaeaea;
+    }
+    .dark .btn:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+    .btn.btn-primary {
+      width: 100%;
+      margin-top: 8px;
+      background: linear-gradient(135deg, #7c5cff, #a78bfa);
+      color: #fff;
+      border: none;
+      box-shadow: 0 6px 20px rgba(124, 92, 255, 0.3);
+    }
+    .dark .btn.btn-primary {
+      color: #fff;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      background: linear-gradient(135deg, #8b6dff, #b59bfa);
+      box-shadow: 0 8px 24px rgba(124, 92, 255, 0.4);
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 18px;
+    }
+    .dark .glass {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
     }
     .card-wrap {
       position: relative;
-      width: min(480px, 100%);
+      width: min(520px, 100%);
+    }
+    .back-row {
+      margin-bottom: 14px;
     }
     .back-dash {
-      position: absolute;
-      left: 0;
-      top: -36px;
       font-size: 0.875rem;
       font-weight: 500;
-      color: var(--muted);
       text-decoration: none;
-      transition: color 0.2s ease;
     }
-    .back-dash:hover { color: var(--primary-hi); }
     .card {
       width: 100%;
-      background: rgba(15, 23, 42, 0.55);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
-      backdrop-filter: blur(16px);
       padding: 28px 32px 26px;
-      transition: border-color 0.2s ease;
     }
     h1 {
       margin: 0 0 22px;
-      font-size: 1.375rem;
+      font-family: "Playfair Display", serif;
+      font-size: 1.75rem;
       font-weight: 700;
       letter-spacing: -0.02em;
       color: var(--text);
@@ -71,46 +132,29 @@
       color: var(--muted);
       margin-bottom: 8px;
     }
-    input {
+    .input {
       width: 100%;
       margin-bottom: 16px;
-      padding: 14px 16px;
-      border-radius: 12px;
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: rgba(8, 11, 20, 0.6);
+      border-radius: 999px;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.4);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0, 0, 0, 0.1);
       color: var(--text);
       font-family: inherit;
       font-size: 0.9375rem;
       outline: none;
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
-    input::placeholder { color: #64748b; }
-    input:focus {
-      border-color: rgba(129, 140, 248, 0.65);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+    .dark .input {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
     }
-    button[type="submit"] {
-      width: 100%;
-      margin-top: 6px;
-      padding: 14px 20px;
-      border: 0;
-      border-radius: 999px;
-      font-family: inherit;
-      font-size: 0.9375rem;
-      font-weight: 700;
-      cursor: pointer;
-      background: linear-gradient(145deg, var(--primary-hi) 0%, var(--primary) 100%);
-      color: #f8fafc;
-      box-shadow: 0 8px 28px rgba(99, 102, 241, 0.35);
-      transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-    }
-    button[type="submit"]:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: 0 12px 36px rgba(99, 102, 241, 0.42);
-    }
-    button[type="submit"]:focus-visible {
-      outline: 2px solid var(--primary-hi);
-      outline-offset: 3px;
+    .input::placeholder { color: color-mix(in srgb, var(--muted) 75%, transparent); }
+    .input:focus {
+      border-color: rgba(124, 92, 255, 0.55);
+      box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.2);
     }
     button.is-loading { cursor: wait; opacity: 0.92; }
     .btn-spinner {
@@ -125,26 +169,39 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .flash-msgs { margin-bottom: 18px; }
     .flash {
-      padding: 12px 14px;
-      border-radius: 16px;
+      padding: 12px 16px;
+      border-radius: 14px;
       margin-bottom: 10px;
       font-size: 0.875rem;
       font-weight: 600;
-      border: 1px solid var(--card-border);
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      background: rgba(255, 255, 255, 0.35);
+      backdrop-filter: blur(10px);
     }
-    .flash.success { background: rgba(22, 163, 74, 0.12); border-color: rgba(34, 197, 94, 0.3); color: #bbf7d0; }
-    .flash.warning { background: rgba(234, 179, 8, 0.1); border-color: rgba(250, 204, 21, 0.28); color: #fde68a; }
-    .flash.error { background: rgba(239, 68, 68, 0.12); border-color: rgba(248, 113, 113, 0.35); color: #fecaca; }
+    .dark .flash {
+      border-color: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .flash.success { color: #166534; border-color: rgba(22, 163, 74, 0.35); }
+    .flash.warning { color: #854d0e; border-color: rgba(234, 179, 8, 0.4); }
+    .flash.error { color: #991b1b; border-color: rgba(239, 68, 68, 0.35); }
+    .dark .flash.success { color: #bbf7d0; border-color: rgba(34, 197, 94, 0.35); }
+    .dark .flash.warning { color: #fde68a; border-color: rgba(250, 204, 21, 0.35); }
+    .dark .flash.error { color: #fecaca; border-color: rgba(248, 113, 113, 0.35); }
     @media (max-width: 375px) {
       .card { padding: 22px 20px; }
-      .back-dash { top: -32px; font-size: 0.8125rem; }
     }
   </style>
 </head>
 <body>
+  <div class="page-tools">
+    <button id="themeToggle" class="btn" type="button" aria-label="Toggle theme">☾</button>
+  </div>
   <div class="card-wrap">
-    <a class="back-dash" href="{{ url_for('index', **edit_back_kw) }}">← Back to dashboard</a>
-    <div class="card">
+    <div class="back-row">
+      <a class="back-dash btn" href="{{ url_for('index', **edit_back_kw) }}">← Back to dashboard</a>
+    </div>
+    <div class="card glass">
       <h1>Edit series</h1>
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -161,14 +218,26 @@
         <input type="hidden" name="sort" value="{{ return_sort }}">
         <input type="hidden" name="page" value="{{ return_page }}">
         <label for="edit-title">Title</label>
-        <input id="edit-title" name="title" value="{{ bookmark['title'] }}" placeholder="Series title" aria-label="Title" required>
+        <input id="edit-title" class="input" name="title" value="{{ bookmark['title'] }}" placeholder="Series title" aria-label="Title" required>
         <label for="edit-url">Series URL</label>
-        <input id="edit-url" name="url" type="text" value="{{ bookmark['url'] }}" placeholder="https://…" aria-label="Series URL" required>
-        <button id="editSubmit" type="submit" data-loading-text="">Save changes</button>
+        <input id="edit-url" class="input" name="url" type="text" value="{{ bookmark['url'] }}" placeholder="https://…" aria-label="Series URL" required>
+        <button id="editSubmit" class="btn btn-primary" type="submit" data-loading-text="">Save changes</button>
       </form>
     </div>
   </div>
   <script>
+    const toggle = document.getElementById("themeToggle");
+    toggle.onclick = () => {
+      document.documentElement.classList.toggle("dark");
+      localStorage.setItem(
+        "theme",
+        document.documentElement.classList.contains("dark") ? "dark" : "light"
+      );
+    };
+    if (localStorage.getItem("theme") === "dark") {
+      document.documentElement.classList.add("dark");
+    }
+
     const form = document.getElementById("editBookmarkForm");
     const submitBtn = document.getElementById("editSubmit");
     form.addEventListener("submit", () => {

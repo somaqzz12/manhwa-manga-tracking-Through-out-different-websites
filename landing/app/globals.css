@@ -22,6 +22,42 @@
 body {
   @apply antialiased bg-background min-h-screen;
   color: var(--color-text);
+  background-image:
+    radial-gradient(ellipse 900px 480px at 90% -10%, rgba(124, 92, 255, 0.08), transparent 55%),
+    radial-gradient(ellipse 600px 400px at 0% 100%, rgba(167, 139, 250, 0.06), transparent 50%);
+}
+
+@layer components {
+  .section {
+    @apply mb-10 md:mb-14;
+  }
+  .btn-glass {
+    background: rgba(255, 255, 255, 0.35);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.4) inset;
+  }
+  .dark .btn-glass {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: var(--color-text);
+    box-shadow: none;
+  }
+  .dark .btn-glass:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+  .btn-glass:hover {
+    background: rgba(255, 255, 255, 0.55);
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #7c5cff, #a78bfa);
+    border: none;
+    box-shadow: 0 6px 20px rgba(124, 92, 255, 0.35);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 10px 28px rgba(124, 92, 255, 0.45);
+  }
 }
 
 ::selection {

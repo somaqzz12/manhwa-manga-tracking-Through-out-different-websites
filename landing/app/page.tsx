@@ -1,4 +1,3 @@
-import { ExtensionPreview } from "@/components/extension-preview";
 import { FeatureGrid } from "@/components/feature-grid";
 import { Hero } from "@/components/hero";
 import { HowItWorks } from "@/components/how-it-works";
@@ -12,7 +11,6 @@ export default function HomePage() {
       <main>
         <Hero />
         <FeatureGrid />
-        <ExtensionPreview />
         <HowItWorks />
       </main>
       <SiteFooter />

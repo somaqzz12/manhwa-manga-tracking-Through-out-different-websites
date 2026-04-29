@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -31,16 +31,31 @@
       color: var(--text);
       font-family: "Inter", sans-serif;
       transition: background 220ms ease, color 220ms ease;
+      background-image:
+        radial-gradient(ellipse 880px 460px at 92% -8%, rgba(124, 92, 255, 0.09), transparent 52%),
+        radial-gradient(ellipse 560px 380px at 6% 100%, rgba(167, 139, 250, 0.06), transparent 48%);
     }
     h1, h2, h3 { font-family: "Playfair Display", serif; }
     .shell { max-width: 1600px; margin: 0 auto; }
+    .glass {
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 18px;
+    }
+    .dark .glass {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
     .topbar {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 16px;
       padding: 16px 32px;
-      border-bottom: 1px solid var(--border);
+      margin: 16px 24px 0;
+      border-bottom: none;
     }
     .topbar h1 {
       margin: 0;
@@ -53,36 +68,111 @@
       gap: 10px;
       flex-wrap: wrap;
     }
-    .input, .select, .btn {
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text);
+    @media (min-width: 1100px) {
+      .top-controls { flex-wrap: nowrap; }
+    }
+    .input, .select {
       border-radius: 999px;
-      padding: 10px 14px;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.4);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      color: var(--text);
       font: inherit;
+      min-width: 0;
     }
-    .input { min-width: 220px; }
+    .dark .input, .dark .select {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: var(--text);
+    }
+    .input { min-width: 180px; flex: 1; max-width: 280px; }
+    .select { min-width: 130px; cursor: pointer; }
     .btn {
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-size: 14px;
+      background: rgba(255, 255, 255, 0.35);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      color: #1a1a1a;
+      transition: all 0.2s ease;
       cursor: pointer;
-      transition: transform 220ms ease, background 220ms ease;
+      font: inherit;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
-    .btn:hover { transform: translateY(-1px); }
-    .btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn:hover {
+      transform: translateY(-2px);
+      background: rgba(255, 255, 255, 0.55);
+    }
+    .dark .btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #eaeaea;
+    }
+    .dark .btn:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+    .btn.btn-primary {
+      background: linear-gradient(135deg, #7c5cff, #a78bfa);
+      color: #fff;
+      border: none;
+      box-shadow: 0 6px 20px rgba(124, 92, 255, 0.3);
+    }
+    .dark .btn.btn-primary {
+      color: #fff;
+    }
+    .btn.btn-primary:hover {
+      transform: translateY(-2px);
+      background: linear-gradient(135deg, #8b6dff, #b59bfa);
+      box-shadow: 0 8px 24px rgba(124, 92, 255, 0.4);
+    }
     .muted { color: var(--muted); }
-    main { padding: 40px; }
+    main { padding: 32px 40px 48px; }
+    .section { margin-bottom: 40px; }
     .headline {
-      margin: 0 0 28px;
-      font-size: 2.25rem;
+      margin: 0 0 24px;
+      font-size: clamp(2rem, 4vw, 2.75rem);
       line-height: 1.15;
     }
     .bar {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
       align-items: center;
-      margin-bottom: 24px;
+      gap: 10px;
+      margin-bottom: 32px;
+      padding: 14px 18px;
     }
-    .flash { border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; }
+    @media (min-width: 1024px) {
+      .bar { flex-wrap: nowrap; }
+      .bar form.add-inline { flex: 1; min-width: 0; }
+    }
+    .bar form.add-inline {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+    @media (min-width: 1024px) {
+      .bar form.add-inline { flex-wrap: nowrap; }
+    }
+    .flash {
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      border-radius: 14px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      background: rgba(255, 255, 255, 0.35);
+      backdrop-filter: blur(10px);
+    }
+    .dark .flash {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
     .grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -91,15 +181,24 @@
     @media (min-width: 860px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
     @media (min-width: 1200px) { .grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
     .card {
-      border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 16px;
       overflow: hidden;
-      background: var(--surface);
-      transition: transform 220ms ease, box-shadow 220ms ease;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .dark .card {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
     }
     .card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 12px 28px rgba(0,0,0,0.16);
+      transform: translateY(-6px);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+    }
+    .dark .card:hover {
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
     }
     .cover {
       width: 100%;
@@ -113,7 +212,10 @@
       display: grid;
       place-items: center;
       color: var(--muted);
-      background: color-mix(in srgb, var(--surface) 88%, var(--bg) 12%);
+      background: rgba(255, 255, 255, 0.25);
+    }
+    .dark .cover-placeholder {
+      background: rgba(255, 255, 255, 0.04);
     }
     .card-meta {
       padding: 12px;
@@ -122,7 +224,7 @@
       align-items: center;
       gap: 8px;
     }
-    .title { font-size: 0.95rem; font-weight: 500; margin: 0; }
+    .title { font-size: 0.95rem; font-weight: 500; margin: 0; font-family: "Inter", sans-serif; }
     .tag { font-size: 0.72rem; color: var(--muted); }
     .card-actions {
       display: flex;
@@ -130,27 +232,41 @@
       gap: 8px;
       padding: 0 12px 12px;
     }
-    .card-actions .btn { padding: 6px 10px; font-size: 0.78rem; }
+    .card-actions .btn { padding: 6px 12px; font-size: 13px; }
+    .card-actions form { display: inline; margin: 0; }
     .pagination {
       display: flex;
-      gap: 8px;
+      gap: 10px;
       align-items: center;
       justify-content: center;
-      margin-top: 30px;
+      margin-top: 40px;
     }
-    .pagination a, .pagination span {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 8px 12px;
-      text-decoration: none;
+    .pagination a {
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-size: 14px;
+      background: rgba(255, 255, 255, 0.35);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(0, 0, 0, 0.15);
       color: var(--text);
-      font-size: 0.82rem;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .pagination a:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.55); }
+    .dark .pagination a {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.18);
+      color: var(--text);
+    }
+    .pagination span {
+      font-size: 14px;
+      color: var(--muted);
     }
   </style>
 </head>
 <body>
   <div class="shell">
-    <header class="topbar">
+    <header class="topbar glass">
       <h1>Manga Watchlist</h1>
       <div class="top-controls">
         <form method="get" action="{{ url_for('index') }}" style="display:inline-flex;gap:8px;align-items:center;">
@@ -183,17 +299,18 @@
         {% endif %}
       {% endwith %}
 
+      <section class="section">
       <h2 class="headline">Your collection</h2>
 
-      <div class="bar">
-        <form action="/add" method="post" data-loading-form="true" style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div class="bar glass">
+        <form class="add-inline" action="/add" method="post" data-loading-form="true">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="q" value="{{ search_q or '' }}">
           <input type="hidden" name="sort" value="{{ sort }}">
           <input type="hidden" name="page" value="{{ page }}">
           <input class="input" name="title" placeholder="Series title" required>
           <input class="input" name="url" placeholder="Series URL" required>
-          <button class="btn btn-accent" type="submit" data-loading-text="...">Add</button>
+          <button class="btn btn-primary" type="submit" data-loading-text="...">Add</button>
         </form>
         <form action="/check-all" method="post" data-loading-form="true" id="check-stale-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -212,8 +329,9 @@
         </form>
         <span id="check-all-status-label" class="muted">{{ check_all_status_text }}</span>
       </div>
+      </section>
 
-      <div class="grid" id="series-grid">
+      <div class="grid section" id="series-grid">
         {% for b in bookmarks %}
           {% set show_continue = ((b.read_source_url or '')|trim) or (b.read_chapter_num is not none) or ((b.read_chapter_label or '')|trim) %}
           <article class="card" data-genre="{{ (b.get('genre') or '')|lower }}">
