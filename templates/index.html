@@ -7,14 +7,14 @@
   <title>Manga Watchlist</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #f5f1e8;
       --surface: #ffffff;
       --text: #1a1a1a;
       --muted: #6f6f6f;
-      --border: #1a1a1a;
+      --border: rgba(0, 0, 0, 0.15);
       --accent: #6d5dfc;
     }
     .dark {
@@ -22,7 +22,7 @@
       --surface: #1a1a1a;
       --text: #eaeaea;
       --muted: #9a9a9a;
-      --border: #eaeaea;
+      --border: rgba(255, 255, 255, 0.18);
     }
     * { box-sizing: border-box; }
     body {
@@ -36,17 +36,17 @@
         radial-gradient(ellipse 560px 380px at 6% 100%, rgba(167, 139, 250, 0.06), transparent 48%);
     }
     h1, h2, h3 { font-family: "Playfair Display", serif; }
-    .shell { max-width: 1600px; margin: 0 auto; }
+    .shell { max-width: 1200px; margin: 0 auto; }
     .glass {
       background: rgba(255, 255, 255, 0.25);
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      border: 1px solid var(--border);
       border-radius: 18px;
     }
     .dark .glass {
       background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      border: 1px solid var(--border);
     }
     .topbar {
       display: flex;
@@ -55,7 +55,7 @@
       gap: 16px;
       padding: 16px 32px;
       margin: 16px 24px 0;
-      border-bottom: none;
+      border-bottom: 1px solid var(--border);
     }
     .topbar h1 {
       margin: 0;
@@ -77,26 +77,26 @@
       background: rgba(255, 255, 255, 0.4);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
-      border: 1px solid rgba(0, 0, 0, 0.1);
+      border: 1px solid var(--border);
       color: var(--text);
       font: inherit;
       min-width: 0;
     }
     .dark .input, .dark .select {
       background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.14);
+      border: 1px solid var(--border);
       color: var(--text);
     }
-    .input { min-width: 180px; flex: 1; max-width: 280px; }
+    .input { min-width: 170px; flex: 1; max-width: 260px; }
     .select { min-width: 130px; cursor: pointer; }
     .btn {
-      padding: 10px 18px;
+      padding: 8px 16px;
       border-radius: 999px;
-      font-size: 14px;
-      background: rgba(255, 255, 255, 0.35);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid var(--border);
       color: #1a1a1a;
       transition: all 0.2s ease;
       cursor: pointer;
@@ -111,8 +111,8 @@
       background: rgba(255, 255, 255, 0.55);
     }
     .dark .btn {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid var(--border);
       color: #eaeaea;
     }
     .dark .btn:hover {
@@ -133,7 +133,7 @@
       box-shadow: 0 8px 24px rgba(124, 92, 255, 0.4);
     }
     .muted { color: var(--muted); }
-    main { padding: 32px 40px 48px; }
+    main { padding: 28px 28px 44px; }
     .section { margin-bottom: 40px; }
     .headline {
       margin: 0 0 24px;
@@ -158,6 +158,11 @@
       align-items: center;
       gap: 10px;
     }
+    .input-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
     @media (min-width: 1024px) {
       .bar form.add-inline { flex-wrap: nowrap; }
     }
@@ -176,22 +181,22 @@
     .grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 26px;
+      gap: 20px;
     }
     @media (min-width: 860px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
     @media (min-width: 1200px) { .grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
     .card {
       border-radius: 16px;
       overflow: hidden;
-      border: 1px solid rgba(0, 0, 0, 0.1);
-      background: rgba(255, 255, 255, 0.6);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       transition: transform 0.25s ease, box-shadow 0.25s ease;
     }
     .dark .card {
       background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      border: 1px solid var(--border);
     }
     .card:hover {
       transform: translateY(-6px);
@@ -202,13 +207,13 @@
     }
     .cover {
       width: 100%;
-      height: 300px;
+      height: 260px;
       object-fit: cover;
       display: block;
     }
     .cover-placeholder {
       width: 100%;
-      height: 300px;
+      height: 260px;
       display: grid;
       place-items: center;
       color: var(--muted);
@@ -304,7 +309,7 @@
       <h2 class="headline">Your collection</h2>
 
       <div class="bar glass">
-        <form class="add-inline" action="/add" method="post" data-loading-form="true">
+        <form class="add-inline input-row" action="/add" method="post" data-loading-form="true">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="q" value="{{ search_q or '' }}">
           <input type="hidden" name="sort" value="{{ sort }}">
