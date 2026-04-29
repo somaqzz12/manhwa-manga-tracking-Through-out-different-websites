@@ -4,6 +4,8 @@ Live at **[mangawatchlist.space](https://mangawatchlist.space)**.
 
 > **Note:** repository directory name is still `manga-tracker` for historical reasons. The product brand is **Manga Watchlist**.
 
+> **License:** This project is licensed under [PolyForm Noncommercial 1.0.0](LICENSE). Commercial use is not permitted without explicit permission.
+
 A self-hosted manga and manhwa tracker. Add a series listing URL, the server scrapes the latest chapter every 30 minutes, the dashboard shows what you're behind on, and an optional Chrome extension picks up the chapter you're currently reading and syncs progress automatically.
 
 ![Dashboard screenshot](docs/screenshot.png)
