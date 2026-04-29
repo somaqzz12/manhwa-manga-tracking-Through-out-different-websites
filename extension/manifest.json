@@ -1,12 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Manga Tracker Companion",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Sign in to Manga Tracker and your manga and manhwa reading progress syncs from any reader. Optional prompts, badge, and shortcuts.",
   "homepage_url": "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites",
   "permissions": ["storage", "activeTab", "tabs", "alarms", "contextMenus"],
   "host_permissions": [
-    "<all_urls>",
     "https://manhwa-manga-tracking-through-out.onrender.com/*",
     "http://127.0.0.1:5000/*"
   ],
