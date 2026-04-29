@@ -65,6 +65,8 @@ In Render, choose **New → Blueprint**, point it at this repository, and accept
 
 After the first deploy, open Render → your web service → **Environment** and set **`CHROME_EXTENSION_ID`** to the 32-character id from `chrome://extensions` (developer mode → Details) for the **published** build. That value is merged into the CORS allowlist so the extension can send credentialed API requests. If you skip this until after store approval, the dashboard will work but the extension may get CORS errors until the id is set.
 
+**Idle / keep-warm:** `GET /healthz` does not touch the database or run scrapers—it only returns JSON. Use UptimeRobot, Better Stack, cron-job.org, or similar to request `https://<your-app-host>/healthz` on a short interval (for example every 5 minutes) if your host would otherwise sleep after inactivity.
+
 ## Environment variables
 
 All configuration is via environment variables. The `Required?` column is what the server actually enforces; defaults below match `app.py` exactly.

@@ -398,7 +398,10 @@ def add_cors_headers(response):
 
 @app.before_request
 def handle_preflight():
-    ensure_db_ready()
+    # /healthz must stay free of DB and heavy work so uptime pings and free-tier
+    # keep-alive cron jobs do not trigger init_db or migrations.
+    if request.endpoint != "healthz":
+        ensure_db_ready()
     if request.method == "OPTIONS":
         return Response(status=204)
     return None
@@ -1599,7 +1602,10 @@ def logout():
 
 @app.route("/healthz")
 def healthz():
-    return jsonify({"ok": True, "status": "healthy"})
+    """Liveness probe only: no database, scraping, or scheduler work."""
+    resp = jsonify({"ok": True, "status": "healthy"})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.route("/")
