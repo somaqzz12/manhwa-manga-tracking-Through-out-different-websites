@@ -231,6 +231,32 @@
     }
     .title { font-size: 0.95rem; font-weight: 500; margin: 0; font-family: "Inter", sans-serif; }
     .tag { font-size: 0.72rem; color: var(--muted); }
+    .card-progress {
+      margin: 0 12px 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      display: grid;
+      gap: 4px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+    .card-progress a {
+      color: inherit;
+      text-decoration: none;
+      border-bottom: 1px dotted color-mix(in srgb, var(--muted) 55%, transparent);
+    }
+    .card-progress a:hover {
+      color: var(--text);
+      border-bottom-color: color-mix(in srgb, var(--text) 45%, transparent);
+    }
+    .card-progress .unread {
+      color: #7c5cff;
+      font-weight: 500;
+    }
+    .dark .card-progress .unread {
+      color: #b59bfa;
+    }
     .card-actions {
       display: flex;
       flex-wrap: wrap;
@@ -340,7 +366,9 @@
 
       <div class="grid section" id="series-grid">
         {% for b in bookmarks %}
-          {% set show_continue = ((b.read_source_url or '')|trim) or (b.read_chapter_num is not none) or ((b.read_chapter_label or '')|trim) %}
+          {% set show_continue = (b.continue_url or '')|trim %}
+          {% set last_read_label = (b.read_chapter_label or '')|trim %}
+          {% set latest_label = (b.latest_seen or '')|trim %}
           <article class="card" data-genre="{{ (b.get('genre') or '')|lower }}">
             {% if b["cover_url"] %}
               <img src="{{ b['cover_url'] }}" alt="" class="cover" loading="lazy" referrerpolicy="origin">
@@ -351,10 +379,36 @@
               <p class="title">{{ b["title"] }}</p>
               <span class="tag">{% if b["new_update"] %}NEW{% else %}OK{% endif %}</span>
             </div>
+            <div class="card-progress">
+              <span>
+                Last read:
+                {% if (b.read_source_url or '')|trim and last_read_label %}
+                  <a href="{{ b.read_source_url }}" target="_blank" rel="noreferrer">{{ last_read_label }}</a>
+                {% elif last_read_label %}
+                  {{ last_read_label }}
+                {% else %}
+                  Not started
+                {% endif %}
+              </span>
+              <span>
+                Latest:
+                {% if (b.latest_seen_url or '')|trim and latest_label %}
+                  <a href="{{ b.latest_seen_url }}" target="_blank" rel="noreferrer">{{ latest_label }}</a>
+                {% elif latest_label %}
+                  {{ latest_label }}
+                {% else %}
+                  Unknown
+                {% endif %}
+              </span>
+              {% if (b.unread_count or 0) > 0 %}
+                <span class="unread">{{ b.unread_count }} unread</span>
+              {% endif %}
+            </div>
             <div class="card-actions">
               {% if show_continue %}
                 <a class="btn" href="{{ b['continue_url'] }}" target="_blank" rel="noreferrer">Continue</a>
               {% endif %}
+              <a class="btn" href="{{ b['latest_seen_url'] if (b.latest_seen_url or '')|trim else b['url'] }}" target="_blank" rel="noreferrer">Open Latest</a>
               <a class="btn" href="{{ b['url'] }}" target="_blank" rel="noreferrer">Open</a>
               <a class="btn" href="{{ url_for('edit_bookmark', bookmark_id=b['id'], **edit_link_kw) }}">Edit</a>
               <form action="/check/{{ b['id'] }}" method="post" data-loading-form="true">
