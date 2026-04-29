@@ -17,7 +17,7 @@ const steps = [
     n: "03",
     icon: Puzzle,
     title: "Install the companion",
-    text: "Add the Chrome extension and point it at your Manga Tracker site URL so it can sync chapters for the account you’re signed into.",
+    text: "Add the Chrome extension. It’s pre-pointed at the Manga Tracker site, so it just connects once you’re signed in there.",
   },
   {
     n: "04",
