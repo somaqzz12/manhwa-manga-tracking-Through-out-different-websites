@@ -16,15 +16,15 @@ export function Hero() {
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-12 lg:flex-row lg:items-center lg:justify-between lg:gap-16">
         <div className="max-w-xl text-center lg:text-left">
           <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-500/25 bg-indigo-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-300">
-            Self-hosted · Companion extension
+            Web app · Chrome extension
           </p>
           <h1 className="bg-gradient-to-b from-white to-slate-300 bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl lg:text-[3.25rem] lg:leading-[1.1]">
             Your manga library, synced across every reader.
           </h1>
           <p className="mt-5 text-lg text-slate-400 sm:text-xl">
-            Add series from any listing URL, scrape latest chapters on a schedule, and
-            let the Chromium extension capture the chapter you are reading —
-            unread counts and one-click Continue stay accurate.
+            Sign up with a username and password, add series from any listing URL, and
+            open the dashboard from anywhere. The extension captures the chapter you are
+            reading so unread counts and one-click Continue stay accurate on your account.
           </p>
           <div className="mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:justify-start">
             <Link

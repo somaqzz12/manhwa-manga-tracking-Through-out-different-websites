@@ -22,5 +22,5 @@ export const extensionPrivacyHref =
 export const authorName =
   process.env.NEXT_PUBLIC_AUTHOR_NAME?.trim() || "Osamah";
 
-/** Optional: your hosted Flask app signup URL (e.g. Render deployment). */
+/** Public web app URL where users register and sign in (e.g. your Render deployment). */
 export const dashboardUrl = process.env.NEXT_PUBLIC_DASHBOARD_URL?.trim() || "";

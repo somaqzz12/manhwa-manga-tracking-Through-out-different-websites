@@ -11,11 +11,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Manga Tracker — Never lose your place",
   description:
-    "Self-hosted manga & manhwa tracker with a Chrome extension that syncs the chapter you are reading. Library, unread counts, and one-click continue.",
+    "Manga & manhwa tracker: sign in from anywhere, build your library, and use the Chrome extension to sync the chapter you read. Unread counts and one-click Continue.",
   openGraph: {
     title: "Manga Tracker",
     description:
-      "Track series across every site. Dashboard + browser extension that keeps progress in sync.",
+      "Sign in anywhere. Track series across every site — dashboard and extension keep your account in sync.",
     type: "website",
   },
 };

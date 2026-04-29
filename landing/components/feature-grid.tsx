@@ -1,22 +1,22 @@
 import {
   ArrowDownToLine,
   BookMarked,
+  Cloud,
   Globe2,
   Puzzle,
   RefreshCw,
-  Sparkles,
 } from "lucide-react";
 
 const features = [
   {
     icon: Puzzle,
     title: "Companion extension",
-    body: "Reads the chapter URL on manga and manhwa sites, pushes progress to your server, and shows a live unread badge.",
+    body: "Reads the chapter URL on manga and manhwa sites, syncs progress to your logged-in account, and shows a live unread badge.",
   },
   {
     icon: RefreshCw,
     title: "Scheduled checks",
-    body: "Your backend scrapes listing pages on a timer so “latest chapter” and behind counts stay fresh without manual refresh.",
+    body: "Manga Tracker checks listing pages on a timer so “latest chapter” and behind counts stay fresh without you refreshing anything.",
   },
   {
     icon: BookMarked,
@@ -31,12 +31,12 @@ const features = [
   {
     icon: ArrowDownToLine,
     title: "Portable data",
-    body: "Export or import your library as JSON for backups, migrations, or moving between hosts.",
+    body: "Export or import your library as JSON for backups or moving your list to another setup.",
   },
   {
-    icon: Sparkles,
-    title: "You own the stack",
-    body: "Self-host Flask + Postgres (or SQLite locally); optional Selenium only when a site requires a real browser.",
+    icon: Cloud,
+    title: "Your account, anywhere",
+    body: "Your series, chapters, and passwords (stored securely hashed) live in the app’s database — sign in from any device with the same username and password.",
   },
 ] as const;
 

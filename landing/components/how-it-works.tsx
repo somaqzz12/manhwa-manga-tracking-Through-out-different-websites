@@ -1,29 +1,29 @@
-import { BookOpen, Cpu, Link2, Puzzle } from "lucide-react";
+import { BookOpen, Link2, Puzzle, UserRound } from "lucide-react";
 
 const steps = [
   {
     n: "01",
-    icon: Cpu,
-    title: "Host the server",
-    text: "Run the Flask app (SQLite locally or Postgres on Render). HTTPS in production unlocks extension sync.",
+    icon: UserRound,
+    title: "Create your account",
+    text: "Register on the web app with a username and password. That login is yours everywhere — same credentials on a new browser or country.",
   },
   {
     n: "02",
     icon: Link2,
     title: "Add series URLs",
-    text: "Paste each series listing URL; the tracker scrapes cover art and discovers the newest chapter slot on schedule.",
+    text: "Paste each series listing URL; Manga Tracker pulls cover art and checks for new chapters on a schedule.",
   },
   {
     n: "03",
     icon: Puzzle,
     title: "Install the companion",
-    text: "Load the Chromium extension from the Web Store or your build, paste your API base URL, and stay Connected.",
+    text: "Add the Chrome extension and point it at your Manga Tracker site URL so it can sync chapters for the account you’re signed into.",
   },
   {
     n: "04",
     icon: BookOpen,
     title: "Just read",
-    text: "On chapter pages the extension parses the chapter, updates last-seen per title, keeps unread badges truthful, and the dashboard mirrors it all.",
+    text: "On chapter pages the extension reads the chapter, updates your last-seen, keeps unread badges accurate, and the dashboard shows the same data for your user.",
   },
 ] as const;
 
@@ -36,8 +36,8 @@ export function HowItWorks() {
             How it works
           </h2>
           <p className="mt-4 text-lg text-slate-400">
-            Scraping stays on your server — the extension&apos;s role is detecting the
-            page you&apos;re reading and syncing that single fact back.
+            Library data is stored per user in the app&apos;s database. The extension
+            only detects which chapter you opened and sends that to your account.
           </p>
         </div>
 
