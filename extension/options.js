@@ -38,16 +38,38 @@ async function loadSettings() {
     : DEFAULT_COOLDOWN_HOURS;
 }
 
+async function ensureBackendHostPermission(origin) {
+  const origins = [`${origin}/*`];
+  try {
+    if (await chrome.permissions.contains({ origins })) {
+      return { ok: true };
+    }
+    const granted = await chrome.permissions.request({ origins });
+    return {
+      ok: granted,
+      error: granted ? null : "Chrome denied host access — API calls to this URL will fail.",
+    };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
 async function saveApiBase() {
   const raw = ($("apiBase").value || "").trim().replace(/\/$/, "");
   if (!raw) {
     setStatus($("apiStatus"), "Backend URL cannot be empty.", "error");
     return;
   }
+  let parsed;
   try {
-    new URL(raw);
+    parsed = new URL(raw);
   } catch {
     setStatus($("apiStatus"), "Not a valid URL.", "error");
+    return;
+  }
+  const perm = await ensureBackendHostPermission(parsed.origin);
+  if (!perm.ok) {
+    setStatus($("apiStatus"), perm.error || "Could not obtain host permission.", "error");
     return;
   }
   await chrome.storage.local.set({ apiBase: raw });

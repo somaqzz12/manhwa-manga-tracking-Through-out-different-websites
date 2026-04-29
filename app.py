@@ -104,8 +104,13 @@ CHECK_SINGLE_LOCKS: dict[int, threading.Lock] = {}
 CHECK_SINGLE_LOCKS_GUARD = threading.Lock()
 _SCHEDULER = None
 _SCHEDULER_LOCK = threading.Lock()
-REQUIRE_API_AUTH = os.getenv("REQUIRE_API_AUTH", "0") == "1"
+CHROME_EXTENSION_ID = os.getenv("CHROME_EXTENSION_ID", "").strip()
 CORS_ALLOW_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+# Optional: allow the published extension origin without listing the full chrome-extension:// URL.
+if CHROME_EXTENSION_ID:
+    ext_origin = f"chrome-extension://{CHROME_EXTENSION_ID}"
+    if ext_origin not in CORS_ALLOW_ORIGINS:
+        CORS_ALLOW_ORIGINS.append(ext_origin)
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "").strip()
 READ_PROGRESS_MAX_PER_USER = int(os.getenv("READ_PROGRESS_MAX_PER_USER", "20000"))
 BOOKMARKS_PAGE_SIZE = max(1, int(os.getenv("BOOKMARKS_PAGE_SIZE", "60")))
@@ -172,6 +177,14 @@ if CORS_ALLOW_ORIGINS:
             "CORS credentials enabled for %d explicit origin(s); keep this list minimal and trusted.",
             len(CORS_ALLOW_ORIGINS),
         )
+elif not APP_DEBUG:
+    log.warning(
+        "CORS_ALLOW_ORIGINS is empty in production. Browser extension requests send Origin: "
+        "chrome-extension://<id>; without an explicit allowlist, those responses will not "
+        "include Access-Control-Allow-Origin and API calls from the extension will fail CORS. "
+        "Set CORS_ALLOW_ORIGINS to a comma-separated list including your app origin (e.g. "
+        "https://app.example.com) and chrome-extension://<your-published-extension-id>."
+    )
 
 
 def _index_redirect_kwargs(
@@ -320,10 +333,12 @@ def add_cors_headers(response):
     allow_origin = False
     if CORS_ALLOW_ORIGINS:
         allow_origin = origin in CORS_ALLOW_ORIGINS
-    elif origin.startswith("chrome-extension://"):
-        allow_origin = True
-    elif APP_DEBUG and (origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1")):
-        allow_origin = True
+    elif APP_DEBUG:
+        # Dev only: allow unpacked extensions and local dashboard tabs without a fixed allowlist.
+        if origin.startswith("chrome-extension://"):
+            allow_origin = True
+        elif origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1"):
+            allow_origin = True
     if allow_origin:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Vary"] = "Origin"
@@ -718,8 +733,19 @@ def login_required():
     return session.get("user_id") is not None
 
 
-def api_auth_required() -> bool:
-    return not REQUIRE_API_AUTH or login_required()
+def api_session_user_id() -> Optional[int]:
+    """Return the logged-in user id for extension JSON API routes.
+
+    Never falls back to DEFAULT_USER_EMAIL — anonymous callers must not read or
+    write another user's bookmarks or progress.
+    """
+    uid = session.get("user_id")
+    if uid is None:
+        return None
+    try:
+        return int(uid)
+    except (TypeError, ValueError):
+        return None
 
 
 def admin_api_authorized() -> bool:
@@ -730,8 +756,8 @@ def admin_api_authorized() -> bool:
     - an ADMIN_API_TOKEN is configured and matches the X-Admin-Token header, or
     - the app is running with FLASK_DEBUG=1 (local development convenience).
 
-    This intentionally does NOT key off REQUIRE_API_AUTH so that misconfigured
-    self-hosted deploys cannot accidentally expose these as an open proxy.
+    This intentionally does NOT treat "open API" env flags as a reason to expose
+    scrape/maintenance tools without an admin signal.
     """
     if APP_DEBUG:
         return True
@@ -1956,7 +1982,8 @@ def delete_bookmark(bookmark_id: int):
 @csrf.exempt
 @app.route("/api/series/ensure", methods=["POST"])
 def ensure_series():
-    if not api_auth_required():
+    user_id = api_session_user_id()
+    if user_id is None:
         return jsonify({"ok": False, "error": "authentication required"}), 401
     payload = request.get_json(silent=True) or {}
     title = (payload.get("title") or "").strip()
@@ -1964,8 +1991,6 @@ def ensure_series():
     series_key = (payload.get("series_key") or "").strip().lower()
     if not title or not url:
         return jsonify({"ok": False, "error": "title and url required"}), 400
-
-    user_id = get_actor_user_id()
     canonical_url = resolve_series_listing_url(url)
     cover_url = scrape_series_cover(canonical_url, title)
     with get_conn() as conn:
@@ -2008,7 +2033,8 @@ def ensure_series():
 @csrf.exempt
 @app.route("/api/progress", methods=["POST"])
 def save_progress():
-    if not api_auth_required():
+    user_id = api_session_user_id()
+    if user_id is None:
         return jsonify({"ok": False, "error": "authentication required"}), 401
     payload = request.get_json(silent=True) or {}
     series_url = (payload.get("series_url") or "").strip()
@@ -2020,7 +2046,6 @@ def save_progress():
     if not series_url and not series_key:
         return jsonify({"ok": False, "error": "series_url or series_key required"}), 400
 
-    user_id = get_actor_user_id()
     with get_conn() as conn:
         row = None
         if series_key:
@@ -2081,9 +2106,9 @@ def api_unread_count():
     reading_progress.chapter_num per bookmark, floored at zero) so the
     extension's badge can show the same number the user sees on the site.
     """
-    if not api_auth_required():
+    user_id = api_session_user_id()
+    if user_id is None:
         return jsonify({"ok": False, "error": "authentication required"}), 401
-    user_id = get_actor_user_id()
     with get_conn() as conn:
         rows = conn.execute(
             """

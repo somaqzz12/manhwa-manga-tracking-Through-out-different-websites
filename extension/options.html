@@ -172,7 +172,7 @@
 
     <section class="card">
       <h2>Backend URL</h2>
-      <p class="help">The Manga Watchlist site this extension syncs to. Leave the default to use the official server; only change it if you're hosting your own copy. The popup pings <code>/healthz</code> here and the badge polls <code>/api/unread-count</code>.</p>
+      <p class="help">The Manga Watchlist site this extension syncs to. Leave the default to use the official server; only change it if you're hosting your own copy. The popup pings <code>/healthz</code> here and the badge polls <code>/api/unread-count</code>. Saving a <strong>custom</strong> URL will ask Chrome for host permission to that origin (the pre-shipped backend domains are already allowed).</p>
       <label class="field" for="apiBase">Backend URL</label>
       <input id="apiBase" type="text" placeholder="https://app.mangawatchlist.space">
       <div class="toolbar">

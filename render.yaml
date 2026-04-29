@@ -8,10 +8,17 @@ services:
     envVars:
       - key: FLASK_DEBUG
         value: "0"
-      - key: REQUIRE_API_AUTH
-        value: "1"
+      # Extension JSON API (/api/series/ensure, /api/progress, /api/unread-count) always
+      # requires a dashboard session cookie — no anonymous default user.
       - key: ALLOW_SQLITE_IN_PRODUCTION
         value: "0"
+      # Comma-separated exact origins for credentialed cross-origin API calls.
+      # Add your app URL and either CHROME_EXTENSION_ID (below) or the full
+      # chrome-extension://<id> string after you publish the extension.
+      - key: CORS_ALLOW_ORIGINS
+        value: "https://app.mangawatchlist.space"
+      # After Chrome Web Store publish: add CHROME_EXTENSION_ID in the Render dashboard
+      # (Environment) with your 32-character extension id — it is merged into the CORS allowlist in app.py.
       # Required for the Chrome extension: cross-site cookies must be SameSite=None+Secure
       # so the chrome-extension:// origin can forward the session cookie on /api/* calls.
       - key: SESSION_COOKIE_SAMESITE

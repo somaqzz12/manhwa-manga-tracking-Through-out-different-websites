@@ -76,7 +76,7 @@ Settings to expose:
 
 Only one new endpoint is required.
 
-- **`GET /api/unread-count`** in [`app.py`](app.py). Returns the number of unread chapters across the signed-in user's tracked series, e.g. `{"unread": 7, "series": [{"series_key": "...", "unread": 3}, ...]}`. Reuse the existing per-series unread logic (the dashboard already computes "new updates" — see the bookmark `new_update` flag referenced near line 213 of `app.py`). Honor `REQUIRE_API_AUTH` exactly like the other `/api/*` routes in the same file.
+- **`GET /api/unread-count`** in [`app.py`](app.py). Returns the number of unread chapters across the signed-in user's tracked series, e.g. `{"unread": 7, "series": [{"series_key": "...", "unread": 3}, ...]}`. Reuse the existing per-series unread logic (the dashboard already computes "new updates" — see the bookmark `new_update` flag referenced near line 213 of `app.py`). Honor the same session requirement as the other `/api/*` user routes in `app.py`.
 
 Everything else the extension needs already exists: `/api/series/ensure`, `/api/progress`, `/healthz`. Do **not** introduce new write endpoints for the extension; reuse what the dashboard uses.
 

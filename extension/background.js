@@ -32,8 +32,7 @@ async function getApiBase() {
 async function postJson(path, payload) {
   const apiBase = await getApiBase();
   // credentials: "include" forwards the Manga Watchlist session cookie when the
-  // server runs with REQUIRE_API_AUTH=1; without it the API rejects extension
-  // requests as unauthenticated even when the user is logged into the dashboard.
+  // user is signed in on the dashboard; /api/* routes require that session.
   const res = await fetch(`${apiBase}${path}`, {
     method: "POST",
     credentials: "include",

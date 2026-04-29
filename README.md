@@ -54,10 +54,14 @@ The repo ships with a [`render.yaml`](render.yaml) blueprint that provisions:
 
 - a free web service running `python app.py`,
 - a free managed Postgres instance,
-- environment defaults that lock down production (`FLASK_DEBUG=0`, `REQUIRE_API_AUTH=1`, `ALLOW_SQLITE_IN_PRODUCTION=0`),
+- environment defaults that lock down production (`FLASK_DEBUG=0`, `ALLOW_SQLITE_IN_PRODUCTION=0`),
+  `CORS_ALLOW_ORIGINS` for the app host, and an optional `CHROME_EXTENSION_ID` so the extension
+  origin is allowlisted without duplicating `chrome-extension://...` in env,
 - an auto-generated `SECRET_KEY`.
 
 In Render, choose **New → Blueprint**, point it at this repository, and accept the defaults. The web service will refuse to start without a `DATABASE_URL` in production, so let the blueprint wire that up for you.
+
+After the first deploy, open Render → your web service → **Environment** and set **`CHROME_EXTENSION_ID`** to the 32-character id from `chrome://extensions` (developer mode → Details) for the **published** build. That value is merged into the CORS allowlist so the extension can send credentialed API requests. If you skip this until after store approval, the dashboard will work but the extension may get CORS errors until the id is set.
 
 ## Environment variables
 
@@ -71,9 +75,9 @@ All configuration is via environment variables. The `Required?` column is what t
 | `FLASK_DEBUG` | Optional | `1` | Enables the Flask debugger and relaxes session/CSRF flags. Must be `0` in production. |
 | `PORT` | Optional | `5000` | Port the dev server binds to. Render injects this automatically. |
 | `LOG_LEVEL` | Optional | `INFO` | Standard Python log level. |
-| `REQUIRE_API_AUTH` | Optional | `0` | When `1`, every `/api/*` route requires an authenticated session cookie. The browser extension forwards your dashboard cookie. |
+| `CHROME_EXTENSION_ID` | Optional | _(unset)_ | Published extension id; if set, `chrome-extension://<id>` is appended to the CORS allowlist. |
 | `ADMIN_API_TOKEN` | Optional | _(unset)_ | Bearer token that gates `/api/debug/scrape` and `/api/maintenance/merge-duplicates`. Routes return 404 when unset. |
-| `CORS_ALLOW_ORIGINS` | Optional | _(unset)_ | Comma-separated list of origins allowed to call the API. |
+| `CORS_ALLOW_ORIGINS` | **Strongly required in production** | _(unset)_ | Comma-separated **exact** origins allowed to receive `Access-Control-Allow-Origin` with credentials. Must include your dashboard origin (e.g. `https://app.example.com`) and, unless you rely on `CHROME_EXTENSION_ID`, the full `chrome-extension://<id>` origin. With `FLASK_DEBUG=1` and an empty list, dev mode allows unpacked extensions and localhost only — not production-safe. |
 | `SESSION_COOKIE_SECURE` | Optional | `1` in prod, `0` in debug | Forces the session cookie to HTTPS-only. |
 | `HTTP_TIMEOUT_SECONDS` | Optional | `15` | Per-request timeout for the chapter scraper. |
 | `MAX_CHECK_WORKERS` | Optional | `6` | Concurrency for "Check All". Lower on small Render plans. |
@@ -157,12 +161,12 @@ The extension’s `homepage_url` in the manifest points at this GitHub repositor
 
 ## API endpoints
 
-Routes the extension and external clients can rely on. All `/api/*` routes are CSRF-exempt and honor `REQUIRE_API_AUTH`; admin routes additionally require `ADMIN_API_TOKEN`.
+Routes the extension and external clients can rely on. User JSON routes (`/api/series/ensure`, `/api/progress`, `/api/unread-count`) are CSRF-exempt and **always require a signed-in dashboard session** (no anonymous default user). Configure production CORS with `CORS_ALLOW_ORIGINS` / `CHROME_EXTENSION_ID` so the extension can send cookies. Admin routes additionally require `ADMIN_API_TOKEN` or a logged-in browser session.
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
 | `GET` | `/healthz` | None | Liveness probe used by Render and the extension popup connection dot. |
-| `POST` | `/api/series/ensure` | Session (when `REQUIRE_API_AUTH=1`) | Idempotently create or look up a bookmark by `series_key` or `url`. |
+| `POST` | `/api/series/ensure` | Session (required) | Idempotently create or look up a bookmark by `series_key` or `url`. |
 | `POST` | `/api/progress` | Session | Record reading progress for a chapter and bump `latest_seen_*` if the user is ahead of the scraper. |
 | `GET` | `/api/unread-count` | Session | Returns total unread, behind-count, per-series unread, and the user's `tracked_keys`. Used by the extension badge. |
 | `POST` | `/api/debug/scrape` | Admin token | Returns candidate links, chosen latest, parser version, confidence, and error flags for a given URL. |
