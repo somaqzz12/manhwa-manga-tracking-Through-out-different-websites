@@ -1227,8 +1227,18 @@ def _check_single_locked(bookmark_id: int, user_id: int) -> None:
         if not row:
             return
 
-        effective_url = resolve_series_listing_url(row["url"])
+        # Fast path: bookmarks are stored canonical at add/edit time. Re-resolving
+        # every interval doubles request count and causes avoidable timeouts.
+        effective_url = (row["url"] or "").strip()
         label, num, latest_url, err, debug_info = scrape_latest_update(effective_url)
+        # One-time fallback: if scraping failed, try resolving redirects/canonical
+        # URL once and retry there.
+        if err:
+            resolved_once = resolve_series_listing_url(effective_url)
+            if resolved_once and resolved_once.rstrip("/") != effective_url.rstrip("/"):
+                label, num, latest_url, err, debug_info = scrape_latest_update(resolved_once)
+                if not err:
+                    effective_url = resolved_once
         cover_url = row["cover_url"]
         if not cover_url:
             scraped_cover = scrape_series_cover(effective_url, row["title"] or "")

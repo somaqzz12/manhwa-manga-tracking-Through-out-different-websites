@@ -18,6 +18,14 @@ services:
       # chrome-extension://<id> string after you publish the extension.
       - key: CORS_ALLOW_ORIGINS
         value: "https://app.mangawatchlist.space"
+      # Keep free-tier memory stable: disable Selenium fallback and reduce
+      # per-check timeout / concurrency.
+      - key: USE_SELENIUM_FALLBACK
+        value: "0"
+      - key: HTTP_TIMEOUT_SECONDS
+        value: "8"
+      - key: MAX_CHECK_WORKERS
+        value: "4"
       # After Chrome Web Store publish: add CHROME_EXTENSION_ID in the Render dashboard
       # (Environment) with your 32-character extension id — it is merged into the CORS allowlist in app.py.
       # Required for the Chrome extension: cross-site cookies must be SameSite=None+Secure
