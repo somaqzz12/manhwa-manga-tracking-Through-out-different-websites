@@ -84,7 +84,7 @@ All configuration is via environment variables. The `Required?` column is what t
 | `CHECK_INTERVAL_MINUTES` | Optional | `30` | Background scheduler interval. |
 | `DISABLE_AUTO_CHECK` | Optional | `0` | Set to `1` to disable the scheduler entirely. |
 | `INITIAL_AUTO_CHECK` | Optional | `0` | Set to `1` to fire one check pass right after startup. |
-| `USE_SELENIUM_FALLBACK` | Optional | `1` | Whether to retry failed scrapes with Selenium. |
+| `USE_SELENIUM_FALLBACK` | Optional | `0` | Whether to retry failed scrapes with Selenium. Keep disabled on small hosts. |
 | `MIN_PASSWORD_LENGTH` | Optional | `8` | Minimum password length on registration. |
 | `BOOKMARKS_PAGE_SIZE` | Optional | `60` | Bookmarks per dashboard page. |
 | `READ_PROGRESS_MAX_PER_BOOKMARK` | Optional | `400` | Cap on stored chapter-read events per series. |
@@ -177,7 +177,7 @@ Example request bodies are in `app.py` near each route, and the extension's call
 ## Known limitations
 
 - **Cover images are best-effort.** Covers are scraped from Open Graph metadata and the largest visible image on the listing page. Sites that lazy-load behind JavaScript or hotlink-block requests will show a placeholder until you point the parser at a different URL.
-- **Selenium is opt-in but heavy.** When `USE_SELENIUM_FALLBACK=1` (the default), the server starts ChromeDriver to retry pages that defeat plain HTTP scraping. This adds significant memory pressure on small Render plans and requires Chrome + ChromeDriver installed in the environment. Free Render builds include them, but custom hosts may not.
+- **Selenium is opt-in and heavy.** When `USE_SELENIUM_FALLBACK=1`, the server starts ChromeDriver to retry pages that defeat plain HTTP scraping. This adds significant memory pressure on small Render plans and requires Chrome + ChromeDriver installed in the environment. Keep it disabled unless you are on a host with enough memory.
 - **SQLite is for local dev only.** The bundled `tracker.db` is fine on your laptop, but on any cloud host the disk is ephemeral and you will lose data on every redeploy. Production refuses to boot without `DATABASE_URL` unless `ALLOW_SQLITE_IN_PRODUCTION=1`.
 - **Heuristic chapter detection.** The extension and the scraper both fall back to URL/title heuristics for hosts without a per-site profile. Expect occasional misses on unusual readers; the per-host extractor map in [`extension/content.js`](extension/content.js) is the right place to add fixes.
 - **Single-tenant by design.** Accounts are local to the instance you host. There is no SSO, no team sharing, and no cross-server sync.

@@ -96,6 +96,7 @@ HTTP_TIMEOUT_SECONDS = int(os.getenv("HTTP_TIMEOUT_SECONDS", "15"))
 MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
 SCRAPE_RETRY_ON_FAIL = os.getenv("SCRAPE_RETRY_ON_FAIL", "0") == "1"
 SCRAPE_TIMING_LOGS = os.getenv("SCRAPE_TIMING_LOGS", "0") == "1"
+USE_SELENIUM_FALLBACK = os.getenv("USE_SELENIUM_FALLBACK", "0") == "1"
 DEFAULT_USER_EMAIL = os.getenv("DEFAULT_USER_EMAIL", "local@tracker")
 MIN_PASSWORD_LENGTH = max(1, int(os.getenv("MIN_PASSWORD_LENGTH", "8")))
 READ_PROGRESS_MAX_PER_BOOKMARK = int(os.getenv("READ_PROGRESS_MAX_PER_BOOKMARK", "400"))
@@ -1138,7 +1139,7 @@ def scrape_latest_update(url: str) -> tuple[Optional[str], Optional[float], Opti
         _log_scrape_timing("scrape_total_ok", url, t_total)
         return label, num, latest_url, None, info
 
-    if os.getenv("USE_SELENIUM_FALLBACK", "1") == "1":
+    if USE_SELENIUM_FALLBACK:
         t_selenium = time.perf_counter()
         s_label, s_num, s_latest_url, s_err, s_info = scrape_selenium(url)
         _log_scrape_timing("selenium_attempt", url, t_selenium)
