@@ -5,7 +5,7 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     # Use gunicorn (not Flask's dev server) so APScheduler + request handling are production-safe.
-    startCommand: gunicorn app:app --workers 1 --threads 4 --bind 0.0.0.0:$PORT
+    startCommand: gunicorn -w 1 --threads 4 -b 0.0.0.0:$PORT app:app
     envVars:
       - key: FLASK_DEBUG
         value: "0"
@@ -17,7 +17,7 @@ services:
       # Add your app URL and either CHROME_EXTENSION_ID (below) or the full
       # chrome-extension://<id> string after you publish the extension.
       - key: CORS_ALLOW_ORIGINS
-        value: "https://app.mangawatchlist.space"
+        value: "https://mangawatchlist.space,https://app.mangawatchlist.space"
       # Keep free-tier memory stable: disable Selenium fallback and reduce
       # per-check timeout / concurrency.
       - key: USE_SELENIUM_FALLBACK
@@ -25,7 +25,17 @@ services:
       - key: HTTP_TIMEOUT_SECONDS
         value: "8"
       - key: MAX_CHECK_WORKERS
-        value: "4"
+        value: "2"
+      - key: INITIAL_AUTO_CHECK
+        value: "0"
+      - key: CHECK_STALE_MINUTES
+        value: "45"
+      - key: PER_SITE_CONCURRENCY
+        value: "2"
+      - key: SCHEDULER_ENABLED
+        value: "1"
+      - key: SCHEDULER_LEADER
+        value: "1"
       # After Chrome Web Store publish: add CHROME_EXTENSION_ID in the Render dashboard
       # (Environment) with your 32-character extension id — it is merged into the CORS allowlist in app.py.
       # Required for the Chrome extension: cross-site cookies must be SameSite=None+Secure

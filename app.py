@@ -3,8 +3,10 @@ import os
 import re
 import sqlite3
 import json
+import ipaddress
 import logging
 import secrets
+import socket
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -19,6 +21,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import check_password_hash, generate_password_hash
+from services import chapter_parsing as chapter
 try:
     import psycopg2
     import psycopg2.extras
@@ -40,9 +43,6 @@ except Exception:
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "tracker.db")
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-CHAPTER_PATTERN = re.compile(r"(chapter|ch\.?|ep\.?|episode)\s*[:#-]?\s*(\d+(?:\.\d+)?)", re.IGNORECASE)
-URL_CHAPTER_PATTERN = re.compile(r"(?:^|[^a-z])(c|chapter|ch|episode|ep)[-_ ]?(\d+(?:\.\d+)?)$", re.IGNORECASE)
-URL_CHAPTER_STEP_PATTERN = re.compile(r"^(chapter|ch|episode|ep)$", re.IGNORECASE)
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me")
@@ -97,12 +97,20 @@ DEFAULT_USER_EMAIL = os.getenv("DEFAULT_USER_EMAIL", "local@tracker")
 MIN_PASSWORD_LENGTH = max(1, int(os.getenv("MIN_PASSWORD_LENGTH", "8")))
 READ_PROGRESS_MAX_PER_BOOKMARK = int(os.getenv("READ_PROGRESS_MAX_PER_BOOKMARK", "400"))
 INITIAL_AUTO_CHECK = os.getenv("INITIAL_AUTO_CHECK", "0") == "1"
+CHECK_STALE_MINUTES = max(1, int(os.getenv("CHECK_STALE_MINUTES", "45")))
 DEFAULT_BUG_REPORT_URL = "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites/issues"
 APP_DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
 DB_READY = False
 DB_INIT_LOCK = threading.Lock()
 CHECK_SINGLE_LOCKS: dict[int, threading.Lock] = {}
 CHECK_SINGLE_LOCKS_GUARD = threading.Lock()
+CHECK_ALL_LOCK = threading.Lock()
+CHECK_ALL_STATUS_LOCK = threading.Lock()
+CHECK_ALL_RUNNING = False
+CHECK_ALL_LAST_FINISHED_AT: Optional[datetime] = None
+SITE_CHECK_SEMAPHORES: dict[str, threading.Semaphore] = {}
+SITE_CHECK_SEMAPHORES_GUARD = threading.Lock()
+PER_SITE_CONCURRENCY = max(1, int(os.getenv("PER_SITE_CONCURRENCY", "2")))
 _SCHEDULER = None
 _SCHEDULER_LOCK = threading.Lock()
 CHROME_EXTENSION_ID = os.getenv("CHROME_EXTENSION_ID", "").strip()
@@ -638,60 +646,44 @@ def ensure_db_ready() -> None:
 
 
 def parse_chapter_number(text: str) -> Optional[float]:
-    match = CHAPTER_PATTERN.search(text or "")
-    if not match:
-        return None
-    try:
-        return float(match.group(2))
-    except ValueError:
-        return None
+    return chapter.parse_chapter_number(text)
 
 
 def parse_chapter_from_url(url: str) -> Optional[float]:
-    raw_url = (url or "").strip()
-    if not raw_url:
-        return None
-    path = raw_url
-    if "://" in raw_url:
-        try:
-            from urllib.parse import urlparse
-
-            path = urlparse(raw_url).path
-        except Exception:
-            path = raw_url
-    tokens = [t for t in path.strip("/").split("/") if t]
-    if not tokens:
-        return None
-
-    # Pattern: /.../chapter/39 or /.../ep/12.5
-    if len(tokens) >= 2 and URL_CHAPTER_STEP_PATTERN.match(tokens[-2]):
-        try:
-            return float(tokens[-1])
-        except ValueError:
-            pass
-
-    # Pattern: /.../c156 or /.../chapter-156
-    tail = tokens[-1]
-    match = URL_CHAPTER_PATTERN.search(tail)
-    if not match:
-        # Fallback for mixed separators in full path.
-        match = re.search(r"(?:chapter|ch|episode|ep)[^0-9]{0,3}(\d+(?:\.\d+)?)", path, re.IGNORECASE)
-        if match:
-            try:
-                return float(match.group(1))
-            except ValueError:
-                return None
-        return None
-    try:
-        return float(match.group(2))
-    except ValueError:
-        return None
+    return chapter.parse_chapter_from_url(url)
 
 
 def is_valid_http_url(raw_url: str) -> bool:
     try:
         parsed = urlparse((raw_url or "").strip())
         return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+    except Exception:
+        return False
+
+
+def is_public_http_url(raw_url: str) -> bool:
+    if not is_valid_http_url(raw_url):
+        return False
+    try:
+        host = (urlparse((raw_url or "").strip()).hostname or "").strip()
+        if not host:
+            return False
+        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+        if not infos:
+            return False
+        for info in infos:
+            ip_txt = info[4][0]
+            ip = ipaddress.ip_address(ip_txt)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_multicast
+                or ip.is_reserved
+                or ip.is_unspecified
+            ):
+                return False
+        return True
     except Exception:
         return False
 
@@ -798,6 +790,8 @@ def admin_api_authorized() -> bool:
 
 
 def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
+    if not is_public_http_url(url):
+        return None
     try:
         res = SESSION.get(url, timeout=HTTP_TIMEOUT_SECONDS)
         res.raise_for_status()
@@ -860,6 +854,8 @@ def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
 
 def resolve_series_listing_url(url: str) -> str:
     """Best-effort canonical series URL resolution for sites with chapter-style slugs."""
+    if not is_public_http_url(url):
+        return url
     parsed_slug = extract_series_slug(url)
     low = (url or "").lower()
     if parsed_slug and ("/manga/" in low or "/comics/" in low) and "chapter" not in low and not re.search(r"-\d+(?:\.\d+)?/?$", low):
@@ -917,184 +913,19 @@ def resolve_series_listing_url(url: str) -> str:
 
 
 def extract_series_slug(raw_url: str) -> str:
-    try:
-        from urllib.parse import urlparse
-
-        path = urlparse(raw_url).path.strip("/")
-    except Exception:
-        path = (raw_url or "").strip("/")
-    if not path:
-        return ""
-    parts = [p for p in path.split("/") if p]
-    if not parts:
-        return ""
-    if parts[0].lower() in {"manga", "comics"} and len(parts) >= 2:
-        slug = parts[1]
-    else:
-        slug = parts[-1]
-    slug = re.sub(r"-chapter-\d+(?:\.\d+)?$", "", slug, flags=re.IGNORECASE)
-    slug = re.sub(r"[-_]\d+(?:\.\d+)?$", "", slug, flags=re.IGNORECASE)
-    return slug.lower()
+    return chapter.extract_series_slug(raw_url)
 
 
 def iter_chapter_candidates(soup: BeautifulSoup, page_url: str) -> list[tuple[str, str, str]]:
-    """Return chapter candidates as (label, absolute_url, class_text)."""
-    out: list[tuple[str, str, str]] = []
-    seen: set[tuple[str, str]] = set()
-
-    # Common case: direct chapter links.
-    for a in soup.select("a[href]"):
-        href = (a.get("href") or "").strip()
-        if not href:
-            continue
-        abs_href = urljoin(page_url, href)
-        label = a.get_text(" ", strip=True) or ""
-        class_text = " ".join(a.get("class", [])) if a.get("class") else ""
-        key = (label, abs_href)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append((label, abs_href, class_text))
-
-    # Some readers render chapter list in <select><option value="...">.
-    for opt in soup.select("option[value]"):
-        value = (opt.get("value") or "").strip()
-        if not value or value.startswith("#"):
-            continue
-        abs_href = urljoin(page_url, value)
-        label = opt.get_text(" ", strip=True) or ""
-        key = (label, abs_href)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append((label, abs_href, "option"))
-
-    # Fallback: data attributes often hold chapter URLs.
-    for node in soup.select("[data-href], [data-url], [data-link]"):
-        raw = (node.get("data-href") or node.get("data-url") or node.get("data-link") or "").strip()
-        if not raw:
-            continue
-        abs_href = urljoin(page_url, raw)
-        label = node.get_text(" ", strip=True) or ""
-        class_text = " ".join(node.get("class", [])) if node.get("class") else ""
-        key = (label, abs_href)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append((label, abs_href, class_text))
-
-    return out
+    return chapter.iter_chapter_candidates(soup, page_url)
 
 
 def pick_best_candidate_with_debug(soup: BeautifulSoup, page_url: str) -> dict:
-    page_slug = extract_series_slug(page_url)
-    best_label: Optional[str] = None
-    best_num: Optional[float] = None
-    best_url: Optional[str] = None
-    best_score = -1
-    parser_hits = {"anchors": 0, "options": 0, "data_attrs": 0}
-    candidate_debug: list[dict] = []
-    error_flags: list[str] = []
-
-    for text, absolute_href, class_text in iter_chapter_candidates(soup, page_url):
-        if "option" in class_text:
-            parser_hits["options"] += 1
-        elif "data-" in class_text:
-            parser_hits["data_attrs"] += 1
-        else:
-            parser_hits["anchors"] += 1
-
-        if not text or len(text) > 140:
-            continue
-        parsed_from_text = parse_chapter_number(text)
-        parsed_from_url = parse_chapter_from_url(absolute_href)
-        if parsed_from_text is None and parsed_from_url is None:
-            continue
-
-        final_num = parsed_from_text if parsed_from_text is not None else parsed_from_url
-        if final_num is None:
-            continue
-
-        href_slug = extract_series_slug(absolute_href) if absolute_href else ""
-        score = 0
-        if parsed_from_url is not None:
-            score += 3
-        if re.search(r"chapter|episode|list|item", class_text, re.IGNORECASE):
-            score += 2
-        if page_slug and href_slug:
-            if page_slug == href_slug or page_slug in absolute_href.lower():
-                score += 5
-            else:
-                continue
-        score += int(final_num)
-
-        candidate_debug.append(
-            {
-                "label": text,
-                "url": absolute_href,
-                "chapter_num": final_num,
-                "score": score,
-                "same_series": bool(not page_slug or (href_slug and (href_slug == page_slug or page_slug in absolute_href.lower()))),
-            }
-        )
-
-        if score > best_score or (score == best_score and (best_num is None or final_num > best_num)):
-            best_score = score
-            best_label = text
-            best_num = final_num
-            best_url = absolute_href or None
-
-    if not candidate_debug:
-        error_flags.append("no_chapter_candidates")
-    elif len(candidate_debug) > 400:
-        error_flags.append("high_candidate_volume")
-
-    confidence = 0.0
-    if best_num is not None:
-        confidence = 0.55
-        if best_url and page_slug and page_slug in best_url.lower():
-            confidence += 0.2
-        if candidate_debug:
-            top_scores = sorted([c["score"] for c in candidate_debug], reverse=True)
-            if len(top_scores) == 1:
-                confidence += 0.2
-            else:
-                gap = top_scores[0] - top_scores[1]
-                if gap >= 6:
-                    confidence += 0.2
-                elif gap >= 3:
-                    confidence += 0.12
-                else:
-                    confidence += 0.05
-        if best_url and parse_chapter_from_url(best_url) is not None:
-            confidence += 0.08
-    confidence = max(0.0, min(0.99, round(confidence, 2)))
-
-    if parser_hits["options"] > 0:
-        parser_version = "generic-option-list"
-    elif parser_hits["data_attrs"] > 0:
-        parser_version = "generic-data-attrs"
-    else:
-        parser_version = "generic-anchor-list"
-
-    if best_label is None:
-        fallback_title = soup.title.string.strip() if soup.title and soup.title.string else "No chapter pattern found"
-        best_label = fallback_title
-
-    return {
-        "label": best_label,
-        "chapter_num": best_num,
-        "chapter_url": best_url,
-        "confidence": confidence,
-        "parser_version": parser_version,
-        "candidates": sorted(candidate_debug, key=lambda c: c["score"], reverse=True),
-        "error_flags": error_flags,
-    }
+    return chapter.pick_best_candidate_with_debug(soup, page_url)
 
 
 def pick_best_candidate(soup: BeautifulSoup, page_url: str) -> tuple[Optional[str], Optional[float], Optional[str]]:
-    info = pick_best_candidate_with_debug(soup, page_url)
-    return info["label"], info["chapter_num"], info["chapter_url"]
+    return chapter.pick_best_candidate(soup, page_url)
 
 
 def get_profile_for_url(url: str) -> Optional[dict]:
@@ -1143,6 +974,8 @@ def scrape_with_profile(soup: BeautifulSoup, page_url: str, profile: dict) -> di
 
 
 def scrape_bs4(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str], dict]:
+    if not is_public_http_url(url):
+        return None, None, None, "Blocked URL (private/internal host)", {}
     try:
         res = SESSION.get(url, timeout=HTTP_TIMEOUT_SECONDS)
         res.raise_for_status()
@@ -1175,6 +1008,8 @@ def scrape_bs4(url: str) -> tuple[Optional[str], Optional[float], Optional[str],
 
 
 def scrape_selenium(url: str) -> tuple[Optional[str], Optional[float], Optional[str], Optional[str], dict]:
+    if not is_public_http_url(url):
+        return None, None, None, "Blocked URL (private/internal host)", {}
     if webdriver is None or Options is None:
         return None, None, None, "Selenium not available", {}
 
@@ -1214,34 +1049,68 @@ def scrape_latest_update(url: str) -> tuple[Optional[str], Optional[float], Opti
     return None, None, None, err, {}
 
 
-def check_single(bookmark_id: int, user_id: int) -> None:
+def _get_site_check_semaphore(raw_url: str) -> threading.Semaphore:
+    host = ""
+    try:
+        host = (urlparse(raw_url or "").hostname or "").lower()
+    except Exception:
+        host = ""
+    if not host:
+        host = "__unknown__"
+    with SITE_CHECK_SEMAPHORES_GUARD:
+        sem = SITE_CHECK_SEMAPHORES.get(host)
+        if sem is None:
+            sem = threading.Semaphore(PER_SITE_CONCURRENCY)
+            SITE_CHECK_SEMAPHORES[host] = sem
+        return sem
+
+
+def _should_check_bookmark(last_checked: Optional[str], force: bool = False) -> bool:
+    if force:
+        return True
+    if not last_checked:
+        return True
+    try:
+        ts = datetime.fromisoformat(str(last_checked).replace("Z", "+00:00"))
+    except Exception:
+        return True
+    age_seconds = (datetime.utcnow() - ts.replace(tzinfo=None)).total_seconds()
+    return age_seconds >= CHECK_STALE_MINUTES * 60
+
+
+def check_single(bookmark_id: int, user_id: int, force: bool = False) -> None:
     with CHECK_SINGLE_LOCKS_GUARD:
         lock = CHECK_SINGLE_LOCKS.setdefault(bookmark_id, threading.Lock())
     with lock:
-        _check_single_locked(bookmark_id, user_id)
+        _check_single_locked(bookmark_id, user_id, force=force)
 
 
-def _check_single_locked(bookmark_id: int, user_id: int) -> None:
+def _check_single_locked(bookmark_id: int, user_id: int, force: bool = False) -> None:
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM bookmarks WHERE id = ? AND user_id = ?", (bookmark_id, user_id)).fetchone()
         if not row:
+            return
+        if not _should_check_bookmark(row["last_checked"], force=force):
             return
 
         # Fast path: bookmarks are stored canonical at add/edit time. Re-resolving
         # every interval doubles request count and causes avoidable timeouts.
         effective_url = (row["url"] or "").strip()
-        label, num, latest_url, err, debug_info = scrape_latest_update(effective_url)
-        # One-time fallback: if scraping failed, try resolving redirects/canonical
-        # URL once and retry there.
-        if err:
-            resolved_once = resolve_series_listing_url(effective_url)
-            if resolved_once and resolved_once.rstrip("/") != effective_url.rstrip("/"):
-                label, num, latest_url, err, debug_info = scrape_latest_update(resolved_once)
-                if not err:
-                    effective_url = resolved_once
+        sem = _get_site_check_semaphore(effective_url)
+        with sem:
+            label, num, latest_url, err, debug_info = scrape_latest_update(effective_url)
+            # One-time fallback: if scraping failed, try resolving redirects/canonical
+            # URL once and retry there.
+            if err:
+                resolved_once = resolve_series_listing_url(effective_url)
+                if resolved_once and resolved_once.rstrip("/") != effective_url.rstrip("/"):
+                    label, num, latest_url, err, debug_info = scrape_latest_update(resolved_once)
+                    if not err:
+                        effective_url = resolved_once
         cover_url = row["cover_url"]
         if not cover_url:
-            scraped_cover = scrape_series_cover(effective_url, row["title"] or "")
+            with sem:
+                scraped_cover = scrape_series_cover(effective_url, row["title"] or "")
             cover_url = scraped_cover or row["cover_url"]
         now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
@@ -1395,15 +1264,22 @@ def prune_reading_progress_all_users() -> None:
         log.exception("prune_reading_progress_all_users failed")
 
 
-def check_all(user_id: int) -> None:
+def check_all(user_id: int, force: bool = False) -> None:
     with get_conn() as conn:
-        rows = conn.execute("SELECT id FROM bookmarks WHERE user_id = ?", (user_id,)).fetchall()
-    ids = [row["id"] for row in rows]
+        rows = conn.execute(
+            "SELECT id, last_checked FROM bookmarks WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+    ids = [
+        row["id"]
+        for row in rows
+        if _should_check_bookmark(row["last_checked"], force=force)
+    ]
     if not ids:
         return
     # Parallel checks significantly reduce total refresh latency.
     with ThreadPoolExecutor(max_workers=min(MAX_CHECK_WORKERS, len(ids))) as pool:
-        futures = [pool.submit(check_single, bid, user_id) for bid in ids]
+        futures = [pool.submit(check_single, bid, user_id, force) for bid in ids]
         for f in as_completed(futures):
             try:
                 f.result()
@@ -1411,12 +1287,43 @@ def check_all(user_id: int) -> None:
                 log.exception("check_single failed in batch check")
 
 
+def check_all_safe(user_id: int, force: bool = False) -> bool:
+    """Run check_all only when no other check-all run is active."""
+    acquired = CHECK_ALL_LOCK.acquire(blocking=False)
+    if not acquired:
+        return False
+    try:
+        check_all(user_id, force=force)
+        return True
+    finally:
+        CHECK_ALL_LOCK.release()
+
+
+def _format_relative_age(ts: Optional[datetime]) -> str:
+    if ts is None:
+        return "never"
+    try:
+        seconds = max(0, int((datetime.utcnow() - ts).total_seconds()))
+    except Exception:
+        return "unknown"
+    if seconds < 60:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} min ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    return f"{days}d ago"
+
+
 def check_all_users() -> None:
     ensure_db_ready()
     with get_conn() as conn:
         users = conn.execute("SELECT id FROM users").fetchall()
     for user in users:
-        check_all(int(user["id"]))
+        check_all(int(user["id"]), force=False)
 
 
 @app.route("/auth", methods=["GET", "POST"])
@@ -1627,6 +1534,15 @@ def index():
         item["continue_url"] = item.get("read_source_url") or item.get("url")
         bookmarks.append(item)
 
+    with CHECK_ALL_STATUS_LOCK:
+        check_all_running = CHECK_ALL_RUNNING
+        check_all_last_finished_at = CHECK_ALL_LAST_FINISHED_AT
+    check_all_status_text = (
+        "Check running..."
+        if check_all_running
+        else f"Last checked: {_format_relative_age(check_all_last_finished_at)}"
+    )
+
     return render_template(
         "index.html",
         bookmarks=bookmarks,
@@ -1641,6 +1557,8 @@ def index():
         sort=sort,
         index_link_kw=index_link_kw,
         edit_link_kw=edit_link_kw,
+        check_all_running=check_all_running,
+        check_all_status_text=check_all_status_text,
     )
 
 
@@ -1736,7 +1654,7 @@ def import_data():
             old_id = int(b.get("id") or 0)
             raw_url = (b.get("url") or "").strip()
             title = (b.get("title") or "").strip()
-            if not title or not is_valid_http_url(raw_url):
+            if not title or not is_public_http_url(raw_url):
                 skipped_invalid_bookmarks += 1
                 continue
             cur = conn.execute(
@@ -1825,7 +1743,7 @@ def add_bookmark():
     user_id = get_actor_user_id()
     title = request.form.get("title", "").strip()
     url = request.form.get("url", "").strip()
-    if not title or not is_valid_http_url(url):
+    if not title or not is_public_http_url(url):
         return redirect_index_preserve_search()
 
     bookmark_id: Optional[int] = None
@@ -1846,7 +1764,7 @@ def add_bookmark():
 
         def _check_after_add():
             try:
-                check_single(bid, uid)
+                check_single(bid, uid, force=True)
             except Exception:
                 log.exception("check_single after add_bookmark failed")
 
@@ -1859,7 +1777,7 @@ def add_bookmark():
 def check_bookmark(bookmark_id: int):
     if not login_required():
         return redirect(url_for("auth_page"))
-    check_single(bookmark_id, get_actor_user_id())
+    check_single(bookmark_id, get_actor_user_id(), force=True)
     return redirect_index_preserve_search()
 
 
@@ -1867,7 +1785,33 @@ def check_bookmark(bookmark_id: int):
 def check_all_route():
     if not login_required():
         return redirect(url_for("auth_page"))
-    check_all(get_actor_user_id())
+    if CHECK_ALL_LOCK.locked():
+        flash("Check already running. Refresh shortly for updates.", "warning")
+        return redirect_index_preserve_search()
+    force = (request.form.get("force") or "").strip() == "1"
+    user_id = get_actor_user_id()
+
+    def _run_check_all():
+        global CHECK_ALL_RUNNING, CHECK_ALL_LAST_FINISHED_AT
+        with CHECK_ALL_STATUS_LOCK:
+            CHECK_ALL_RUNNING = True
+        ran = False
+        try:
+            ran = check_all_safe(user_id, force=force)
+            if not ran:
+                log.info("check_all already running; skipped duplicate start")
+        finally:
+            with CHECK_ALL_STATUS_LOCK:
+                CHECK_ALL_RUNNING = False
+                if ran:
+                    CHECK_ALL_LAST_FINISHED_AT = datetime.utcnow()
+
+    threading.Thread(
+        target=_run_check_all,
+        name=f"check-all-user-{user_id}",
+        daemon=True,
+    ).start()
+    flash("Check started in background. Refresh shortly to see updates.", "success")
     return redirect_index_preserve_search()
 
 
@@ -1944,7 +1888,7 @@ def edit_bookmark(bookmark_id: int):
     if request.method == "POST":
         title = request.form.get("title", "").strip()
         url = request.form.get("url", "").strip()
-        if not title or not is_valid_http_url(url):
+        if not title or not is_public_http_url(url):
             flash("Title and a valid http(s) URL are required.", "error")
             return render_template(
                 "edit_bookmark.html",
@@ -2028,6 +1972,8 @@ def ensure_series():
     series_key = (payload.get("series_key") or "").strip().lower()
     if not title or not url:
         return jsonify({"ok": False, "error": "title and url required"}), 400
+    if not is_public_http_url(url):
+        return jsonify({"ok": False, "error": "blocked URL"}), 400
     canonical_url = resolve_series_listing_url(url)
     cover_url = scrape_series_cover(canonical_url, title)
     with get_conn() as conn:
@@ -2388,6 +2334,12 @@ def setup_scheduler() -> Optional[BackgroundScheduler]:
 
 
 def _should_autostart_scheduler() -> bool:
+    if os.getenv("SCHEDULER_ENABLED", "1") != "1":
+        return False
+    # For multi-worker/process deployments, run scheduler in exactly one
+    # designated instance by setting SCHEDULER_LEADER=1 on that instance only.
+    if os.getenv("SCHEDULER_LEADER", "1") != "1":
+        return False
     if os.getenv("DISABLE_AUTO_CHECK") == "1":
         return False
     if APP_DEBUG and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
