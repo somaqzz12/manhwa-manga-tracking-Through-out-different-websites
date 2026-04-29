@@ -102,6 +102,8 @@ All configuration is via environment variables. The `Required?` column is what t
 
 A Chromium MV3 companion lives in [`extension/`](extension/). It detects chapter pages, prompts you the first time you visit a series, and forwards reads to `/api/series/ensure` and `/api/progress`.
 
+**Install, self-hosting, and zip packaging:** see [`extension/README.md`](extension/README.md). **What the extension does *not* contain** (secrets, other users’ data): see [`extension/SECURITY.md`](extension/SECURITY.md).
+
 ### Install (unpacked)
 
 1. Build is not required — the extension is plain JS.
