@@ -1884,7 +1884,6 @@ def check_all_route():
     if not login_required():
         return redirect(url_for("auth_page"))
     if CHECK_ALL_LOCK.locked():
-        flash("Check already running. Refresh shortly for updates.", "warning")
         return redirect_index_preserve_search()
     force = (request.form.get("force") or "").strip() == "1"
     user_id = get_actor_user_id()
@@ -1909,8 +1908,18 @@ def check_all_route():
         name=f"check-all-user-{user_id}",
         daemon=True,
     ).start()
-    flash("Check started in background. Refresh shortly to see updates.", "success")
     return redirect_index_preserve_search()
+
+
+@app.route("/api/check-all/status", methods=["GET"])
+def check_all_status_api():
+    user_id = api_session_user_id()
+    if user_id is None:
+        return jsonify({"ok": False, "error": "authentication required"}), 401
+    with CHECK_ALL_STATUS_LOCK:
+        running = CHECK_ALL_RUNNING
+        finished_at = CHECK_ALL_LAST_FINISHED_AT.isoformat(timespec="seconds") + "Z" if CHECK_ALL_LAST_FINISHED_AT else None
+    return jsonify({"ok": True, "running": running, "finished_at": finished_at})
 
 
 @app.route("/mark-seen/<int:bookmark_id>", methods=["POST"])

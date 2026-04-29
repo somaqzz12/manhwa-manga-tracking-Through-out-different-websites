@@ -622,22 +622,22 @@
     </div>
 
     <div class="card-surface tools-row">
-      <form action="/check-all" method="post" data-loading-form="true" class="inline">
+      <form action="/check-all" method="post" data-loading-form="true" class="inline" id="check-stale-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="q" value="{{ search_q or '' }}">
         <input type="hidden" name="sort" value="{{ sort }}">
         <input type="hidden" name="page" value="{{ page }}">
-        <button class="btn btn-primary btn-sm" type="submit" data-loading-text="Checking…">Check stale</button>
+        <button class="btn btn-primary btn-sm" type="submit" data-loading-text="Checking…" id="check-stale-btn">Check stale</button>
       </form>
-      <form action="/check-all" method="post" data-loading-form="true" class="inline">
+      <form action="/check-all" method="post" data-loading-form="true" class="inline" id="force-check-all-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="q" value="{{ search_q or '' }}">
         <input type="hidden" name="sort" value="{{ sort }}">
         <input type="hidden" name="page" value="{{ page }}">
         <input type="hidden" name="force" value="1">
-        <button class="btn btn-ghost btn-sm" type="submit" data-loading-text="Checking…">Force check all</button>
+        <button class="btn btn-ghost btn-sm" type="submit" data-loading-text="Checking…" id="force-check-all-btn">Force check all</button>
       </form>
-      <span class="filter-label" style="margin-left:auto;">{{ check_all_status_text }}</span>
+      <span class="filter-label" style="margin-left:auto;" id="check-all-status-label">{{ check_all_status_text }}</span>
       <form action="/mark-all-seen" method="post" data-loading-form="true" class="inline" data-confirm="Clear the &quot;new update&quot; flag on every series in your library? Search and the current page do not limit this — it applies to your whole library. Reading progress is unchanged.">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="q" value="{{ search_q or '' }}">
@@ -888,6 +888,68 @@
         });
       });
     }
+
+    (function () {
+      const pollMs = 1500;
+      const statusLabel = document.getElementById("check-all-status-label");
+      const checkStaleBtn = document.getElementById("check-stale-btn");
+      const forceBtn = document.getElementById("force-check-all-btn");
+      const checkStaleForm = document.getElementById("check-stale-form");
+      const forceForm = document.getElementById("force-check-all-form");
+      let pollTimer = null;
+
+      function setCheckingUi(isChecking) {
+        if (statusLabel) statusLabel.textContent = isChecking ? "Check running..." : statusLabel.textContent;
+        [checkStaleBtn, forceBtn].forEach((btn) => {
+          if (!btn) return;
+          if (isChecking) {
+            btn.disabled = true;
+            btn.classList.add("is-loading");
+            btn.setAttribute("aria-busy", "true");
+            if (!btn.dataset.originalHtml) btn.dataset.originalHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span> Checking...';
+          }
+        });
+      }
+
+      async function pollStatus() {
+        try {
+          const res = await fetch("/api/check-all/status", { credentials: "same-origin" });
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!data || data.ok !== true) return;
+          if (data.running) {
+            setCheckingUi(true);
+            return;
+          }
+          if (pollTimer) window.clearInterval(pollTimer);
+          pollTimer = null;
+          if (statusLabel) statusLabel.textContent = "Check complete. Refreshing...";
+          window.location.reload();
+        } catch (_err) {
+          // Keep UI resilient; next interval retries.
+        }
+      }
+
+      function startPolling() {
+        setCheckingUi(true);
+        if (pollTimer) return;
+        pollTimer = window.setInterval(pollStatus, pollMs);
+        pollStatus();
+      }
+
+      [checkStaleForm, forceForm].forEach((form) => {
+        if (!form) return;
+        form.addEventListener("submit", function () {
+          sessionStorage.setItem("mt-check-all-poll", "1");
+        });
+      });
+
+      if ({{ "true" if check_all_running else "false" }} || sessionStorage.getItem("mt-check-all-poll") === "1") {
+        startPolling();
+        sessionStorage.removeItem("mt-check-all-poll");
+      }
+    })();
 
   </script>
 </body>
