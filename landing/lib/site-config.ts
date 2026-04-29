@@ -24,4 +24,4 @@ export const authorName =
 /** Public web app URL where users register and sign in. */
 export const dashboardUrl =
   process.env.NEXT_PUBLIC_DASHBOARD_URL?.trim() ||
-  "https://app.mangawatchlist.space";
+  "https://api.mangawatchlist.space";

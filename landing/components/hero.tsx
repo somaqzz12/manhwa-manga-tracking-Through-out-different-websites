@@ -40,13 +40,15 @@ export function Hero() {
               {isStore ? "Add to Chrome" : "Get extension (GitHub)"}
             </Link>
             {dashboardUrl.length > 0 ? (
-              <Link
+              <a
                 href={dashboardUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex min-h-[3.25rem] items-center justify-center gap-2 rounded-full border border-slate-600/80 bg-card px-8 py-3.5 text-base font-semibold text-slate-100 transition hover:border-indigo-500/50 hover:bg-slate-800/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
               >
                 Open live app
                 <ExternalLink className="h-4 w-4 opacity-70" aria-hidden />
-              </Link>
+              </a>
             ) : (
               <Link
                 href={`${githubUrl}#readme`}
