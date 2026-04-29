@@ -4,6 +4,8 @@ importScripts("config.js");
 const DEFAULT_COOLDOWN_HOURS = 24;
 const UNREAD_ALARM_NAME = "manga-watchlist-unread-poll";
 const UNREAD_POLL_PERIOD_MINUTES = 30;
+const KEEPALIVE_ALARM_NAME = "manga-watchlist-keepalive-ping";
+const KEEPALIVE_PERIOD_MINUTES = 5;
 const CONTEXT_MENU_ID = "manga-watchlist-track-chapter";
 const TRACK_COMMAND = "track-current-chapter";
 const DEBUG_LOG_LIMIT = 25;
@@ -176,6 +178,29 @@ async function ensureUnreadAlarm() {
   }
 }
 
+async function ensureKeepAliveAlarm() {
+  const existing = await chrome.alarms.get(KEEPALIVE_ALARM_NAME);
+  if (!existing) {
+    chrome.alarms.create(KEEPALIVE_ALARM_NAME, {
+      delayInMinutes: 1,
+      periodInMinutes: KEEPALIVE_PERIOD_MINUTES,
+    });
+  }
+}
+
+async function pingHealthzKeepAlive() {
+  try {
+    const apiBase = await getApiBase();
+    await fetch(`${apiBase}/healthz`, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "omit",
+    });
+  } catch {
+    // Keep-alive pings are best-effort; avoid noisy failures.
+  }
+}
+
 function ensureContextMenu() {
   try {
     chrome.contextMenus.removeAll(() => {
@@ -342,18 +367,26 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === UNREAD_ALARM_NAME) {
     fetchUnreadAndUpdateBadge().catch(() => {});
+    return;
+  }
+  if (alarm.name === KEEPALIVE_ALARM_NAME) {
+    pingHealthzKeepAlive().catch(() => {});
   }
 });
 
 chrome.runtime.onInstalled.addListener(() => {
   ensureContextMenu();
   ensureUnreadAlarm();
+  ensureKeepAliveAlarm();
+  pingHealthzKeepAlive().catch(() => {});
   fetchUnreadAndUpdateBadge().catch(() => {});
 });
 
 chrome.runtime.onStartup.addListener(() => {
   ensureContextMenu();
   ensureUnreadAlarm();
+  ensureKeepAliveAlarm();
+  pingHealthzKeepAlive().catch(() => {});
   fetchUnreadAndUpdateBadge().catch(() => {});
 });
 
@@ -361,6 +394,7 @@ chrome.runtime.onStartup.addListener(() => {
 // idempotently every time the worker spins up.
 ensureContextMenu();
 ensureUnreadAlarm();
+ensureKeepAliveAlarm();
 
 if (chrome.contextMenus?.onClicked) {
   chrome.contextMenus.onClicked.addListener((info, _tab) => {
