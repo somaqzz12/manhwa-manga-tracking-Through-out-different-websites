@@ -19,6 +19,14 @@ This is the extracted route inventory from `app.py` before modularization.
 - `GET /demo` -> demo dashboard
 - `GET /healthz` -> health check
 
+### Source comparison routing (do not regress)
+
+- Discover/home cards: link **View sources** through **`comparison_slug`** when present; it resolves a normalized DB **`series`** first when slug or normalized title matches, else the catalog slug.
+- **`GET /series/<slug>`** order: (1) MangaDex UUID fallback, (2) normalized **`Series`** from DB, (3) catalog/demo fallback.
+- **Add** CTAs: `/app/add?url=…` when a listing `source_url` exists, otherwise `/app/add?title=…`.
+- **Open original site**: listing URL from **`SeriesSource.source_url`** (or equivalent source row field).
+- **Dashboard** still uses legacy **`bookmarks`** for now. Prefer **`Series` / `SeriesSource` / `UserLibraryItem`** for new product work (dashboard dual-read is next).
+
 ## Auth / Account
 
 - `GET|POST /auth` -> sign in/register (optional `next` = safe internal path to continue after auth)

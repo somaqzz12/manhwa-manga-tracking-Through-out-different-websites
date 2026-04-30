@@ -9,16 +9,87 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   <style>
-    .series-hero { margin-bottom: 18px; }
-    .series-hero h1 { margin: 0 0 8px; font-family: "Playfair Display", Georgia, serif; }
-    .series-hero p { margin: 0; max-width: 720px; color: var(--muted); }
-    .series-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-    .series-table-wrap { overflow-x: auto; }
-    .series-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-    .series-table th, .series-table td { border-bottom: 1px solid var(--border); padding: 10px 8px; text-align: left; vertical-align: top; }
-    .series-table th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-    .series-rec-badge { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
-    .series-empty { color: var(--muted); margin: 0; }
+    .series-hero { margin-bottom: 22px; }
+    .series-hero h1 { margin: 0 0 8px; font-family: "Playfair Display", Georgia, serif; font-size: clamp(1.55rem, 3vw, 2rem); }
+    .series-hero .series-desc { margin: 0; max-width: 720px; color: var(--muted); line-height: 1.55; font-size: 0.95rem; }
+    .series-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+    .series-cover {
+      width: 140px;
+      height: 196px;
+      object-fit: cover;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--panel-2);
+      box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 6%, transparent);
+    }
+    .series-rec-badge {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+      border-radius: 999px;
+      padding: 2px 8px;
+      margin-left: 6px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .series-empty {
+      color: var(--muted);
+      margin: 0;
+      line-height: 1.5;
+      font-size: 0.95rem;
+    }
+    .series-empty a { font-weight: 600; }
+    .series-sources-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 4px;
+    }
+    .series-source-card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 14px 12px;
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 100%;
+    }
+    .series-source-card--recommended {
+      border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+      background: color-mix(in srgb, var(--accent) 5%, var(--panel));
+    }
+    .series-source-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+    .series-source-name { font-weight: 700; font-size: 0.95rem; margin: 0; }
+    .series-source-domain { font-size: 0.8rem; color: var(--muted); margin: 0; width: 100%; }
+    .series-source-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+      font-size: 0.82rem;
+    }
+    .series-source-meta dt { margin: 0; color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .series-source-meta dd { margin: 0; font-weight: 500; }
+    .series-support-pill {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--panel-2) 88%, var(--accent));
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .series-support-pill--unavailable {
+      opacity: 0.85;
+      background: color-mix(in srgb, var(--panel-2) 94%, var(--muted));
+      color: var(--muted);
+    }
+    .series-source-actions { margin-top: auto; padding-top: 4px; display: flex; flex-wrap: wrap; gap: 8px; }
   </style>
 </head>
 <body class="page-app" data-theme="normal">
@@ -29,15 +100,27 @@
       <div class="page-single-inner" style="max-width:960px;">
         <section class="panel series-hero">
           <p class="muted" style="margin:0 0 6px;font-size:0.82rem;"><a href="{{ url_for('discover_page') }}">← Discover</a></p>
-          <h1 class="page-title page-title--display">{{ title|e }}</h1>
-          {% if description %}
-          <p>{{ description|e }}</p>
-          {% endif %}
-          {% if missing_catalog_entry %}
-          <p class="series-empty" style="margin-top:10px;">This slug is not in the local catalog yet. Paste a series URL to track it, or search Discover.</p>
-          {% endif %}
+          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;">
+            {% if cover_url %}
+            <img class="series-cover" src="{{ cover_url|e }}" alt="" width="140" height="196" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.style.display='none';">
+            {% endif %}
+            <div style="flex:1;min-width:min(100%,240px);">
+              <h1 class="page-title page-title--display">{{ title|e }}</h1>
+              {% if description %}
+              <p class="series-desc">{{ description|e }}</p>
+              {% endif %}
+              {% if missing_catalog_entry %}
+              <p class="series-empty" style="margin-top:10px;">This slug is not in the local catalog yet. Paste a series URL to track it, or search Discover.</p>
+              {% endif %}
+            </div>
+          </div>
           <div class="series-actions">
+            {% if primary_add_url %}
+            <a class="btn primary" href="{{ url_for('app_add_url', url=primary_add_url) }}">Add to library</a>
+            {% else %}
             <a class="btn primary" href="{{ url_for('app_add_url', title=title) }}">Add to library</a>
+            {% endif %}
+            <a class="btn ghost" href="{{ url_for('app_add_url', title=title) }}">Track manually</a>
             <a class="btn ghost" href="{{ url_for('discover_page', q=title) }}">Search title</a>
             <a class="btn ghost" href="{{ url_for('app_add_url') }}">Paste URL</a>
           </div>
@@ -46,40 +129,58 @@
         <section class="panel">
           <h2 class="section-title" style="margin-top:0;">Sources{% if sources_count is defined and sources_count == 0 %} (0){% endif %}</h2>
           {% if not source_preview %}
-          <p class="series-empty">No source rows for this entry. Use <a href="{{ url_for('app_add_url') }}">Paste URL</a> to track a specific site.</p>
+          <p class="series-empty">No sources saved yet. <a href="{{ url_for('app_add_url') }}">Paste a URL</a> to add one.</p>
           {% else %}
-          <div class="series-table-wrap">
-            <table class="series-table">
-              <thead>
-                <tr>
-                  <th>Source</th>
-                  <th>Latest</th>
-                  <th>Support</th>
-                  <th>Open</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in source_preview %}
-                {% set src_url = (row.url or '')|trim %}
-                {% set is_rec = recommended_source and row.source_name == recommended_source %}
-                <tr>
-                  <td>
-                    {{ row.source_name|e }}
-                    {% if is_rec %}<span class="series-rec-badge">Recommended</span>{% endif %}
-                  </td>
-                  <td>{{ row.latest_chapter or row.latest or '—' }}</td>
-                  <td>{{ row.label|e if row.label else (row.support_level or '—') }}</td>
-                  <td>
-                    {% if src_url and src_url.startswith('http') %}
-                    <a class="btn btn-compact primary" href="{{ src_url|e }}" target="_blank" rel="noreferrer">Original site</a>
+          <div class="series-sources-grid">
+            {% for row in source_preview %}
+            {% set src_url = (row.url or '')|trim %}
+            {% set is_rec = row['is_recommended'] if 'is_recommended' in row else false %}
+            {% set sup_lbl = row.label if row.label is defined else (row.support_level or '—') %}
+            <article class="series-source-card{% if is_rec %} series-source-card--recommended{% endif %}">
+              <div class="series-source-head">
+                <p class="series-source-name">
+                  {{ row.source_name|e }}
+                  {% if is_rec %}<span class="series-rec-badge">Recommended</span>{% endif %}
+                </p>
+                {% if row.source_domain %}
+                <p class="series-source-domain">{{ row.source_domain|e }}</p>
+                {% endif %}
+              </div>
+              <dl class="series-source-meta">
+                <div>
+                  <dt>Latest</dt>
+                  <dd>{{ row.latest_chapter or row.latest or '—' }}</dd>
+                </div>
+                <div>
+                  <dt>Chapters</dt>
+                  <dd>
+                    {% if 'chapter_count' in row and row['chapter_count'] is not none %}
+                      {{ row['chapter_count']|int }}
                     {% else %}
-                    <span class="muted">—</span>
+                      —
                     {% endif %}
-                  </td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+                  </dd>
+                </div>
+                <div style="grid-column:1/-1;">
+                  <dt>Support</dt>
+                  <dd>
+                    {% if sup_lbl == 'Unavailable' %}
+                    <span class="series-support-pill series-support-pill--unavailable">{{ sup_lbl|e }}</span>
+                    {% else %}
+                    <span class="series-support-pill">{{ sup_lbl|e }}</span>
+                    {% endif %}
+                  </dd>
+                </div>
+              </dl>
+              <div class="series-source-actions">
+                {% if src_url and src_url.startswith('http') %}
+                <a class="btn btn-compact primary" href="{{ src_url|e }}" target="_blank" rel="noreferrer">Open original site</a>
+                {% else %}
+                <span class="muted" style="font-size:0.86rem;">No listing URL</span>
+                {% endif %}
+              </div>
+            </article>
+            {% endfor %}
           </div>
           {% endif %}
         </section>

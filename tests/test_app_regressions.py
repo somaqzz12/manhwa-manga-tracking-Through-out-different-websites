@@ -189,18 +189,95 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn("?url=", body)
 
     def test_discover_query_specific_results_or_empty_state(self):
-        hit = self.client.get("/discover?q=solo")
+        from unittest.mock import patch
+
+        from sources.adapters.mangadex import MangaDexAdapter
+
+        with patch.object(MangaDexAdapter, "search", return_value=[]):
+            hit = self.client.get("/discover?q=solo")
         self.assertEqual(hit.status_code, 200)
         hit_body = hit.get_data(as_text=True)
         self.assertIn('Results for "solo".', hit_body)
         self.assertIn("Solo Leveling", hit_body)
+        self.assertIn("Search results · Demo", hit_body)
 
-        miss = self.client.get("/discover?q=zzzz-nothing-found")
+        with patch.object(MangaDexAdapter, "search", return_value=[]):
+            miss = self.client.get("/discover?q=zzzz-nothing-found-xyz")
         self.assertEqual(miss.status_code, 200)
         miss_body = miss.get_data(as_text=True)
         self.assertIn("No matches yet", miss_body)
+        self.assertNotIn("Solo Leveling", miss_body.split("Starter picks")[0])
         self.assertIn("Search supported sites live", miss_body)
         self.assertIn("Paste URL", miss_body)
+
+    def test_api_discover_search_returns_real_shaped_results(self):
+        from unittest.mock import patch
+
+        from sources.adapters.mangadex import MangaDexAdapter
+
+        fake = [
+            {
+                "source_id": "mangadex",
+                "source_name": "MangaDex",
+                "external_id": "abc-def-0000-0000-000000000001",
+                "title": "Chainsaw Man",
+                "url": "https://mangadex.org/title/abc-def-0000-0000-000000000001",
+                "description": "On the page.",
+                "cover_url": "https://uploads.mangadex.org/covers/abc/cover.jpg",
+                "latest_chapter": "200",
+                "chapter_count": 200,
+                "support_level": "official_api",
+            }
+        ]
+        with patch.object(MangaDexAdapter, "search", return_value=fake):
+            res = self.client.get("/api/discover/search?q=chainsaw")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json() or {}
+        self.assertTrue(data.get("ok"))
+        self.assertFalse(data.get("is_demo"))
+        rows = data.get("results") or []
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].get("title"), "Chainsaw Man")
+        self.assertEqual(rows[0].get("support_level"), "official_api")
+        self.assertIn("mangadex.org", rows[0].get("source_url") or "")
+        self.assertIn("uploads.mangadex.org", rows[0].get("cover_url") or "")
+
+    def test_public_series_mangadex_uuid_uses_build_page(self):
+        from unittest.mock import patch
+
+        uid = "12345678-abcd-ef01-2345-6789abcdef01"
+
+        def fake_build(slug: str):
+            self.assertEqual(slug, uid.lower())
+            return {
+                "slug": uid,
+                "title": "UUID Manga",
+                "description": "About",
+                "cover_url": "https://uploads.mangadex.org/covers/x/y.jpg",
+                "source_preview": [
+                    {
+                        "source_name": "MangaDex",
+                        "url": "https://mangadex.org/title/" + uid,
+                        "latest_chapter": "5",
+                        "support_level": "official_api",
+                        "label": "Automatic",
+                        "health_status": "working",
+                    }
+                ],
+                "recommended_source": "MangaDex",
+                "sources_count": 1,
+                "missing_catalog_entry": False,
+                "from_mangadex": True,
+                "primary_add_url": "https://mangadex.org/title/" + uid,
+            }
+
+        with patch("app.metadata_discovery.build_series_page_from_mangadex_uuid", side_effect=fake_build):
+            res = self.client.get(f"/series/{uid}")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("UUID Manga", body)
+        self.assertIn("Open original site", body)
+        self.assertIn("uploads.mangadex.org", body)
 
     def test_login_register_path_aliases(self):
         r1 = self.client.get("/login", follow_redirects=False)
@@ -662,7 +739,7 @@ class AppRegressionTests(unittest.TestCase):
         body = res.get_data(as_text=True)
         self.assertIn("Solo Leveling", body)
         self.assertIn("Asura", body)
-        self.assertIn("Original site", body)
+        self.assertIn("Open original site", body)
         self.assertIn("/app/add", body)
 
     def test_add_from_preview_manual_only_requires_title_when_missing(self):

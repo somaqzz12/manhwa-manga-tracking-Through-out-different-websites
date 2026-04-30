@@ -34,13 +34,14 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from services import chapter_parsing as chapter
 from services import discovery
 from services import discovery_home
+from services import library_model
+from services import metadata_discovery
 from services import reading_insights
 from services import source_registry
 from services import story_groups
 from sources import registry as policy_registry
 from sources.resolver import normalize_url as source_engine_normalize_url
 from sources.resolver import resolve_url as source_engine_resolve_url
-from sources.resolver import search_title as source_engine_search_title
 from sources.registry import supported_source_policy
 try:
     import psycopg2
@@ -778,6 +779,127 @@ def _ensure_source_requests_table(conn) -> None:
     )
 
 
+def _ensure_normalized_library_tables(conn) -> None:
+    """Series / SeriesSource / UserLibraryItem (normalized library; bookmarks remain legacy)."""
+    if IS_POSTGRES:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS series (
+                id BIGSERIAL PRIMARY KEY,
+                slug TEXT NOT NULL UNIQUE,
+                norm_title_key TEXT NOT NULL,
+                title TEXT NOT NULL,
+                canonical_title TEXT,
+                description TEXT,
+                cover_url TEXT,
+                type TEXT NOT NULL DEFAULT 'manga',
+                status TEXT NOT NULL DEFAULT 'unknown',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_series_norm_title_key ON series(norm_title_key)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS series_source (
+                id BIGSERIAL PRIMARY KEY,
+                series_id BIGINT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+                source_name TEXT,
+                source_domain TEXT,
+                source_url TEXT NOT NULL,
+                normalized_source_url TEXT NOT NULL UNIQUE,
+                support_level TEXT NOT NULL,
+                source_policy TEXT NOT NULL,
+                detection_source TEXT NOT NULL,
+                latest_chapter TEXT,
+                latest_chapter_url TEXT,
+                chapter_count INTEGER,
+                health_status TEXT NOT NULL DEFAULT 'unknown',
+                last_checked_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_series_source_series_id ON series_source(series_id)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_library_item (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                series_id BIGINT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+                preferred_source_id BIGINT REFERENCES series_source(id) ON DELETE SET NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                notifications_enabled INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, series_id)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_user_library_item_user ON user_library_item(user_id)")
+        return
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS series (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug TEXT NOT NULL UNIQUE,
+            norm_title_key TEXT NOT NULL,
+            title TEXT NOT NULL,
+            canonical_title TEXT,
+            description TEXT,
+            cover_url TEXT,
+            type TEXT NOT NULL DEFAULT 'manga',
+            status TEXT NOT NULL DEFAULT 'unknown',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_series_norm_title_key ON series(norm_title_key)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS series_source (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            series_id INTEGER NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+            source_name TEXT,
+            source_domain TEXT,
+            source_url TEXT NOT NULL,
+            normalized_source_url TEXT NOT NULL UNIQUE,
+            support_level TEXT NOT NULL,
+            source_policy TEXT NOT NULL,
+            detection_source TEXT NOT NULL,
+            latest_chapter TEXT,
+            latest_chapter_url TEXT,
+            chapter_count INTEGER,
+            health_status TEXT NOT NULL DEFAULT 'unknown',
+            last_checked_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_series_source_series_id ON series_source(series_id)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_library_item (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            series_id INTEGER NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+            preferred_source_id INTEGER REFERENCES series_source(id) ON DELETE SET NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            notifications_enabled INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(user_id, series_id)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_library_item_user ON user_library_item(user_id)")
+
+
 def _backfill_bookmark_story_ids(conn) -> None:
     if IS_POSTGRES:
         rows = conn.execute(
@@ -901,6 +1023,7 @@ def init_db() -> None:
             _harden_legacy_default_user_password(conn)
             _ensure_users_integration_columns(conn)
             _ensure_source_requests_table(conn)
+            _ensure_normalized_library_tables(conn)
         return
 
     with get_conn() as conn:
@@ -1010,6 +1133,7 @@ def init_db() -> None:
         _backfill_bookmark_story_ids(conn)
         _ensure_users_integration_columns(conn)
         _ensure_source_requests_table(conn)
+        _ensure_normalized_library_tables(conn)
 
 
 def ensure_db_ready() -> None:
@@ -2860,6 +2984,10 @@ LANDING_RECENT_UPDATES_DEMO = [
 
 def home():
     home_data = discovery_home.build_discovery_home_data(supported_source_policy())
+    _enrich_comparison_slugs(home_data["starter_picks"])
+    _enrich_comparison_slugs(home_data["popular_manhwa"])
+    _enrich_comparison_slugs(home_data["popular_manga"])
+    comp_slug = home_data.get("source_comparison_slug") or "solo-leveling"
     return render_template(
         "landing_v2.html",
         landing_trending_cards=home_data["starter_picks"],
@@ -2867,7 +2995,7 @@ def home():
         landing_popular_manga=home_data["popular_manga"],
         landing_recent_updates=home_data["recently_updated_examples"],
         landing_source_comparison=home_data["source_comparison_example"],
-        landing_source_comparison_slug=home_data.get("source_comparison_slug") or "solo-leveling",
+        landing_source_comparison_slug=_effective_comparison_slug(comp_slug),
         landing_source_summary=home_data["supported_source_summary"],
         landing_is_demo=home_data["is_demo"],
         current_user=get_current_user(),
@@ -2881,9 +3009,17 @@ def public_search():
 def discover_page():
     q = (request.args.get("q") or "").strip()
     url_q = (request.args.get("url") or "").strip()
-    local = discovery.search_local_series(q) if q else []
-    results = local[:8]
+    live_flag = (request.args.get("live") or "").strip().lower() in ("1", "true", "yes")
+    search_payload = metadata_discovery.discover_search(q, live=live_flag) if q else {"results": [], "is_demo": False}
+    search_results = search_payload.get("results") or []
+    _enrich_comparison_slugs(search_results)
+    search_is_demo = bool(search_payload.get("is_demo"))
     home_data = discovery_home.build_discovery_home_data(supported_source_policy())
+    _enrich_comparison_slugs(home_data["starter_picks"])
+    _enrich_comparison_slugs(home_data["popular_manhwa"])
+    _enrich_comparison_slugs(home_data["popular_manga"])
+    comp_slug = home_data.get("source_comparison_slug") or "solo-leveling"
+    landing_comparison_slug = _effective_comparison_slug(comp_slug)
     resolved = None
     if url_q:
         try:
@@ -2898,7 +3034,8 @@ def discover_page():
         "discover.html",
         q=q,
         url_q=url_q,
-        results=results,
+        search_results=search_results,
+        search_is_demo=search_is_demo,
         trending=discovery.trending_snapshot(),
         source_policy=supported_source_policy(),
         resolved=resolved,
@@ -2914,26 +3051,128 @@ def discover_page():
         landing_popular_manga=home_data["popular_manga"],
         landing_recent_updates=home_data["recently_updated_examples"],
         landing_source_comparison=home_data["source_comparison_example"],
-        landing_source_comparison_slug=home_data.get("source_comparison_slug") or "solo-leveling",
+        landing_source_comparison_slug=landing_comparison_slug,
         landing_is_demo=home_data["is_demo"],
     )
 
 
+def _filter_public_source_preview(rows: list) -> list:
+    """Omit sources whose registered profile is NSFW from public comparison pages."""
+    out = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        url = str(row.get("url") or "").strip()
+        if url:
+            prof = source_registry.get_profile_for_url(url)
+            if prof and prof.get("nsfw"):
+                continue
+        out.append(row)
+    return out
+
+
+def _enrich_comparison_slugs(items: list) -> None:
+    """Mutate discover result dicts: set comparison_slug to normalized series slug when one exists."""
+    if not items:
+        return
+    with get_conn() as conn:
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            slug = str(item.get("slug") or "").strip()
+            title = str(item.get("title") or "").strip()
+            resolved = library_model.resolve_public_comparison_slug(conn, catalog_slug=slug, title=title)
+            item["comparison_slug"] = resolved if resolved else slug
+
+
+def _prepare_public_series_preview(filtered_preview: list) -> tuple[list, str, str, int]:
+    """
+    After NSFW filtering: enrich labels, pick recommended source, primary add URL.
+    Returns (enriched_rows, recommended_source_name, primary_add_url, sources_count).
+    """
+    enriched = library_model.enrich_public_source_rows(list(filtered_preview or []))
+    rec_name, rec_url = library_model.pick_recommended_cta(enriched)
+    primary = rec_url
+    if not primary:
+        for r in enriched:
+            u = str(r.get("url") or "").strip()
+            if u.startswith("http"):
+                primary = u
+                break
+    sources_count = len([p for p in enriched if (p.get("url") or "").strip()])
+    return enriched, rec_name, primary, sources_count
+
+
+def _effective_comparison_slug(catalog_slug: str) -> str:
+    cs = (catalog_slug or "").strip()
+    if not cs:
+        return ""
+    with get_conn() as conn:
+        resolved = library_model.resolve_public_comparison_slug(conn, catalog_slug=cs, title="")
+    return resolved if resolved else cs
+
+
 def public_series(slug: str):
     safe_slug = (slug or "").strip().lower()[:120]
+    md_ctx = metadata_discovery.build_series_page_from_mangadex_uuid(safe_slug)
+    if md_ctx:
+        primary_fallback = md_ctx.get("primary_add_url") or ""
+        preview = _filter_public_source_preview(list(md_ctx.get("source_preview") or []))
+        enriched, rec_name, primary, sc = _prepare_public_series_preview(preview)
+        primary_add = primary or primary_fallback
+        return render_template(
+            "public_series.html",
+            current_user=get_current_user(),
+            slug=md_ctx["slug"],
+            title=md_ctx["title"],
+            description=md_ctx.get("description") or "",
+            cover_url=md_ctx.get("cover_url") or "",
+            source_preview=enriched,
+            recommended_source=rec_name,
+            sources_count=sc,
+            missing_catalog_entry=bool(md_ctx.get("missing_catalog_entry")),
+            primary_add_url=primary_add,
+            from_mangadex=True,
+            from_normalized=False,
+        )
+    with get_conn() as conn:
+        norm = library_model.load_series_for_public_page(conn, safe_slug)
+    if norm:
+        norm = dict(norm)
+        norm.pop("from_mangadex", None)
+        norm.pop("from_normalized", None)
+        preview = _filter_public_source_preview(norm.get("source_preview") or [])
+        enriched, rec_name, primary, sc = _prepare_public_series_preview(preview)
+        norm["source_preview"] = enriched
+        norm["recommended_source"] = rec_name
+        norm["sources_count"] = sc
+        norm["primary_add_url"] = primary
+        return render_template(
+            "public_series.html",
+            current_user=get_current_user(),
+            from_mangadex=False,
+            from_normalized=True,
+            **norm,
+        )
     row = discovery.get_series_by_slug(safe_slug)
     title = (row.get("title") if row else safe_slug.replace("-", " ").title()) if safe_slug else "Series"
     sources = list(row.get("sources") or []) if row else []
-    recommended = (row.get("recommended_source") if row else None) or ""
+    sources = _filter_public_source_preview(sources)
+    enriched, rec_name, primary, sc = _prepare_public_series_preview(sources)
+    cov = str((row.get("cover_url") if row else "") or "").strip()
     return render_template(
         "public_series.html",
         slug=safe_slug,
         title=title,
         description=(row.get("description") if row else "") or "",
-        source_preview=sources,
-        recommended_source=recommended,
-        sources_count=len([s for s in sources if (s.get("url") or "").strip()]),
+        cover_url=cov,
+        source_preview=enriched,
+        recommended_source=rec_name,
+        sources_count=sc,
         missing_catalog_entry=row is None,
+        primary_add_url=primary,
+        from_mangadex=False,
+        from_normalized=False,
         current_user=get_current_user(),
     )
 
@@ -4243,9 +4482,12 @@ def api_discover_supported_sources():
 def api_discover_search():
     q = (request.args.get("q") or "").strip()[:DISCOVER_QUERY_MAX_LEN]
     if not q:
-        return jsonify({"ok": True, "items": []})
-    items = discovery.search_local_series(q)
-    return jsonify({"ok": True, "items": items})
+        return jsonify({"ok": True, "results": [], "items": [], "is_demo": False})
+    live = (request.args.get("live") or "").strip().lower() in ("1", "true", "yes")
+    payload = metadata_discovery.discover_search(q, live=live)
+    results = payload.get("results") or []
+    _enrich_comparison_slugs(results)
+    return jsonify({"ok": True, **payload, "items": results})
 
 
 @app.route("/api/discover/series/<int:series_id>", methods=["GET"])
@@ -4269,14 +4511,23 @@ def api_discover_search_live():
     q = (data.get("q") or "").strip()[:DISCOVER_QUERY_MAX_LEN]
     if not q:
         return jsonify({"ok": False, "error": "q is required"}), 400
-    cached = _cache_get(_DISCOVER_LIVE_CACHE, q.lower(), 60)
+    cache_key = f"live:{q.lower()}"
+    cached = _cache_get(_DISCOVER_LIVE_CACHE, cache_key, 60)
     if cached is not None:
+        _enrich_comparison_slugs(cached.get("items") or [])
         return jsonify(cached)
-    live = source_engine_search_title(q)
-    merged = discovery.merge_live_results(live)
-    payload = {"ok": True, "items": merged, "sources_checked": len(live)}
-    _cache_set(_DISCOVER_LIVE_CACHE, q.lower(), payload)
-    return jsonify(payload)
+    payload = metadata_discovery.discover_search(q, live=True)
+    results = payload.get("results") or []
+    _enrich_comparison_slugs(results)
+    out = {
+        "ok": True,
+        "items": results,
+        "results": results,
+        "is_demo": False,
+        "sources_checked": len(results),
+    }
+    _cache_set(_DISCOVER_LIVE_CACHE, cache_key, out)
+    return jsonify(out)
 
 
 register_api_discovery_routes(
@@ -4388,6 +4639,7 @@ def api_library_add_from_preview():
     support_level_store = str(support_level or "manual_only").strip().lower()[:64]
     detection_source_store = str(detection_source or "manual").strip().lower()[:32]
     latest_seen_url = canonical_url
+    latest_chapter_url_norm = None
     if isinstance(chapters_preview, list) and chapters_preview:
         last = chapters_preview[-1]
         if isinstance(last, dict):
@@ -4395,9 +4647,39 @@ def api_library_add_from_preview():
             if ch_url and is_public_http_url(ch_url):
                 try:
                     latest_seen_url = resolve_series_listing_url(ch_url)
+                    latest_chapter_url_norm = latest_seen_url
                 except Exception:
                     latest_seen_url = ch_url
+                    latest_chapter_url_norm = ch_url
+    add_title = title or canonical_title or extract_series_slug(canonical_url).replace("-", " ").title() or "Untitled series"
+    norm_meta: dict = {
+        "source_url": canonical_url,
+        "title": add_title,
+        "canonical_title": canonical_title or None,
+        "description": description or None,
+        "cover_url": cover_url or None,
+        "source_name": source_name,
+        "source_domain": source_domain,
+        "support_level": support_level_store,
+        "detection_source": detection_source_store,
+        "latest_chapter": latest_chapter_raw or None,
+        "latest_chapter_url": latest_chapter_url_norm,
+        "chapter_count": chapter_count,
+    }
+    spol = str(data.get("source_policy") or "").strip()[:64]
+    if spol:
+        norm_meta["source_policy"] = spol
+    slug_extra = str(data.get("slug") or "").strip()[:120]
+    if slug_extra:
+        norm_meta["slug"] = slug_extra
     with get_conn() as conn:
+        now = _now_iso_z()
+        try:
+            norm_result = library_model.add_preview_to_library(
+                conn, user_id, norm_meta, now=now, url_validator=is_public_http_url
+            )
+        except library_model.LibraryModelError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
         existing_rows = conn.execute(
             "SELECT id, url FROM bookmarks WHERE user_id = ?",
             (user_id,),
@@ -4418,9 +4700,9 @@ def api_library_add_from_preview():
             ).fetchone()
             if full is None:
                 return jsonify({"ok": False, "error": "bookmark not found"}), 500
-            return jsonify({"ok": True, "created": False, "duplicate": True, "series": dict(full)})
-        add_title = title or canonical_title or extract_series_slug(canonical_url).replace("-", " ").title() or "Untitled series"
-        now = _now_iso_z()
+            return jsonify(
+                {"ok": True, "created": False, "duplicate": True, "series": dict(full), "library": norm_result}
+            )
         sid = story_groups.new_solo_story_id()
         conn.execute(
             """
@@ -4486,7 +4768,7 @@ def api_library_add_from_preview():
             """,
             (int(row["id"]),),
         ).fetchone()
-    return jsonify({"ok": True, "created": True, "duplicate": False, "series": dict(row)})
+    return jsonify({"ok": True, "created": True, "duplicate": False, "series": dict(row), "library": norm_result})
 
 
 register_library_routes(

@@ -1,11 +1,65 @@
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import requests
 
 from sources.base import ChapterResult, SourceAdapter, SourcePreview
+
+MANGADEX_API = "https://api.mangadex.org"
+MANGADEX_CDN_COVERS = "https://uploads.mangadex.org/covers"
+
+
+def _cover_url_from_manga(manga_obj: dict, included: list[dict]) -> Optional[str]:
+    mid = (manga_obj or {}).get("id")
+    if not mid:
+        return None
+    by_id = {str(i.get("id")): i for i in (included or []) if isinstance(i, dict) and i.get("id")}
+    for rel in (manga_obj.get("relationships") or []):
+        if rel.get("type") != "cover_art":
+            continue
+        cid = rel.get("id")
+        node = by_id.get(str(cid)) if cid else None
+        if not node:
+            continue
+        fn = (node.get("attributes") or {}).get("fileName")
+        if fn and isinstance(fn, str) and mid:
+            return f"{MANGADEX_CDN_COVERS}/{mid}/{fn}"
+    return None
+
+
+def _fetch_latest_chapter_meta(manga_id: str, session: requests.Session) -> tuple[Optional[str], Optional[int]]:
+    try:
+        r = session.get(
+            f"{MANGADEX_API}/chapter",
+            params={
+                "manga": manga_id,
+                "translatedLanguage[]": ["en"],
+                "limit": 1,
+                "order[chapter]": "desc",
+            },
+            timeout=12,
+        )
+        r.raise_for_status()
+        body = r.json()
+        total = body.get("total")
+        items = body.get("data") or []
+        latest: Optional[str] = None
+        if items:
+            ch = (items[0].get("attributes") or {}).get("chapter")
+            if ch is not None:
+                latest = str(ch)
+        t_int: Optional[int] = None
+        if total is not None:
+            try:
+                t_int = int(total)
+            except (TypeError, ValueError):
+                t_int = None
+        return latest, t_int
+    except Exception:
+        return None, None
 
 
 class MangaDexAdapter(SourceAdapter):
@@ -33,16 +87,24 @@ class MangaDexAdapter(SourceAdapter):
                 warnings=["Could not extract MangaDex manga ID."],
             )
 
+        session = requests.Session()
         try:
-            manga_res = requests.get(f"https://api.mangadex.org/manga/{manga_id}", timeout=15)
+            manga_res = session.get(
+                f"{MANGADEX_API}/manga/{manga_id}",
+                params={"includes[]": ["cover_art"]},
+                timeout=15,
+            )
             manga_res.raise_for_status()
-            manga_data = manga_res.json().get("data", {})
+            body = manga_res.json()
+            manga_data = body.get("data", {})
+            included = body.get("included") or []
             attrs = manga_data.get("attributes", {})
             title_map = attrs.get("title") or {}
             title = title_map.get("en") or next(iter(title_map.values()), "Unknown title")
+            cover_url = _cover_url_from_manga(manga_data, included)
 
-            chapters_res = requests.get(
-                "https://api.mangadex.org/chapter",
+            chapters_res = session.get(
+                f"{MANGADEX_API}/chapter",
                 params={
                     "manga": manga_id,
                     "translatedLanguage[]": ["en"],
@@ -52,7 +114,8 @@ class MangaDexAdapter(SourceAdapter):
                 timeout=15,
             )
             chapters_res.raise_for_status()
-            chapter_data = chapters_res.json().get("data", [])
+            ch_json = chapters_res.json()
+            chapter_data = ch_json.get("data", [])
         except Exception as exc:
             return SourcePreview(
                 source_name=self.name,
@@ -78,6 +141,11 @@ class MangaDexAdapter(SourceAdapter):
                 )
             )
         latest = chapters[0].number if chapters else None
+        ch_total = ch_json.get("total")
+        try:
+            chapter_count = int(ch_total) if ch_total is not None else (len(chapters) if chapters else None)
+        except (TypeError, ValueError):
+            chapter_count = len(chapters) if chapters else None
         return SourcePreview(
             source_name=self.name,
             source_url=url,
@@ -87,7 +155,8 @@ class MangaDexAdapter(SourceAdapter):
             canonical_title=title,
             description=(attrs.get("description") or {}).get("en"),
             latest_chapter=latest,
-            chapter_count=len(chapters) if chapters else None,
+            cover_url=cover_url,
+            chapter_count=chapter_count,
             chapters=chapters,
             warnings=[],
         )
@@ -98,31 +167,56 @@ class MangaDexAdapter(SourceAdapter):
             return []
         try:
             res = requests.get(
-                "https://api.mangadex.org/manga",
-                params={"title": q, "limit": 8, "includes[]": ["cover_art"]},
+                f"{MANGADEX_API}/manga",
+                params={
+                    "title": q,
+                    "limit": 8,
+                    "includes[]": ["cover_art"],
+                    "contentRating[]": ["safe", "suggestive"],
+                },
                 timeout=15,
             )
             res.raise_for_status()
-            items = res.json().get("data", [])
+            body = res.json()
+            items = body.get("data", [])
+            included = body.get("included") or []
         except Exception:
             return []
-        out: list[dict] = []
-        for item in items:
+
+        session = requests.Session()
+
+        def enrich_one(item: dict) -> dict:
             attrs = item.get("attributes", {})
             title_map = attrs.get("title") or {}
             title = title_map.get("en") or next(iter(title_map.values()), None)
             if not title:
-                continue
-            out.append(
-                {
-                    "source_id": self.id,
-                    "source_name": self.name,
-                    "external_id": item.get("id"),
-                    "title": title,
-                    "url": f"https://mangadex.org/title/{item.get('id', '')}",
-                    "description": (attrs.get("description") or {}).get("en"),
-                    "status": attrs.get("status"),
-                    "confidence": 0.92,
-                }
-            )
+                return {}
+            mid = item.get("id", "")
+            cover_url = _cover_url_from_manga(item, included)
+            latest_chapter: Optional[str] = None
+            chapter_count: Optional[int] = None
+            if mid:
+                latest_chapter, chapter_count = _fetch_latest_chapter_meta(str(mid), session)
+            return {
+                "source_id": self.id,
+                "source_name": self.name,
+                "external_id": mid,
+                "title": title,
+                "url": f"https://mangadex.org/title/{mid}",
+                "description": (attrs.get("description") or {}).get("en"),
+                "status": attrs.get("status"),
+                "confidence": 0.92,
+                "cover_url": cover_url or "",
+                "latest_chapter": latest_chapter,
+                "chapter_count": chapter_count,
+                "support_level": self.support_level,
+            }
+
+        out: list[dict] = []
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futs = [pool.submit(enrich_one, item) for item in items]
+            for fut in futs:
+                row = fut.result()
+                if row:
+                    out.append(row)
         return out

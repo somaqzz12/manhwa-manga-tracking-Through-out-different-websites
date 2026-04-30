@@ -350,7 +350,7 @@
       <div class="card-grid card-grid--six" style="margin-top:18px;">
         {% for card in landing_trending_cards %}
         <article class="series-card">
-          <a class="series-card-cover series-card-cover--art ph-{{ card.slug }}" href="{{ url_for('public_series', slug=card.slug) }}" aria-hidden="true" tabindex="-1">
+          <a class="series-card-cover series-card-cover--art ph-{{ card.slug }}" href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}" aria-hidden="true" tabindex="-1">
             <div class="cover-abstract" aria-hidden="true"></div>
             {% if card.cover_url %}
             <img class="cover-img" src="{{ card.cover_url|e }}" alt="" width="300" height="450" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.remove();">
@@ -360,7 +360,7 @@
             <h3>{{ card.title|e }}</h3>
             <p class="series-meta">{{ card.type_label }} · Latest ch. {{ card.latest_chapter|e }} · {{ card.sources_found }} sources</p>
             <div class="series-actions">
-              <a href="{{ url_for('public_series', slug=card.slug) }}">View sources</a>
+              <a href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}">View sources</a>
               <a class="primary" href="{{ url_for('app_add_url', title=card.title) }}">Add</a>
             </div>
           </div>
@@ -375,7 +375,7 @@
       <div class="card-grid" style="margin-top:18px;">
         {% for card in landing_popular_manhwa %}
         <article class="series-card">
-          <a class="series-card-cover series-card-cover--art ph-{{ card.slug }}" href="{{ url_for('public_series', slug=card.slug) }}" aria-hidden="true" tabindex="-1">
+          <a class="series-card-cover series-card-cover--art ph-{{ card.slug }}" href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}" aria-hidden="true" tabindex="-1">
             <div class="cover-abstract" aria-hidden="true"></div>
             {% if card.cover_url %}
             <img class="cover-img" src="{{ card.cover_url|e }}" alt="" width="300" height="450" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.remove();">
@@ -385,7 +385,7 @@
             <h3>{{ card.title|e }}</h3>
             <p class="series-meta">{{ card.type_label }} · Latest ch. {{ card.latest_chapter|e }} · {{ card.sources_found }} sources</p>
             <div class="series-actions">
-              <a href="{{ url_for('public_series', slug=card.slug) }}">View sources</a>
+              <a href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}">View sources</a>
               <a class="primary" href="{{ url_for('app_add_url', title=card.title) }}">Add</a>
             </div>
           </div>
@@ -400,7 +400,7 @@
       <div class="card-grid" style="margin-top:18px;">
         {% for card in landing_popular_manga %}
         <article class="series-card">
-          <a class="series-card-cover series-card-cover--art ph-{{ card.slug }}" href="{{ url_for('public_series', slug=card.slug) }}" aria-hidden="true" tabindex="-1">
+          <a class="series-card-cover series-card-cover--art ph-{{ card.slug }}" href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}" aria-hidden="true" tabindex="-1">
             <div class="cover-abstract" aria-hidden="true"></div>
             {% if card.cover_url %}
             <img class="cover-img" src="{{ card.cover_url|e }}" alt="" width="300" height="450" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.remove();">
@@ -410,7 +410,7 @@
             <h3>{{ card.title|e }}</h3>
             <p class="series-meta">{{ card.type_label }} · Latest ch. {{ card.latest_chapter|e }} · {{ card.sources_found }} sources</p>
             <div class="series-actions">
-              <a href="{{ url_for('public_series', slug=card.slug) }}">View sources</a>
+              <a href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}">View sources</a>
               <a class="primary" href="{{ url_for('app_add_url', title=card.title) }}">Add</a>
             </div>
           </div>
