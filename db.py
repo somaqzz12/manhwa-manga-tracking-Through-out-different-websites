@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 import secrets
 import sqlite3
@@ -9,6 +8,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+import config
 from services import story_groups
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -24,13 +24,10 @@ except Exception:
     psycopg = None
     psycopg_dict_row = None
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "tracker.db")
-DEFAULT_USER_EMAIL = os.getenv("DEFAULT_USER_EMAIL", "local@tracker")
-
-DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://") :]
-IS_POSTGRES = bool(DATABASE_URL)
+DB_PATH = config.DEFAULT_DB_PATH
+DEFAULT_USER_EMAIL = config.DEFAULT_USER_EMAIL
+DATABASE_URL = config.DATABASE_URL
+IS_POSTGRES = config.IS_POSTGRES
 
 DB_READY = False
 DB_INIT_LOCK = threading.Lock()

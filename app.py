@@ -28,6 +28,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from auth import helpers as auth_helpers
+import config
 import db as db_core
 from routes.account_routes import register_account_routes
 from routes.api_discovery import register_api_discovery_routes
@@ -52,7 +53,9 @@ from services import reading_insights
 from services import scraping as scraping_services
 from services import security as security_helpers
 from services import source_registry
+from services import source_preview
 from services import story_groups
+from services import url_resolve as url_resolve_service
 from sources import registry as policy_registry
 from sources.resolver import normalize_url as source_engine_normalize_url
 from sources.resolver import resolve_url as source_engine_resolve_url
@@ -76,12 +79,12 @@ except Exception:
     webdriver = None
     Options = None
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "tracker.db")
+DB_PATH = config.DEFAULT_DB_PATH
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me")
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+app.secret_key = config.SECRET_KEY
+logging.basicConfig(level=config.LOG_LEVEL)
 log = logging.getLogger(__name__)
 
 
@@ -140,11 +143,10 @@ def clean_number(value):
     return str(int(num)) if num.is_integer() else f"{num:g}"
 
 
-_RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
 limiter = Limiter(
     key_func=get_remote_address,
     app=app,
-    storage_uri=_RATELIMIT_STORAGE_URI,
+    storage_uri=config.RATELIMIT_STORAGE_URI,
     default_limits=[],
     headers_enabled=True,
 )
@@ -170,18 +172,18 @@ def _ratelimited(_err):
         429,
     )
 
-HTTP_TIMEOUT_SECONDS = int(os.getenv("HTTP_TIMEOUT_SECONDS", "15"))
+HTTP_TIMEOUT_SECONDS = config.HTTP_TIMEOUT_SECONDS
 MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
 SCRAPE_RETRY_ON_FAIL = os.getenv("SCRAPE_RETRY_ON_FAIL", "0") == "1"
 SCRAPE_TIMING_LOGS = os.getenv("SCRAPE_TIMING_LOGS", "0") == "1"
 USE_SELENIUM_FALLBACK = os.getenv("USE_SELENIUM_FALLBACK", "0") == "1"
-DEFAULT_USER_EMAIL = os.getenv("DEFAULT_USER_EMAIL", "local@tracker")
+DEFAULT_USER_EMAIL = config.DEFAULT_USER_EMAIL
 MIN_PASSWORD_LENGTH = max(1, int(os.getenv("MIN_PASSWORD_LENGTH", "8")))
 READ_PROGRESS_MAX_PER_BOOKMARK = int(os.getenv("READ_PROGRESS_MAX_PER_BOOKMARK", "400"))
 INITIAL_AUTO_CHECK = os.getenv("INITIAL_AUTO_CHECK", "0") == "1"
 CHECK_STALE_MINUTES = max(1, int(os.getenv("CHECK_STALE_MINUTES", "45")))
 DEFAULT_BUG_REPORT_URL = "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites/issues"
-APP_DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
+APP_DEBUG = config.APP_DEBUG
 
 _DEMO_STORY_MERGED = "sg-demomerged"
 
@@ -279,15 +281,13 @@ IMPORT_MAX_ITEMS = int(os.getenv("IMPORT_MAX_ITEMS", "20000"))
 AUTH_RATE_LIMIT_PER_IP = os.getenv("AUTH_RATE_LIMIT_PER_IP", "10/minute;60/hour")
 AUTH_RATE_LIMIT_PER_USER = os.getenv("AUTH_RATE_LIMIT_PER_USER", "8/minute;30/hour")
 DEAD_SERIES_WARNING_DAYS = max(1, int(os.getenv("DEAD_SERIES_WARNING_DAYS", "120")))
-RESOLVE_URL_MAX_LEN = int(os.getenv("RESOLVE_URL_MAX_LEN", "2048"))
-DISCOVER_QUERY_MAX_LEN = int(os.getenv("DISCOVER_QUERY_MAX_LEN", "120"))
-RESOLVE_CACHE_TTL_SECONDS = int(os.getenv("RESOLVE_CACHE_TTL_SECONDS", "120"))
+RESOLVE_URL_MAX_LEN = config.RESOLVE_URL_MAX_LEN
+DISCOVER_QUERY_MAX_LEN = config.DISCOVER_QUERY_MAX_LEN
 _PUBLIC_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,40}[a-z0-9])?$")
 if not APP_DEBUG and not os.getenv("SECRET_KEY"):
     raise RuntimeError("SECRET_KEY must be set in production")
 
 _RESOLVE_CACHE_LOCK = threading.Lock()
-_RESOLVE_CACHE: dict[str, tuple[float, dict]] = {}
 _DISCOVER_LIVE_CACHE: dict[str, tuple[float, dict]] = {}
 
 
@@ -389,11 +389,9 @@ def source_bug_report_href(bookmark) -> str:
     )
 
 
-DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://"):]
-IS_POSTGRES = bool(DATABASE_URL)
-ALLOW_SQLITE_IN_PRODUCTION = os.getenv("ALLOW_SQLITE_IN_PRODUCTION", "0") == "1"
+DATABASE_URL = config.DATABASE_URL
+IS_POSTGRES = config.IS_POSTGRES
+ALLOW_SQLITE_IN_PRODUCTION = config.ALLOW_SQLITE_IN_PRODUCTION
 if not APP_DEBUG and not IS_POSTGRES and not ALLOW_SQLITE_IN_PRODUCTION:
     raise RuntimeError(
         "Production requires DATABASE_URL (PostgreSQL) to prevent deploy-time data loss. "
@@ -4367,205 +4365,14 @@ def api_alt_sources():
     return jsonify({"ok": True, "current_source_id": curr_id, "alternatives": alternatives[:40]})
 
 
-_PREVIEW_SUPPORT_LEVELS = {
-    "official_api",
-    "site_adapter",
-    "generic_detector",
-    "protected",
-    "extension_assisted",
-    "manual_only",
-    "requested",
-    "blocked",
-}
-
-
-def _preview_support_label(raw: str) -> str:
-    level = str(raw or "").strip().lower()
-    if level == "official_api":
-        return "Automatic"
-    if level == "site_adapter":
-        return "Supported"
-    if level == "generic_detector":
-        return "Experimental"
-    if level == "protected":
-        return "Protected"
-    if level in {"extension_assisted", "requested"}:
-        return "Requested"
-    if level == "blocked":
-        return "Unavailable"
-    return "Manual"
-
-
-def _preview_latest_chapter_num(raw: str) -> Optional[float]:
-    s = str(raw or "").strip()
-    if not s:
-        return None
-    n = parse_chapter_number(s)
-    if n is not None and math.isfinite(n) and n >= 0:
-        return float(n)
-    try:
-        v = float(s)
-        if math.isfinite(v) and v >= 0:
-            return v
-    except (TypeError, ValueError):
-        pass
-    return None
-
-
-def _chapter_preview_dict(raw: dict) -> dict:
-    item = raw if isinstance(raw, dict) else {}
-    url = str(item.get("url") or "").strip()
-    if not is_public_http_url(url):
-        return {}
-    out = {"url": url}
-    number = str(item.get("number") or "").strip()
-    if number:
-        out["number"] = number
-    title = str(item.get("title") or "").strip()
-    if title:
-        out["title"] = title
-    released = str(item.get("released_at") or "").strip()
-    if released:
-        out["released_at"] = released
-    return out
-
-
-def _coerce_preview_payload(raw: dict, *, detection_source: str, fallback_url: str = "") -> dict:
-    data = raw if isinstance(raw, dict) else {}
-    source_url = str(data.get("source_url") or data.get("url") or fallback_url or "").strip()
-    source_name = str(data.get("source_name") or "").strip()
-    source_domain = str(data.get("source_domain") or "").strip()
-    support_level = str(data.get("support_level") or "manual_only").strip().lower()
-    if support_level not in _PREVIEW_SUPPORT_LEVELS:
-        support_level = "manual_only"
-    title = str(data.get("title") or "").strip()[:220]
-    canonical_title = str(data.get("canonical_title") or "").strip()[:220]
-    description = str(data.get("description") or "").strip()[:2000]
-    cover_url = str(data.get("cover_url") or "").strip()
-    if cover_url and not is_public_http_url(cover_url):
-        cover_url = ""
-    latest_chapter = str(data.get("latest_chapter") or "").strip()
-    latest_chapter_url = str(data.get("latest_chapter_url") or "").strip()
-    if latest_chapter_url and not is_public_http_url(latest_chapter_url):
-        latest_chapter_url = ""
-    current_chapter = str(data.get("current_chapter") or "").strip()
-    chapter_count_raw = data.get("chapter_count")
-    try:
-        chapter_count = int(chapter_count_raw) if chapter_count_raw not in (None, "") else None
-    except (TypeError, ValueError):
-        chapter_count = None
-    if chapter_count is not None and chapter_count < 0:
-        chapter_count = None
-    warnings = [str(w).strip() for w in (data.get("warnings") or []) if str(w or "").strip()]
-    chapters_raw = data.get("chapters")
-    chapters = []
-    if isinstance(chapters_raw, list):
-        for ch in chapters_raw[:40]:
-            row = _chapter_preview_dict(ch)
-            if row:
-                chapters.append(row)
-    confidence_raw = data.get("confidence")
-    try:
-        confidence = float(confidence_raw) if confidence_raw not in (None, "") else 0.0
-    except (TypeError, ValueError):
-        confidence = 0.0
-    confidence = max(0.0, min(1.0, confidence))
-    capabilities = ["url_resolve", "extension_detect"]
-    if support_level == "official_api":
-        capabilities.extend(["website_search", "chapter_check", "cover_image"])
-    elif support_level in {"site_adapter", "generic_detector"}:
-        capabilities.extend(["chapter_check", "cover_image"])
-    elif support_level == "protected":
-        capabilities = ["manual_only", "extension_detect"]
-    elif support_level in {"manual_only", "blocked", "requested"}:
-        capabilities = ["manual_only"]
-    return {
-        "source_url": source_url,
-        "source_name": source_name or "Manual",
-        "source_domain": source_domain,
-        "support_level": support_level,
-        "title": title,
-        "canonical_title": canonical_title,
-        "description": description,
-        "cover_url": cover_url,
-        "latest_chapter": latest_chapter,
-        "latest_chapter_url": latest_chapter_url,
-        "current_chapter": current_chapter,
-        "chapter_count": chapter_count,
-        "chapters": chapters,
-        "warnings": warnings,
-        "capabilities": capabilities,
-        "detection_source": detection_source if detection_source in ("backend", "extension", "manual") else "manual",
-        "confidence": confidence,
-    }
-
-
 def api_resolve_url():
-    data = request.get_json(silent=True) or {}
-    raw_url = (data.get("url") or "").strip()[: RESOLVE_URL_MAX_LEN + 1]
-    if not raw_url:
-        return jsonify({"ok": False, "error": "url is required"}), 400
-    if len(raw_url) > RESOLVE_URL_MAX_LEN:
-        return jsonify({"ok": False, "error": "url is too long"}), 400
-    raw_parsed = urlparse(raw_url)
-    if raw_parsed.scheme and raw_parsed.scheme not in ("http", "https"):
-        return jsonify({"ok": False, "error": "url must use http or https"}), 400
-    try:
-        normalized = source_engine_normalize_url(raw_url)
-    except Exception:
-        return jsonify({"ok": False, "error": "invalid url"}), 400
-    parsed = urlparse(normalized)
-    if parsed.scheme not in ("http", "https"):
-        return jsonify({"ok": False, "error": "url must use http or https"}), 400
-    if not is_public_http_url(normalized):
-        return jsonify({"ok": False, "error": "url must be a public http(s) address"}), 400
-
-    cached = _cache_get(_RESOLVE_CACHE, normalized, RESOLVE_CACHE_TTL_SECONDS)
-    if cached is not None:
-        return jsonify(cached)
-    try:
-        preview = source_engine_resolve_url(normalized)
-    except Exception:
-        fallback = _coerce_preview_payload(
-            {
-                "source_url": normalized,
-                "support_level": "manual_only",
-                "source_name": "Manual",
-                "warnings": [
-                    "Automatic detection could not read this page from the server. "
-                    "You can save it manually, or open it and use the extension to capture metadata from your browser."
-                ],
-            },
-            detection_source="manual",
-            fallback_url=normalized,
-        )
-        fallback["ok"] = True
-        fallback["status"] = "manual"
-        fallback["supportLabel"] = _preview_support_label(fallback.get("support_level"))
-        fallback["chaptersFound"] = 0
-        _cache_set(_RESOLVE_CACHE, normalized, fallback)
-        return jsonify(fallback)
-    payload = _coerce_preview_payload(asdict(preview), detection_source="backend", fallback_url=normalized)
-    if not payload.get("source_url"):
-        payload["source_url"] = normalized
-    if not payload.get("source_domain"):
-        try:
-            payload["source_domain"] = (urlparse(payload["source_url"]).hostname or "").lower().replace("www.", "")
-        except Exception:
-            payload["source_domain"] = ""
-    payload["status"] = "supported" if preview.support_level not in ("manual_only", "blocked") else "manual"
-    payload["supportLabel"] = _preview_support_label(payload.get("support_level"))
-    payload["chaptersFound"] = len(payload.get("chapters") or [])
-    payload["ok"] = True
-    if payload.get("support_level") == "manual_only":
-        warnings = list(payload.get("warnings") or [])
-        warnings.append(
-            "Automatic detection could not read this page from the server. "
-            "You can save it manually, or open it and use the extension to capture metadata from your browser."
-        )
-        payload["warnings"] = warnings
-    _cache_set(_RESOLVE_CACHE, normalized, payload)
-    return jsonify(payload)
+    body, status = url_resolve_service.resolve_url_post(
+        request.get_json(silent=True) or {},
+        is_public_http_url=is_public_http_url,
+        normalize_url_fn=source_engine_normalize_url,
+        resolve_url_fn=source_engine_resolve_url,
+    )
+    return jsonify(body), status
 
 
 _IMAGE_PROXY_ALLOWED_HOSTS = {"uploads.mangadex.org", "cmdxd98sbkhr3.cloudfront.net"}
@@ -4820,7 +4627,11 @@ def api_library_add_from_preview():
     if user_id is None:
         return jsonify({"ok": False, "error": "authentication required"}), 401
     data = request.get_json(silent=True) or {}
-    normalized_input = _coerce_preview_payload(data, detection_source=str(data.get("detection_source") or "manual").strip().lower())
+    normalized_input = source_preview.coerce_preview_payload(
+        data,
+        detection_source=str(data.get("detection_source") or "manual").strip().lower(),
+        is_public_http_url=is_public_http_url,
+    )
     raw_url = (normalized_input.get("source_url") or "").strip()
     if not raw_url:
         return jsonify({"ok": False, "error": "source_url is required"}), 400
@@ -5019,7 +4830,7 @@ def api_library_add_from_preview():
         ).fetchone()
         if row is None:
             return jsonify({"ok": False, "error": "failed to add series"}), 500
-        latest_num = _preview_latest_chapter_num(latest_chapter_raw) if latest_chapter_raw else None
+        latest_num = source_preview.preview_latest_chapter_num(latest_chapter_raw) if latest_chapter_raw else None
         latest_lbl = None
         if latest_num is not None:
             latest_lbl = f"Ch {latest_num}" if float(int(latest_num)) == latest_num else f"Ch {latest_num}"
@@ -5030,7 +4841,7 @@ def api_library_add_from_preview():
                 "UPDATE bookmarks SET latest_seen_num = ?, latest_seen = ?, latest_seen_url = ?, last_checked = ? WHERE id = ?",
                 (latest_num, latest_lbl, latest_seen_url, now, int(row["id"])),
             )
-        current_num = _preview_latest_chapter_num(current_chapter_raw) if current_chapter_raw else None
+        current_num = source_preview.preview_latest_chapter_num(current_chapter_raw) if current_chapter_raw else None
         if current_num is not None or current_chapter_raw:
             read_lbl = None
             if current_num is not None:
