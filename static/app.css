@@ -12,7 +12,7 @@
   --panel-2: #f8f1e8;
   --panel-strong: #fffaf3;
   --text: #241c17;
-  --text-muted: #7c6f63;
+  --text-muted: #5f5144;
   --text-soft: #9a8b7e;
   --muted: var(--text-muted);
   --border: #e3d7c8;
@@ -48,7 +48,7 @@
   --panel-2: #261e19;
   --panel-strong: #261e19;
   --text: #f3eadf;
-  --text-muted: #b9a898;
+  --text-muted: #d7c7b8;
   --text-soft: #8f8276;
   --muted: var(--text-muted);
   --border: #3a2f28;
@@ -115,6 +115,29 @@ a:hover {
 
 .muted {
   color: var(--muted);
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 /* ——— App shell (single column; nav lives in menu drawer) ——— */

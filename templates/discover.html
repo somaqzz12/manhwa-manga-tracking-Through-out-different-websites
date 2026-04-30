@@ -136,6 +136,7 @@
           <h1 class="page-title page-title--display">Discover manga and manhwa</h1>
           <p class="muted">Search a title or paste a URL. We’ll find sources, metadata, and the best way to track it.</p>
           <form id="discover-unified-form" class="discover-unified-form" method="get" action="{{ url_for('discover_page') }}" role="search">
+            <label for="discover-unified-input">Search title or paste a source URL</label>
             <input type="search" name="q" id="discover-unified-input" value="{{ q or url_q or '' }}" placeholder="Search manga, manhwa, or paste a URL..." autocomplete="off" aria-label="Search or paste URL">
             <button type="submit" class="btn primary" id="discoverUnifiedBtn">Search</button>
             <button id="liveBtn" type="button" class="btn ghost">Search supported sites live</button>
@@ -154,7 +155,7 @@
             <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
               <div class="discover-cover" style="width:140px;flex-shrink:0;border-radius:14px;border:1px solid var(--border);">
                 {% if resolved.cover_url %}
-                <img src="{{ resolved.cover_url|e }}" alt="" width="140" height="210" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
+                <img src="{{ resolved.cover_url|e }}" alt="{{ (resolved.title or 'Series')|e }} cover" width="140" height="210" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
                 {% endif %}
                 <div class="discover-cover-fallback">
                   <span class="discover-cover-fallback-badge">{{ (resolved.source_name or 'Source')|e }}</span>
@@ -170,7 +171,7 @@
                 <p class="muted" style="font-size:0.9rem;">Source: {{ resolved.source_name or "Unknown" }} · Support: {{ resolved.supportLabel }} · Chapters found: {{ resolved.chaptersFound or 0 }}</p>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
                   <a class="btn primary" href="{{ url_for('app_add_url', url=(resolved.source_url or url_q or '')) }}">Add in app</a>
-                  <a class="btn ghost" href="{{ (resolved.source_url or url_q or '')|e }}" target="_blank" rel="noreferrer">Original site</a>
+                  <a class="btn ghost" href="{{ (resolved.source_url or url_q or '')|e }}" target="_blank" rel="noopener noreferrer">Original site</a>
                 </div>
               </div>
             </div>
@@ -188,7 +189,7 @@
               <a class="discover-cover" href="{{ url_for('public_series', slug=(r.comparison_slug or r.slug)) }}" aria-label="{{ r.title|e }}">
                 <span class="discover-type-badge">{{ (r.type or 'Series')|e }}</span>
                 {% if r.cover_url %}
-                <img src="{{ r.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
+                <img src="{{ r.cover_url|e }}" alt="{{ (r.title or 'Series')|e }} cover" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
                 {% endif %}
                 <div class="discover-cover-fallback">
                   <span class="discover-cover-fallback-badge">{{ (r.best_source or r.source_name or 'Source')|e }}</span>
@@ -210,7 +211,7 @@
                 <div class="discover-actions">
                   <a class="btn ghost" href="{{ url_for('public_series', slug=(r.comparison_slug or r.slug)) }}">View sources</a>
                   {% if r.source_url %}
-                  <a class="btn ghost" href="{{ r.source_url|e }}" target="_blank" rel="noreferrer">Open original</a>
+                  <a class="btn ghost" href="{{ r.source_url|e }}" target="_blank" rel="noopener noreferrer">Open original</a>
                   {% endif %}
                   {% if r.source_url %}
                     {% if current_user %}
@@ -254,7 +255,7 @@
               <a class="discover-cover" href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}" aria-label="{{ card.title|e }}">
                 <span class="discover-type-badge">{{ card.type_label|e }}</span>
                 {% if card.cover_url %}
-                <img src="{{ card.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
+                <img src="{{ card.cover_url|e }}" alt="{{ card.title|e }} cover" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
                 {% endif %}
                 <div class="discover-cover-fallback">
                   <span class="discover-cover-fallback-badge">Starter</span>
@@ -286,7 +287,7 @@
               <a class="discover-cover" href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}" aria-label="{{ card.title|e }}">
                 <span class="discover-type-badge">{{ card.type_label|e }}</span>
                 {% if card.cover_url %}
-                <img src="{{ card.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
+                <img src="{{ card.cover_url|e }}" alt="{{ card.title|e }} cover" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
                 {% endif %}
                 <div class="discover-cover-fallback">
                   <span class="discover-cover-fallback-badge">Popular</span>
@@ -318,7 +319,7 @@
               <a class="discover-cover" href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}" aria-label="{{ card.title|e }}">
                 <span class="discover-type-badge">{{ card.type_label|e }}</span>
                 {% if card.cover_url %}
-                <img src="{{ card.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
+                <img src="{{ card.cover_url|e }}" alt="{{ card.title|e }} cover" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
                 {% endif %}
                 <div class="discover-cover-fallback">
                   <span class="discover-cover-fallback-badge">Popular</span>
@@ -365,7 +366,7 @@
                 <td>{{ row.source|e }}</td>
                 <td>{{ row.support|e }}</td>
                 <td>{{ row.notes|e }}</td>
-                <td>{% if row.url %}<a href="{{ row.url|e }}" target="_blank" rel="noreferrer">Original site</a>{% else %}—{% endif %}</td>
+                <td>{% if row.url %}<a href="{{ row.url|e }}" target="_blank" rel="noopener noreferrer">Original site</a>{% else %}—{% endif %}</td>
               </tr>
               {% endfor %}
             </tbody>

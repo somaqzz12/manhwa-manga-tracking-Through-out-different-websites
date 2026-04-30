@@ -3,7 +3,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from sources.base import SourcePreview
-from sources.registry import ADAPTERS, GENERIC_DETECTOR
+from sources.registry import ADAPTERS, GENERIC_DETECTOR, adapter_supports, list_sources_by_capability
 
 _HOST_PREFIXES = ("www.", "www2.", "m.", "mobile.")
 
@@ -83,6 +83,8 @@ def search_title(query: str, *, skip_adapter_ids: set[str] | None = None) -> lis
         aid = str(getattr(adapter, "id", "") or "")
         if aid in skip:
             continue
+        if not adapter_supports(adapter, "title_search"):
+            continue
         try:
             rows = adapter.search(q)
             if rows:
@@ -90,3 +92,7 @@ def search_title(query: str, *, skip_adapter_ids: set[str] | None = None) -> lis
         except Exception:
             continue
     return out
+
+
+def list_title_search_sources() -> list[dict]:
+    return list_sources_by_capability("title_search")

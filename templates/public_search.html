@@ -28,7 +28,8 @@
     <h1>Search manga &amp; manhwa</h1>
     <p class="muted" style="font-size:0.9rem;">Prefer the full experience on <a href="{{ url_for('discover_page') }}">Discover</a>.</p>
     <form method="get" action="{{ url_for('discover_page') }}">
-      <input class="search-input" name="q" value="{{ q|default('', true) }}" placeholder="Solo Leveling" aria-label="Search query">
+      <label for="public-search-q">Search title</label>
+      <input id="public-search-q" class="search-input" name="q" value="{{ q|default('', true) }}" placeholder="Solo Leveling" aria-label="Search query">
       <button type="submit">Search</button>
       <a href="{{ url_for('home') }}">Back home</a>
     </form>
@@ -38,7 +39,7 @@
       {% for r in results %}
       <article class="search-card">
         {% if r.cover_url %}
-        <img class="search-card-cover" src="{{ r.cover_url|e }}" alt="" width="72" height="102" loading="lazy" decoding="async" referrerpolicy="origin">
+        <img class="search-card-cover" src="{{ r.cover_url|e }}" alt="{{ (r.title or 'Series')|e }} cover" width="72" height="102" loading="lazy" decoding="async" referrerpolicy="no-referrer">
         {% else %}
         <div class="search-card-cover" aria-hidden="true"></div>
         {% endif %}

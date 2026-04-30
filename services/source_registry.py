@@ -103,6 +103,16 @@ def normalize_source_record(raw: dict) -> Optional[dict]:
         status = "partial"
 
     page_type = (raw.get("page_type") or raw.get("type") or "series").strip().lower()
+    caps = raw.get("capabilities")
+    capabilities: list[str]
+    if isinstance(caps, list):
+        capabilities = [str(c).strip() for c in caps if str(c).strip()]
+    else:
+        capabilities = ["url_resolve"]
+        if chapter_sel:
+            capabilities.append("chapter_check")
+        if strategy == "mangadex_api":
+            capabilities.append("title_search")
 
     return {
         **raw,
@@ -127,6 +137,7 @@ def normalize_source_record(raw: dict) -> Optional[dict]:
         "package": (raw.get("package") or "").strip(),
         "version": (raw.get("version") or "").strip(),
         "api": strategy == "mangadex_api",
+        "capabilities": capabilities,
     }
 
 
@@ -337,6 +348,71 @@ def get_profile_for_url(url: str) -> Optional[dict]:
     return best
 
 
+def adapter_supports(adapter_or_profile, capability: str) -> bool:
+    cap = str(capability or "").strip().lower()
+    if not cap:
+        return False
+    profile = None
+    if isinstance(adapter_or_profile, dict):
+        profile = adapter_or_profile
+    else:
+        aid = str(getattr(adapter_or_profile, "id", "") or "").strip().lower()
+        if aid:
+            for row in list_sources():
+                if str(row.get("id") or "").strip().lower() == aid:
+                    profile = row
+                    break
+    if not isinstance(profile, dict):
+        return cap == "url_resolve"
+    caps = profile.get("capabilities")
+    if isinstance(caps, list):
+        return cap in {str(c).strip().lower() for c in caps}
+    return cap == "url_resolve"
+
+
+def list_sources_by_capability(capability: str) -> list[dict]:
+    cap = str(capability or "").strip().lower()
+    if not cap:
+        return []
+    out: list[dict] = []
+    for row in list_sources():
+        if adapter_supports(row, cap):
+            out.append(dict(row))
+    return out
+
+
+def get_source_capabilities(source_id_or_url: str) -> list[str]:
+    raw = str(source_id_or_url or "").strip()
+    if not raw:
+        return ["manual_only"]
+    profile: Optional[dict] = None
+    if "://" in raw:
+        profile = get_profile_for_url(raw)
+    else:
+        sid = raw.lower()
+        for row in list_sources():
+            if str(row.get("id") or "").strip().lower() == sid:
+                profile = row
+                break
+    if not profile:
+        return ["manual_only"]
+    caps = profile.get("capabilities")
+    if isinstance(caps, list) and caps:
+        return [str(c) for c in caps]
+    return ["url_resolve"]
+
+
+def get_source_capabilities(url: str) -> list[str]:
+    profile = get_profile_for_url(url)
+    if not profile:
+        return ["url_resolve"]
+    caps = profile.get("capabilities")
+    if isinstance(caps, list):
+        out = [str(c).strip() for c in caps if str(c).strip()]
+        return out or ["url_resolve"]
+    return ["url_resolve"]
+
+
 def load_health() -> dict:
     global _HEALTH_MTIME, _HEALTH_CACHE
     path = _health_path()
@@ -398,22 +474,47 @@ def aggregate_status_counts(sources: Optional[list[dict]] = None) -> dict[str, i
     srcs = sources or list_sources()
     health = load_health()
     by_id = health.get("by_id") if isinstance(health.get("by_id"), dict) else {}
-    counts = {"total": len(srcs), "working": 0, "partial": 0, "broken": 0}
+    health_available = bool(by_id)
+    counts = {
+        "total": len(srcs),
+        "working": 0,
+        "partial": 0,
+        "broken": 0,
+        "manual": 0,
+        "requested": 0,
+        "unchecked": 0,
+    }
     for s in srcs:
         hid = s["id"]
         h = by_id.get(hid) if isinstance(by_id.get(hid), dict) else {}
         check_status = (h.get("check_status") or "").strip().lower()
         declared = (s.get("status") or "partial").strip().lower()
-        if check_status in ("working", "partial", "broken"):
+        support_level = str(s.get("policy_support_level") or "").strip().lower()
+        origin = str(s.get("registry_origin") or "").strip().lower()
+        if support_level in ("requested", "extension_assisted") or origin == "manifest":
+            effective = "requested"
+        elif support_level == "manual_only":
+            effective = "manual"
+        elif support_level == "blocked":
+            effective = "broken"
+        elif check_status in ("working", "partial", "broken"):
             effective = check_status
+        elif not health_available:
+            effective = "unchecked"
         elif declared in ("working", "partial", "broken"):
             effective = declared
         else:
-            effective = "partial"
+            effective = "unchecked"
         if effective == "working":
             counts["working"] += 1
         elif effective == "broken":
             counts["broken"] += 1
+        elif effective == "manual":
+            counts["manual"] += 1
+        elif effective == "requested":
+            counts["requested"] += 1
+        elif effective == "unchecked":
+            counts["unchecked"] += 1
         else:
             counts["partial"] += 1
     return counts

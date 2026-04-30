@@ -27,16 +27,26 @@ from flask import Flask, flash, jsonify, redirect, render_template, request, ses
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
+from auth import helpers as auth_helpers
+import db as db_core
 from routes.api_discovery import register_api_discovery_routes
+from routes.admin import register_admin_routes
+from routes.auth import register_auth_routes
+from routes.extension_api import register_extension_api_routes
 from routes.library import register_library_routes
 from routes.public import register_public_routes
 from werkzeug.security import check_password_hash, generate_password_hash
 from services import chapter_parsing as chapter
+from services import bookmarks as bookmark_services
+from services import admin as admin_services
 from services import discovery
 from services import discovery_home
+from services import extension_progress as ext_progress
 from services import library_model
 from services import metadata_discovery
 from services import reading_insights
+from services import scraping as scraping_services
+from services import security as security_helpers
 from services import source_registry
 from services import story_groups
 from sources import registry as policy_registry
@@ -294,7 +304,24 @@ def inject_template_globals():
 
 
 SESSION = requests.Session()
-SESSION.headers.update({"User-Agent": USER_AGENT})
+SESSION.headers.update(
+    {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+    }
+)
 
 
 def get_profile_for_url(url: str) -> Optional[dict]:
@@ -568,11 +595,8 @@ def handle_preflight():
 
 
 def get_conn():
-    if IS_POSTGRES:
-        return PostgresConn()
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    db_core.set_db_path(DB_PATH)
+    return db_core.get_conn()
 
 
 def _sqlite_bookmarks_has_global_unique_url(conn) -> bool:
@@ -940,211 +964,18 @@ def _harden_legacy_default_user_password(conn) -> None:
 
 
 def init_db() -> None:
-    if IS_POSTGRES:
-        with get_conn() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS users (
-                    id BIGSERIAL PRIMARY KEY,
-                    username TEXT UNIQUE,
-                    email TEXT NOT NULL UNIQUE,
-                    password_hash TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS bookmarks (
-                    id BIGSERIAL PRIMARY KEY,
-                    user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
-                    title TEXT NOT NULL,
-                    url TEXT NOT NULL,
-                    latest_seen TEXT,
-                    latest_seen_num DOUBLE PRECISION,
-                    new_update INTEGER NOT NULL DEFAULT 0,
-                    last_checked TEXT,
-                    last_error TEXT,
-                    series_key TEXT,
-                    latest_seen_url TEXT,
-                    cover_url TEXT,
-                    latest_confidence DOUBLE PRECISION,
-                    latest_parser_version TEXT,
-                    latest_error_flags TEXT,
-                    story_id TEXT,
-                    created_at TEXT,
-                    canonical_title TEXT,
-                    description TEXT,
-                    chapter_count INTEGER
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS reading_progress (
-                    id BIGSERIAL PRIMARY KEY,
-                    user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
-                    bookmark_id BIGINT REFERENCES bookmarks(id) ON DELETE CASCADE,
-                    chapter_num DOUBLE PRECISION,
-                    chapter_label TEXT,
-                    source_url TEXT,
-                    seen_at TEXT NOT NULL,
-                    UNIQUE(bookmark_id, chapter_num, source_url)
-                )
-                """
-            )
-            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_series_key ON bookmarks(series_key)")
-            conn.execute("ALTER TABLE bookmarks DROP CONSTRAINT IF EXISTS bookmarks_url_key")
-            conn.execute("DROP INDEX IF EXISTS bookmarks_url_key")
-            conn.execute("DROP INDEX IF EXISTS idx_bookmarks_url_unique")
-            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_url_unique ON bookmarks(user_id, url)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_url ON bookmarks(user_id, url)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_user_id ON reading_progress(user_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_bookmark ON reading_progress(bookmark_id)")
-            _ensure_bookmarks_story_id_column(conn)
-            _ensure_bookmarks_created_at_column(conn)
-            _ensure_bookmarks_metadata_columns(conn)
-            _backfill_bookmark_story_ids(conn)
-
-            now = _now_iso_z()
-            conn.execute(
-                "INSERT OR IGNORE INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-                (DEFAULT_USER_EMAIL, _bootstrap_default_user_password_hash(), now),
-            )
-            conn.execute(
-                "UPDATE users SET username = COALESCE(username, split_part(email, '@', 1)) WHERE username IS NULL"
-            )
-            default_user = conn.execute("SELECT id FROM users WHERE email = ?", (DEFAULT_USER_EMAIL,)).fetchone()
-            default_user_id = default_user["id"]
-            conn.execute("UPDATE bookmarks SET user_id = ? WHERE user_id IS NULL", (default_user_id,))
-            conn.execute("UPDATE reading_progress SET user_id = ? WHERE user_id IS NULL", (default_user_id,))
-            _harden_legacy_default_user_password(conn)
-            _ensure_users_integration_columns(conn)
-            _ensure_source_requests_table(conn)
-            _ensure_normalized_library_tables(conn)
-        return
-
-    with get_conn() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT,
-                email TEXT NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-        user_cols = conn.execute("PRAGMA table_info(users)").fetchall()
-        user_col_names = {c["name"] for c in user_cols}
-        if "username" not in user_col_names:
-            conn.execute("ALTER TABLE users ADD COLUMN username TEXT")
-        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username)")
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS bookmarks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                title TEXT NOT NULL,
-                url TEXT NOT NULL,
-                latest_seen TEXT,
-                latest_seen_num REAL,
-                new_update INTEGER NOT NULL DEFAULT 0,
-                last_checked TEXT,
-                last_error TEXT,
-                created_at TEXT,
-                canonical_title TEXT,
-                description TEXT,
-                chapter_count INTEGER
-            )
-            """
-        )
-        _migrate_sqlite_bookmarks_to_user_unique(conn)
-        cols = conn.execute("PRAGMA table_info(bookmarks)").fetchall()
-        col_names = {c["name"] for c in cols}
-        if "user_id" not in col_names:
-            conn.execute("ALTER TABLE bookmarks ADD COLUMN user_id INTEGER")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id)")
-        if "series_key" not in col_names:
-            conn.execute("ALTER TABLE bookmarks ADD COLUMN series_key TEXT")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_series_key ON bookmarks(series_key)")
-        if "latest_seen_url" not in col_names:
-            conn.execute("ALTER TABLE bookmarks ADD COLUMN latest_seen_url TEXT")
-        if "cover_url" not in col_names:
-            conn.execute("ALTER TABLE bookmarks ADD COLUMN cover_url TEXT")
-        if "latest_confidence" not in col_names:
-            conn.execute("ALTER TABLE bookmarks ADD COLUMN latest_confidence REAL")
-        if "latest_parser_version" not in col_names:
-            conn.execute("ALTER TABLE bookmarks ADD COLUMN latest_parser_version TEXT")
-        if "latest_error_flags" not in col_names:
-            conn.execute("ALTER TABLE bookmarks ADD COLUMN latest_error_flags TEXT")
-        if "story_id" not in col_names:
-            conn.execute("ALTER TABLE bookmarks ADD COLUMN story_id TEXT")
-        if "created_at" not in col_names:
-            conn.execute("ALTER TABLE bookmarks ADD COLUMN created_at TEXT")
-        _ensure_bookmarks_metadata_columns(conn)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_url ON bookmarks(user_id, url)")
-        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_url_unique ON bookmarks(user_id, url)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_story ON bookmarks(user_id, story_id)")
-        _ensure_bookmarks_created_at_column(conn)
-
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS reading_progress (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                bookmark_id INTEGER NOT NULL,
-                chapter_num REAL,
-                chapter_label TEXT,
-                source_url TEXT,
-                seen_at TEXT NOT NULL,
-                UNIQUE(bookmark_id, chapter_num, source_url),
-                FOREIGN KEY(bookmark_id) REFERENCES bookmarks(id) ON DELETE CASCADE
-            )
-            """
-        )
-        progress_cols = conn.execute("PRAGMA table_info(reading_progress)").fetchall()
-        progress_names = {c["name"] for c in progress_cols}
-        if "user_id" not in progress_names:
-            conn.execute("ALTER TABLE reading_progress ADD COLUMN user_id INTEGER")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_user_id ON reading_progress(user_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_bookmark ON reading_progress(bookmark_id)")
-
-        # Ensure a default local user exists so extension flow keeps working.
-        now = _now_iso_z()
-        conn.execute(
-            "INSERT OR IGNORE INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-            (DEFAULT_USER_EMAIL, _bootstrap_default_user_password_hash(), now),
-        )
-        conn.execute(
-            "UPDATE users SET username = COALESCE(username, substr(email, 1, instr(email, '@') - 1)) WHERE username IS NULL"
-        )
-        default_user = conn.execute("SELECT id FROM users WHERE email = ?", (DEFAULT_USER_EMAIL,)).fetchone()
-        default_user_id = default_user["id"]
-        conn.execute("UPDATE bookmarks SET user_id = ? WHERE user_id IS NULL", (default_user_id,))
-        conn.execute(
-            "UPDATE reading_progress SET user_id = ? WHERE user_id IS NULL",
-            (default_user_id,),
-        )
-        _harden_legacy_default_user_password(conn)
-        _backfill_bookmark_story_ids(conn)
-        _ensure_users_integration_columns(conn)
-        _ensure_source_requests_table(conn)
-        _ensure_normalized_library_tables(conn)
+    db_core.set_db_path(DB_PATH)
+    db_core.init_db()
 
 
 def ensure_db_ready() -> None:
     global DB_READY
     if DB_READY:
         return
-    with DB_INIT_LOCK:
-        if DB_READY:
-            return
-        init_db()
-        DB_READY = True
+    db_core.set_db_path(DB_PATH)
+    db_core.DB_READY = DB_READY
+    db_core.ensure_db_ready()
+    DB_READY = db_core.DB_READY
 
 
 def parse_chapter_number(text: str) -> Optional[float]:
@@ -1156,61 +987,24 @@ def parse_chapter_from_url(url: str) -> Optional[float]:
 
 
 def is_valid_http_url(raw_url: str) -> bool:
-    try:
-        parsed = urlparse((raw_url or "").strip())
-        return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
-    except Exception:
-        return False
+    return scraping_services.is_valid_http_url(raw_url)
 
 
 def is_public_http_url(raw_url: str) -> bool:
-    if not is_valid_http_url(raw_url):
-        return False
-    try:
-        host = (urlparse((raw_url or "").strip()).hostname or "").strip()
-        if not host:
-            return False
-        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
-        if not infos:
-            return False
-        for info in infos:
-            ip_txt = info[4][0]
-            ip = ipaddress.ip_address(ip_txt)
-            if (
-                ip.is_private
-                or ip.is_loopback
-                or ip.is_link_local
-                or ip.is_multicast
-                or ip.is_reserved
-                or ip.is_unspecified
-            ):
-                return False
-        return True
-    except Exception:
-        return False
+    return scraping_services.is_public_http_url(raw_url)
 
 
 def fetch_public_url(url: str, **kwargs) -> requests.Response:
-    """Fetch a public URL while revalidating every redirect target."""
-    current = (url or "").strip()
-    max_redirects = int(kwargs.pop("max_redirects", 5))
-    timeout = kwargs.pop("timeout", HTTP_TIMEOUT_SECONDS)
-    for _ in range(max_redirects + 1):
-        if not is_public_http_url(current):
-            raise ValueError("Blocked URL (private/internal host)")
-        res = SESSION.get(current, timeout=timeout, allow_redirects=False, **kwargs)
-        if not res.is_redirect:
-            return res
-        location = (res.headers.get("Location") or "").strip()
-        if not location:
-            return res
-        current = urljoin(current, location)
-    raise ValueError("Too many redirects")
+    return scraping_services.fetch_public_url(
+        SESSION,
+        url,
+        timeout_seconds=HTTP_TIMEOUT_SECONDS,
+        **kwargs,
+    )
 
 
 def normalize_bookmark_url(raw_url: str) -> str:
-    """Normalize URL for duplicate checks (trim, strip trailing slash, case-fold)."""
-    return (raw_url or "").strip().rstrip("/").lower()
+    return bookmark_services.normalize_bookmark_url(raw_url)
 
 
 def parse_backup_int(value) -> Optional[int]:
@@ -1721,112 +1515,55 @@ def resolve_scrape_chapter_fields(
 
 
 def get_default_user_id() -> int:
-    with get_conn() as conn:
-        row = conn.execute("SELECT id FROM users WHERE email = ?", (DEFAULT_USER_EMAIL,)).fetchone()
-    return int(row["id"])
+    return auth_helpers.get_default_user_id()
 
 
 def get_actor_user_id() -> int:
-    user_id = session.get("user_id")
-    if user_id:
-        return int(user_id)
-    return get_default_user_id()
+    return auth_helpers.get_actor_user_id()
 
 
 def get_current_user():
-    user_id = session.get("user_id")
-    if not user_id:
-        return None
-    with get_conn() as conn:
-        return conn.execute("SELECT id, username, email, created_at FROM users WHERE id = ?", (user_id,)).fetchone()
+    return auth_helpers.get_current_user()
 
 
 def login_required():
-    return session.get("user_id") is not None
+    return auth_helpers.login_required()
 
 
 def _safe_internal_redirect_path(candidate: str | None) -> str | None:
-    """Return path+query if safe for post-auth redirects (same-origin relative only)."""
-    if not candidate:
-        return None
-    s = candidate.strip()
-    if not s.startswith("/") or s.startswith("//") or "\n" in s or "\r" in s or "\\" in s:
-        return None
-    return s
+    return auth_helpers.safe_internal_redirect_path(candidate)
 
 
 def _login_redirect_preserve_destination() -> Response:
-    return redirect(url_for("auth_page", mode="login", next=request.full_path))
+    return auth_helpers.login_redirect_preserve_destination()
 
 
 def api_session_user_id() -> Optional[int]:
-    """Return the logged-in user id for extension JSON API routes.
-
-    Never falls back to DEFAULT_USER_EMAIL — anonymous callers must not read or
-    write another user's bookmarks or progress.
-    """
-    uid = session.get("user_id")
-    if uid is None:
-        return None
-    try:
-        return int(uid)
-    except (TypeError, ValueError):
-        return None
+    return auth_helpers.api_session_user_id()
 
 
 def _admin_secret_from_request() -> str:
-    """Read admin API token from headers only (never query strings — referrers/history leak)."""
-    auth = (request.headers.get("Authorization") or "").strip()
-    if auth.lower().startswith("bearer "):
-        return auth[7:].strip()
-    return (request.headers.get("X-Admin-Token") or "").strip()
+    return security_helpers.admin_secret_from_request()
 
 
 def admin_api_authorized() -> bool:
-    """Destructive / scrape-proxy JSON routes: debug token, or admin username session, or FLASK_DEBUG."""
-    if APP_DEBUG:
-        return True
-    if ADMIN_API_TOKEN:
-        provided = _admin_secret_from_request()
-        if provided and provided == ADMIN_API_TOKEN:
-            return True
-    if ADMIN_USERNAME:
-        current = get_current_user()
-        if current:
-            try:
-                if str(current.get("username") or "").strip().lower() == ADMIN_USERNAME.strip().lower():
-                    return True
-            except Exception:
-                pass
-    return False
+    return security_helpers.admin_api_authorized(
+        app_debug=APP_DEBUG,
+        admin_api_token=ADMIN_API_TOKEN,
+        admin_username=ADMIN_USERNAME,
+    )
 
 
 def admin_view_authorized() -> bool:
-    """Allow admin HTML pages for configured admin user or the same header token as the API.
-
-    Browser navigation cannot safely carry secrets in query strings; use a normal
-    login as ``ADMIN_USERNAME`` or a reverse-proxy that injects ``X-Admin-Token``.
-    """
-    if APP_DEBUG:
-        return True
-    current = get_current_user()
-    if current and ADMIN_USERNAME:
-        try:
-            current_username = str(current["username"] or "").strip().lower()
-        except Exception:
-            current_username = ""
-        if current_username == ADMIN_USERNAME:
-            return True
-    if ADMIN_API_TOKEN:
-        provided = _admin_secret_from_request()
-        if provided and provided == ADMIN_API_TOKEN:
-            return True
-    return False
+    return security_helpers.admin_view_authorized(
+        app_debug=APP_DEBUG,
+        admin_api_token=ADMIN_API_TOKEN,
+        admin_username=ADMIN_USERNAME,
+    )
 
 
 def _admin_link_kw() -> dict:
-    """Reserved for backward-compatible templates; admin secrets are never embedded in URLs."""
-    return {}
+    return security_helpers.admin_link_kw()
 
 
 def _public_slug_ok(candidate: Optional[str]) -> bool:
@@ -1976,66 +1713,7 @@ def scrape_series_cover(url: str, series_title: str = "") -> Optional[str]:
 
 
 def resolve_series_listing_url(url: str) -> str:
-    """Best-effort canonical series URL resolution for sites with chapter-style slugs."""
-    if not is_public_http_url(url):
-        return url
-    parsed_slug = extract_series_slug(url)
-    low = (url or "").lower()
-    if parsed_slug and ("/manga/" in low or "/comics/" in low) and "chapter" not in low and not re.search(r"-\d+(?:\.\d+)?/?$", low):
-        # Fast path: already looks like canonical series listing URL.
-        return url.rstrip("/")
-    try:
-        res = fetch_public_url(url)
-        res.raise_for_status()
-    except Exception:
-        return url
-
-    final_url = str(res.url or url).strip()
-    soup = BeautifulSoup(res.text, "html.parser")
-    candidates: list[str] = []
-    canonical = soup.select_one('link[rel="canonical"]')
-    if canonical and canonical.get("href"):
-        candidates.append(urljoin(final_url or url, canonical.get("href", "").strip()))
-    og_url = soup.select_one('meta[property="og:url"]')
-    if og_url and og_url.get("content"):
-        candidates.append(urljoin(final_url or url, og_url.get("content", "").strip()))
-    candidates.append(final_url)
-    candidates.append(url)
-
-    def is_chapter_like(raw: str) -> bool:
-        path = raw.lower()
-        return bool(
-            re.search(r"/(?:chapter|ch|episode|ep)[-_ /]?\d", path)
-            or re.search(r"/c\d+(?:\.\d+)?(?:/|$)", path)
-            or re.search(r"-chapter-\d+(?:\.\d+)?(?:/|$)", path)
-            or re.search(r"-\d+(?:\.\d+)?/?$", path)
-        )
-
-    candidates = [c for c in candidates if c and is_public_http_url(c)]
-    preferred = [c for c in candidates if "/manga/" in c.lower() or "/comics/" in c.lower()]
-    if preferred:
-        return preferred[0].rstrip("/")
-
-    base_slug = extract_series_slug(url)
-    if base_slug:
-        for a in soup.select("a[href]"):
-            href = (a.get("href") or "").strip()
-            if not href:
-                continue
-            absolute = urljoin(final_url or url, href)
-            if not is_public_http_url(absolute):
-                continue
-            lowered = absolute.lower()
-            if "/manga/" not in lowered and "/comics/" not in lowered:
-                continue
-            href_slug = extract_series_slug(absolute)
-            if href_slug and (href_slug == base_slug or base_slug in href_slug or href_slug in base_slug):
-                return absolute.rstrip("/")
-
-    for c in candidates:
-        if c and not is_chapter_like(c):
-            return c.rstrip("/")
-    return final_url.rstrip("/") if final_url else url
+    return bookmark_services.resolve_series_listing_url(url, fetch_public_url_cb=fetch_public_url)
 
 
 def extract_series_slug(raw_url: str) -> str:
@@ -2590,17 +2268,6 @@ def check_all_users() -> None:
         check_all(int(user["id"]), force=False)
 
 
-@app.route("/auth", methods=["GET", "POST"])
-@limiter.limit(
-    AUTH_RATE_LIMIT_PER_IP,
-    methods=["POST"],
-    key_func=get_remote_address,
-)
-@limiter.limit(
-    AUTH_RATE_LIMIT_PER_USER,
-    methods=["POST"],
-    key_func=_auth_username_key,
-)
 def auth_page():
     if login_required() and get_current_user() is not None:
         dest = _safe_internal_redirect_path((request.args.get("next") or "").strip())
@@ -2669,29 +2336,42 @@ def auth_page():
     return render_template("auth.html", mode=mode, error=error, auth_next=auth_next)
 
 
-@app.route("/login")
 def login_alias():
     nxt = (request.args.get("next") or "").strip()
     return redirect(url_for("auth_page", mode="login", **({"next": nxt} if nxt else {})))
 
 
-@app.route("/register")
 def register_alias():
     nxt = (request.args.get("next") or "").strip()
     return redirect(url_for("auth_page", mode="register", **({"next": nxt} if nxt else {})))
 
 
-@app.route("/logout", methods=["POST"])
 def logout():
     session.pop("user_id", None)
     return redirect(url_for("auth_page"))
+
+
+register_auth_routes(
+    app,
+    {
+        "auth_page": auth_page,
+        "login_alias": login_alias,
+        "register_alias": register_alias,
+        "logout": logout,
+        "get_remote_address": get_remote_address,
+    },
+    limiter,
+    AUTH_RATE_LIMIT_PER_IP,
+    AUTH_RATE_LIMIT_PER_USER,
+    _auth_username_key,
+)
 
 
 _SOURCE_CATALOG_GROUP_ORDER = (
     "Automatic",
     "Supported",
     "Experimental",
-    "Extension-assisted",
+    "Requested",
     "Manual",
     "Unavailable",
     "Other",
@@ -2712,9 +2392,9 @@ def _friendly_public_support_bucket(src: dict) -> str:
     if p == "blocked":
         return "Unavailable"
     if p == "requested":
-        return "Extension-assisted"
+        return "Requested"
     if (src.get("registry_origin") or "").strip() == "manifest":
-        return "Extension-assisted"
+        return "Requested"
     if (src.get("registry_origin") or "").strip() == "curated":
         return "Supported"
     return "Other"
@@ -2723,11 +2403,18 @@ def _friendly_public_support_bucket(src: dict) -> str:
 def _public_sources_catalog_view(raw_sources: list[dict]) -> tuple[list[dict], list[tuple[str, list[dict]]]]:
     """Drop imported manifest rows that have no policy match; keep curated and legacy rows."""
     filtered: list[dict] = []
+    seen_site_keys: set[str] = set()
     for src in raw_sources:
         origin = (src.get("registry_origin") or "").strip()
         pol = (src.get("policy_support_level") or "").strip()
         if origin == "manifest" and not pol:
             continue
+        domains = [str(d).strip().lower().lstrip(".") for d in (src.get("domains") or []) if str(d or "").strip()]
+        site_key = "|".join(sorted(set(domains))) if domains else str(src.get("id") or "")
+        if site_key and site_key in seen_site_keys:
+            continue
+        if site_key:
+            seen_site_keys.add(site_key)
         row = dict(src)
         row["friendly_support"] = _friendly_public_support_bucket(row)
         filtered.append(row)
@@ -2740,6 +2427,26 @@ def _public_sources_catalog_view(raw_sources: list[dict]) -> tuple[list[dict], l
         buckets[b].append(row)
     groups = [(k, buckets[k]) for k in _SOURCE_CATALOG_GROUP_ORDER if buckets[k]]
     return filtered, groups
+
+
+def _sources_effective_status(src: dict, *, health_available: bool) -> str:
+    h = src.get("health") if isinstance(src.get("health"), dict) else {}
+    check_status = str(h.get("check_status") or "").strip().lower()
+    if check_status in {"working", "partial", "broken"}:
+        return check_status
+    friendly = str(src.get("friendly_support") or "").strip().lower()
+    if friendly == "manual":
+        return "manual"
+    if friendly == "requested":
+        return "requested"
+    if friendly == "unavailable":
+        return "broken"
+    declared = str(src.get("status") or "").strip().lower()
+    if not health_available:
+        return "unchecked"
+    if declared in {"working", "partial", "broken"}:
+        return declared
+    return "unchecked"
 
 
 @app.route("/sources")
@@ -2761,13 +2468,18 @@ def sources_page():
         src["policy_support_level"] = (matched or {}).get("support_level") or ""
         src["policy_risk_level"] = (matched or {}).get("risk_level") or ""
     catalog_sources, source_groups = _public_sources_catalog_view(sources)
-    counts = source_registry.aggregate_status_counts(catalog_sources)
     health = source_registry.load_health()
+    by_id = health.get("by_id") if isinstance(health.get("by_id"), dict) else {}
+    health_available = bool(by_id)
+    for src in catalog_sources:
+        src["effective_status"] = _sources_effective_status(src, health_available=health_available)
+    counts = source_registry.aggregate_status_counts(catalog_sources)
     return render_template(
         "sources.html",
         sources=catalog_sources,
         source_groups=source_groups,
         counts=counts,
+        health_available=health_available,
         health_updated_at=health.get("updated_at"),
         current_user=get_current_user(),
         demo_mode=False,
@@ -2782,6 +2494,25 @@ def sources_page():
 @app.route("/privacy")
 def privacy_page():
     return render_template("privacy.html")
+
+
+@app.route("/check", methods=["GET"])
+def check_info_page():
+    if login_required():
+        flash("Run checks from your dashboard.", "info")
+        return redirect(url_for("index"))
+    flash("Checks are dashboard actions. Sign in to run them.", "info")
+    return redirect(url_for("auth_page", mode="login", next=url_for("index")))
+
+
+@app.route("/terms")
+def terms_page():
+    return render_template("terms.html")
+
+
+@app.route("/dmca")
+def dmca_page():
+    return render_template("dmca.html")
 
 
 @app.route("/changelog")
@@ -3377,67 +3108,85 @@ def _effective_comparison_slug(catalog_slug: str) -> str:
 
 def public_series(slug: str):
     safe_slug = (slug or "").strip().lower()[:120]
-    md_ctx = metadata_discovery.build_series_page_from_mangadex_uuid(safe_slug)
-    if md_ctx:
-        primary_fallback = md_ctx.get("primary_add_url") or ""
-        preview = _filter_public_source_preview(list(md_ctx.get("source_preview") or []))
-        enriched, rec_name, primary, sc = _prepare_public_series_preview(preview)
-        primary_add = primary or primary_fallback
+    try:
+        md_ctx = metadata_discovery.build_series_page_from_mangadex_uuid(safe_slug)
+        if md_ctx:
+            primary_fallback = md_ctx.get("primary_add_url") or ""
+            preview = _filter_public_source_preview(list(md_ctx.get("source_preview") or []))
+            enriched, rec_name, primary, sc = _prepare_public_series_preview(preview)
+            primary_add = primary or primary_fallback
+            return render_template(
+                "public_series.html",
+                current_user=get_current_user(),
+                slug=md_ctx["slug"],
+                title=md_ctx["title"],
+                description=md_ctx.get("description") or "",
+                cover_url=md_ctx.get("cover_url") or "",
+                source_preview=enriched,
+                recommended_source=rec_name,
+                sources_count=sc,
+                missing_catalog_entry=bool(md_ctx.get("missing_catalog_entry")),
+                primary_add_url=primary_add,
+                from_mangadex=True,
+                from_normalized=False,
+            )
+        with get_conn() as conn:
+            norm = library_model.load_series_for_public_page(conn, safe_slug)
+        if norm:
+            norm = dict(norm)
+            norm.pop("from_mangadex", None)
+            norm.pop("from_normalized", None)
+            preview = _filter_public_source_preview(norm.get("source_preview") or [])
+            enriched, rec_name, primary, sc = _prepare_public_series_preview(preview)
+            norm["source_preview"] = enriched
+            norm["recommended_source"] = rec_name
+            norm["sources_count"] = sc
+            norm["primary_add_url"] = primary
+            return render_template(
+                "public_series.html",
+                current_user=get_current_user(),
+                from_mangadex=False,
+                from_normalized=True,
+                **norm,
+            )
+        row = discovery.get_series_by_slug(safe_slug)
+        title = (row.get("title") if row else safe_slug.replace("-", " ").title()) if safe_slug else "Series"
+        sources = list(row.get("sources") or []) if row else []
+        sources = _filter_public_source_preview(sources)
+        enriched, rec_name, primary, sc = _prepare_public_series_preview(sources)
+        cov = str((row.get("cover_url") if row else "") or "").strip()
         return render_template(
             "public_series.html",
-            current_user=get_current_user(),
-            slug=md_ctx["slug"],
-            title=md_ctx["title"],
-            description=md_ctx.get("description") or "",
-            cover_url=md_ctx.get("cover_url") or "",
+            slug=safe_slug,
+            title=title,
+            description=(row.get("description") if row else "") or "",
+            cover_url=cov,
             source_preview=enriched,
             recommended_source=rec_name,
             sources_count=sc,
-            missing_catalog_entry=bool(md_ctx.get("missing_catalog_entry")),
-            primary_add_url=primary_add,
-            from_mangadex=True,
+            missing_catalog_entry=row is None,
+            primary_add_url=primary,
+            from_mangadex=False,
             from_normalized=False,
+            current_user=get_current_user(),
         )
-    with get_conn() as conn:
-        norm = library_model.load_series_for_public_page(conn, safe_slug)
-    if norm:
-        norm = dict(norm)
-        norm.pop("from_mangadex", None)
-        norm.pop("from_normalized", None)
-        preview = _filter_public_source_preview(norm.get("source_preview") or [])
-        enriched, rec_name, primary, sc = _prepare_public_series_preview(preview)
-        norm["source_preview"] = enriched
-        norm["recommended_source"] = rec_name
-        norm["sources_count"] = sc
-        norm["primary_add_url"] = primary
+    except Exception:
+        log.exception("public_series failed slug=%r", safe_slug)
         return render_template(
             "public_series.html",
-            current_user=get_current_user(),
+            slug=safe_slug,
+            title=safe_slug.replace("-", " ").title() if safe_slug else "Series",
+            description="This series page is temporarily unavailable. You can still paste a source URL and track it manually.",
+            cover_url="",
+            source_preview=[],
+            recommended_source="",
+            sources_count=0,
+            missing_catalog_entry=True,
+            primary_add_url="",
             from_mangadex=False,
-            from_normalized=True,
-            **norm,
+            from_normalized=False,
+            current_user=get_current_user(),
         )
-    row = discovery.get_series_by_slug(safe_slug)
-    title = (row.get("title") if row else safe_slug.replace("-", " ").title()) if safe_slug else "Series"
-    sources = list(row.get("sources") or []) if row else []
-    sources = _filter_public_source_preview(sources)
-    enriched, rec_name, primary, sc = _prepare_public_series_preview(sources)
-    cov = str((row.get("cover_url") if row else "") or "").strip()
-    return render_template(
-        "public_series.html",
-        slug=safe_slug,
-        title=title,
-        description=(row.get("description") if row else "") or "",
-        cover_url=cov,
-        source_preview=enriched,
-        recommended_source=rec_name,
-        sources_count=sc,
-        missing_catalog_entry=row is None,
-        primary_add_url=primary,
-        from_mangadex=False,
-        from_normalized=False,
-        current_user=get_current_user(),
-    )
 
 
 def about_page():
@@ -3456,6 +3205,8 @@ register_public_routes(
         "discover_page": discover_page,
         "public_series": public_series,
         "about_page": about_page,
+        "terms_page": terms_page,
+        "dmca_page": dmca_page,
         "extension_page": extension_page,
     },
 )
@@ -4234,22 +3985,22 @@ def save_progress():
 
     if not series_url and not series_key:
         return jsonify({"ok": False, "error": "series_url or series_key required"}), 400
+    canonical_series_url, normalized_series_url = ext_progress.canonical_and_normalized_series_urls(
+        series_url,
+        resolve_series_listing_url_cb=resolve_series_listing_url,
+        normalize_bookmark_url_cb=normalize_bookmark_url,
+    )
 
     with get_conn() as conn:
-        row = None
-        if series_key:
-            row = conn.execute(
-                "SELECT id FROM bookmarks WHERE user_id = ? AND series_key = ?",
-                (user_id, series_key),
-            ).fetchone()
-        if row is None and series_url:
-            row = conn.execute(
-                "SELECT id FROM bookmarks WHERE user_id = ? AND url = ?",
-                (user_id, series_url),
-            ).fetchone()
-        if not row:
+        bookmark_id = ext_progress.find_progress_bookmark_id(
+            conn,
+            user_id=user_id,
+            series_key=series_key,
+            canonical_series_url=canonical_series_url,
+            normalized_series_url=normalized_series_url,
+        )
+        if bookmark_id is None:
             return jsonify({"ok": False, "error": "series not found (ensure step failed or key mismatch)"}), 404
-        bookmark_id = row["id"]
 
     parsed_num = None
     try:
@@ -4286,8 +4037,6 @@ def save_progress():
     return jsonify({"ok": True, "bookmark_id": bookmark_id, "chapter_num": parsed_num})
 
 
-@csrf.exempt
-@app.route("/api/unread-count", methods=["GET"])
 def api_unread_count():
     """Return the total unread chapter count for the actor user.
 
@@ -4512,6 +4261,7 @@ _PREVIEW_SUPPORT_LEVELS = {
     "official_api",
     "site_adapter",
     "generic_detector",
+    "protected",
     "extension_assisted",
     "manual_only",
     "requested",
@@ -4527,8 +4277,12 @@ def _preview_support_label(raw: str) -> str:
         return "Supported"
     if level == "generic_detector":
         return "Experimental"
-    if level == "extension_assisted":
-        return "Extension-assisted"
+    if level == "protected":
+        return "Protected"
+    if level in {"extension_assisted", "requested"}:
+        return "Requested"
+    if level == "blocked":
+        return "Unavailable"
     return "Manual"
 
 
@@ -4606,6 +4360,15 @@ def _coerce_preview_payload(raw: dict, *, detection_source: str, fallback_url: s
     except (TypeError, ValueError):
         confidence = 0.0
     confidence = max(0.0, min(1.0, confidence))
+    capabilities = ["url_resolve"]
+    if support_level == "official_api":
+        capabilities.extend(["title_search", "chapter_check", "cover_image"])
+    elif support_level in {"site_adapter", "generic_detector"}:
+        capabilities.extend(["chapter_check", "cover_image"])
+    elif support_level == "protected":
+        capabilities = ["manual_only", "extension_detect"]
+    elif support_level in {"manual_only", "blocked", "requested"}:
+        capabilities = ["manual_only"]
     return {
         "source_url": source_url,
         "source_name": source_name or "Manual",
@@ -4621,6 +4384,7 @@ def _coerce_preview_payload(raw: dict, *, detection_source: str, fallback_url: s
         "chapter_count": chapter_count,
         "chapters": chapters,
         "warnings": warnings,
+        "capabilities": capabilities,
         "detection_source": detection_source if detection_source in ("backend", "extension", "manual") else "manual",
         "confidence": confidence,
     }
@@ -4694,14 +4458,59 @@ def api_resolve_url():
     return jsonify(payload)
 
 
+_IMAGE_PROXY_ALLOWED_HOSTS = {"uploads.mangadex.org", "cmdxd98sbkhr3.cloudfront.net"}
+_IMAGE_PROXY_MAX_BYTES = 4 * 1024 * 1024
+
+
+@app.route("/api/image-proxy", methods=["GET"])
+def api_image_proxy():
+    raw = (request.args.get("url") or "").strip()
+    if not raw:
+        return jsonify({"ok": False, "error": "url is required"}), 400
+    parsed = urlparse(raw)
+    if parsed.scheme != "https":
+        return jsonify({"ok": False, "error": "https only"}), 400
+    host = (parsed.hostname or "").lower()
+    if not any(host == h or host.endswith("." + h) for h in _IMAGE_PROXY_ALLOWED_HOSTS):
+        return jsonify({"ok": False, "error": "domain not allowed"}), 403
+    if not is_public_http_url(raw):
+        return jsonify({"ok": False, "error": "public url required"}), 400
+    try:
+        res = SESSION.get(raw, timeout=8, stream=True, allow_redirects=False)
+    except Exception:
+        return jsonify({"ok": False, "error": "upstream fetch failed"}), 502
+    if 300 <= res.status_code < 400:
+        return jsonify({"ok": False, "error": "redirect not allowed"}), 400
+    if res.status_code >= 400:
+        return jsonify({"ok": False, "error": "upstream unavailable"}), 502
+    ct = (res.headers.get("Content-Type") or "").lower()
+    if not ct.startswith("image/"):
+        return jsonify({"ok": False, "error": "upstream is not an image"}), 400
+    buf = bytearray()
+    try:
+        for chunk in res.iter_content(chunk_size=65536):
+            if not chunk:
+                continue
+            buf.extend(chunk)
+            if len(buf) > _IMAGE_PROXY_MAX_BYTES:
+                return jsonify({"ok": False, "error": "image too large"}), 413
+    finally:
+        res.close()
+    return Response(
+        bytes(buf),
+        content_type=ct,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @csrf.exempt
-@app.route("/api/track", methods=["POST"])
+@app.route("/api/demo/track", methods=["POST"])
 def api_track_series():
     data = request.get_json(silent=True) or {}
     return jsonify({"ok": True, "status": "queued", "series": data.get("series") or data.get("title") or "series"})
 
 
-@app.route("/api/search", methods=["GET"])
+@app.route("/api/demo/search", methods=["GET"])
 def api_public_search():
     q = (request.args.get("q") or "").strip()
     if not q:
@@ -4714,6 +4523,17 @@ def api_public_search():
             ],
         }
     )
+
+
+@csrf.exempt
+@app.route("/api/track", methods=["POST"])
+def api_track_series_legacy_disabled():
+    return jsonify({"ok": False, "error": "deprecated endpoint; use /api/demo/track"}), 410
+
+
+@app.route("/api/search", methods=["GET"])
+def api_public_search_legacy_disabled():
+    return jsonify({"ok": False, "error": "deprecated endpoint; use /api/demo/search"}), 410
 
 
 @app.route("/api/series/<int:series_id>/sources", methods=["GET"])
@@ -5140,8 +4960,6 @@ def api_account_issue_token():
     return jsonify({"ok": True, "token": tok, "usage": "Authorization: Bearer <token> on GET /api/v1/bookmarks"})
 
 
-@csrf.exempt
-@app.route("/api/reader-overlay", methods=["GET"])
 def api_reader_overlay():
     user_id = api_session_user_id()
     if user_id is None:
@@ -5251,6 +5069,16 @@ def api_reader_overlay():
             "new_update": new_update,
         }
     )
+
+
+register_extension_api_routes(
+    app,
+    {
+        "api_unread_count": api_unread_count,
+        "api_reader_overlay": api_reader_overlay,
+    },
+    csrf=csrf,
+)
 
 
 @csrf.exempt
@@ -5391,51 +5219,13 @@ def merge_duplicates():
     )
 
 
-@app.route("/admin/users", methods=["GET"])
 def admin_users():
     if not admin_view_authorized():
         if not login_required():
             return _login_redirect_preserve_destination()
         return abort(403)
     with get_conn() as conn:
-        totals = conn.execute(
-            """
-            SELECT
-                (SELECT COUNT(*) FROM users) AS total_users,
-                (SELECT COUNT(*) FROM bookmarks) AS total_bookmarks,
-                (SELECT COUNT(*) FROM reading_progress) AS total_progress
-            """
-        ).fetchone()
-        users = conn.execute(
-            """
-            SELECT
-                u.id,
-                u.username,
-                u.email,
-                u.created_at,
-                (SELECT COUNT(*) FROM bookmarks b WHERE b.user_id = u.id) AS bookmark_count,
-                (SELECT COUNT(*) FROM reading_progress rp WHERE rp.user_id = u.id) AS progress_count
-            FROM users u
-            ORDER BY u.created_at DESC, u.id DESC
-            """
-        ).fetchall()
-        latest_users = conn.execute(
-            """
-            SELECT id, username, email, created_at
-            FROM users
-            ORDER BY created_at DESC, id DESC
-            LIMIT 10
-            """
-        ).fetchall()
-        latest_bookmarks = conn.execute(
-            """
-            SELECT b.id, b.title, b.url, b.created_at, b.user_id, u.username
-            FROM bookmarks b
-            LEFT JOIN users u ON u.id = b.user_id
-            ORDER BY b.created_at DESC, b.id DESC
-            LIMIT 10
-            """
-        ).fetchall()
+        totals, users, latest_users, latest_bookmarks = admin_services.admin_users_overview(conn)
     return render_template(
         "admin_users.html",
         totals=totals,
@@ -5446,46 +5236,15 @@ def admin_users():
     )
 
 
-@app.route("/admin/users/<int:user_id>", methods=["GET"])
 def admin_user_detail(user_id: int):
     if not admin_view_authorized():
         if not login_required():
             return _login_redirect_preserve_destination()
         return abort(403)
     with get_conn() as conn:
-        user = conn.execute(
-            "SELECT id, username, email, created_at FROM users WHERE id = ?",
-            (user_id,),
-        ).fetchone()
+        user, bookmarks, progress = admin_services.admin_user_detail_rows(conn, user_id)
         if not user:
             abort(404)
-        bookmarks = conn.execute(
-            """
-            SELECT id, title, url, latest_seen, latest_seen_num, new_update, created_at
-            FROM bookmarks
-            WHERE user_id = ?
-            ORDER BY id DESC
-            """,
-            (user_id,),
-        ).fetchall()
-        progress = conn.execute(
-            """
-            SELECT
-                rp.id,
-                rp.bookmark_id,
-                rp.chapter_num,
-                rp.chapter_label,
-                rp.source_url,
-                rp.seen_at,
-                b.title AS bookmark_title
-            FROM reading_progress rp
-            LEFT JOIN bookmarks b ON b.id = rp.bookmark_id
-            WHERE rp.user_id = ?
-            ORDER BY rp.seen_at DESC, rp.id DESC
-            LIMIT 300
-            """,
-            (user_id,),
-        ).fetchall()
     return render_template(
         "admin_user_detail.html",
         user=user,
@@ -5495,19 +5254,27 @@ def admin_user_detail(user_id: int):
     )
 
 
-@app.route("/admin/source-registry-status", methods=["GET"])
 def admin_source_registry_status():
     if not admin_view_authorized():
         if not login_required():
             return _login_redirect_preserve_destination()
         return abort(403)
-    rows = source_registry.sources_with_health()
-    rows = sorted(rows, key=lambda r: ((r.get("registry_origin") or "zzz"), r.get("display_name") or r.get("id") or ""))
+    rows = admin_services.admin_source_registry_rows(source_registry)
     return render_template(
         "admin_source_registry_status.html",
         rows=rows,
         admin_link_kw=_admin_link_kw(),
     )
+
+
+register_admin_routes(
+    app,
+    {
+        "admin_users": admin_users,
+        "admin_user_detail": admin_user_detail,
+        "admin_source_registry_status": admin_source_registry_status,
+    },
+)
 
 
 def _scheduled_source_health() -> None:

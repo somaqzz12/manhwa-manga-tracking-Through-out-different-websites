@@ -292,7 +292,7 @@
     <section class="block" id="install" aria-labelledby="install-h2">
       <p class="section-note">Install</p>
       <h2 id="install-h2">Chrome — manual install (unpacked)</h2>
-      <p class="section-lead" style="font-size:0.95rem;">The extension is distributed as source for developer-mode loading. Download the ZIP, unzip, then load the folder that contains <code style="font-size:0.9em;">manifest.json</code>.</p>
+      <p class="section-lead" style="font-size:0.95rem;">The extension is currently distributed as a manual ZIP/unpacked install (no verified browser store listing yet). Download the ZIP, unzip, then load the folder that contains <code style="font-size:0.9em;">manifest.json</code>.</p>
       <ol class="install-steps">
         <li><strong>Download</strong> the <a href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:700;">extension ZIP</a> and unzip it on your computer.</li>
         <li>Open <code>chrome://extensions</code> (or <code>edge://extensions</code> in Microsoft Edge).</li>
@@ -343,6 +343,9 @@
       <p style="margin:0;">
         <a href="{{ url_for('home') }}">Home</a>
         · <a href="{{ url_for('discover_page') }}">Discover</a>
+        · <a href="{{ url_for('privacy_page') }}">Privacy</a>
+        · <a href="{{ url_for('terms_page') }}">Terms</a>
+        · <a href="{{ url_for('dmca_page') }}">DMCA</a>
         · <a href="{{ github_url }}" target="_blank" rel="noopener noreferrer">GitHub</a>
       </p>
     </footer>

@@ -358,7 +358,7 @@
           </a>
           <div class="series-card-body">
             <h3>{{ card.title|e }}</h3>
-            <p class="series-meta">{{ card.type_label }} · Latest ch. {{ card.latest_chapter|e }} · {{ card.sources_found }} sources</p>
+            <p class="series-meta">{{ card.type_label }} · Latest ch. {{ card.latest_chapter|e }} · {{ card.sources_hint|default((card.sources_found ~ ' sources'), true) }}</p>
             <div class="series-actions">
               <a href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}">View sources</a>
               <a class="primary" href="{{ url_for('app_add_url', title=card.title) }}">Add</a>
@@ -383,7 +383,7 @@
           </a>
           <div class="series-card-body">
             <h3>{{ card.title|e }}</h3>
-            <p class="series-meta">{{ card.type_label }} · Latest ch. {{ card.latest_chapter|e }} · {{ card.sources_found }} sources</p>
+            <p class="series-meta">{{ card.type_label }} · Latest ch. {{ card.latest_chapter|e }} · {{ card.sources_hint|default((card.sources_found ~ ' sources'), true) }}</p>
             <div class="series-actions">
               <a href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}">View sources</a>
               <a class="primary" href="{{ url_for('app_add_url', title=card.title) }}">Add</a>
@@ -408,7 +408,7 @@
           </a>
           <div class="series-card-body">
             <h3>{{ card.title|e }}</h3>
-            <p class="series-meta">{{ card.type_label }} · Latest ch. {{ card.latest_chapter|e }} · {{ card.sources_found }} sources</p>
+            <p class="series-meta">{{ card.type_label }} · Latest ch. {{ card.latest_chapter|e }} · {{ card.sources_hint|default((card.sources_found ~ ' sources'), true) }}</p>
             <div class="series-actions">
               <a href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}">View sources</a>
               <a class="primary" href="{{ url_for('app_add_url', title=card.title) }}">Add</a>

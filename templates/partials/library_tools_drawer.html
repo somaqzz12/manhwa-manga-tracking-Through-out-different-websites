@@ -28,6 +28,7 @@
       <a class="drawer-nav-link {% if request.endpoint == 'discover_page' %}is-active{% endif %}" href="{{ url_for('discover_page') }}">Discover</a>
       <a class="drawer-nav-link {% if request.endpoint == 'sources_page' %}is-active{% endif %}" href="{{ url_for('sources_page') }}">Sources</a>
       <a class="drawer-nav-link {% if request.endpoint == 'extension_page' %}is-active{% endif %}" href="{{ url_for('extension_page') }}">Extension</a>
+      <a class="drawer-nav-link {% if request.endpoint in ['about_page', 'help_page'] %}is-active{% endif %}" href="{{ url_for('help_page') }}">Help</a>
       <a class="drawer-nav-link" href="{{ github_url|default('https://github.com') }}" target="_blank" rel="noopener noreferrer">GitHub</a>
       <a class="drawer-nav-link" href="{{ url_for('index') }}">Open App</a>
       {% if not (current_user is defined and current_user and not demo_mode|default(false)) %}
@@ -36,6 +37,8 @@
       {% endif %}
       {% endif %}
       <a class="drawer-nav-link {% if request.endpoint == 'privacy_page' %}is-active{% endif %}" href="{{ url_for('privacy_page') }}">Privacy</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'terms_page' %}is-active{% endif %}" href="{{ url_for('terms_page') }}">Terms</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'dmca_page' %}is-active{% endif %}" href="{{ url_for('dmca_page') }}">DMCA</a>
       <a class="drawer-nav-link {% if request.endpoint == 'changelog_page' %}is-active{% endif %}" href="{{ url_for('changelog_page') }}">Changelog</a>
       <a class="drawer-nav-link {% if request.endpoint == 'demo_dashboard' %}is-active{% endif %}" href="{{ url_for('demo_dashboard') }}">Demo</a>
     </nav>

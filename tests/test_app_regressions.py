@@ -13,6 +13,20 @@ from sources.base import SourcePreview
 
 
 class AppRegressionTests(unittest.TestCase):
+    def test_app_imports_without_cycles(self):
+        import app as imported_app
+
+        self.assertIsNotNone(imported_app.app)
+
+    def test_non_test_modules_do_not_import_from_app(self):
+        root = Path(__file__).resolve().parents[1]
+        for py in root.rglob("*.py"):
+            rel = py.relative_to(root).as_posix()
+            if rel.startswith("tests/") or rel == "app.py":
+                continue
+            text = py.read_text(encoding="utf-8")
+            self.assertNotIn("from app import", text, f"forbidden import in {rel}")
+
     def setUp(self):
         fd, self.db_path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
@@ -317,7 +331,7 @@ class AppRegressionTests(unittest.TestCase):
         self.assertEqual(rows[0].get("title"), "Chainsaw Man")
         self.assertEqual(rows[0].get("support_level"), "official_api")
         self.assertIn("mangadex.org", rows[0].get("source_url") or "")
-        self.assertEqual(rows[0].get("cover_url") or "", "")
+        self.assertIn("/api/image-proxy?url=", rows[0].get("cover_url") or "")
 
     def test_public_series_mangadex_uuid_uses_build_page(self):
         from unittest.mock import patch
@@ -877,6 +891,229 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn("isSafeHttpUrl(data.cover_url || \"\")", content)
         self.assertIn("isSafeHttpUrl(data.source_url || \"\")", content)
         self.assertNotIn("out.innerHTML = renderPreview(data)", content)
+
+    def test_discover_search_input_has_visible_label(self):
+        res = self.client.get("/discover")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn('label for="discover-unified-input"', body)
+        self.assertIn("Search title or paste a source URL", body)
+
+    def test_public_search_cover_img_has_alt_text(self):
+        with app.app.test_request_context("/"):
+            html = app.render_template(
+                "public_search.html",
+                q="x",
+                results=[{"title": "Solo Leveling", "slug": "solo", "cover_url": "https://ex.com/c.jpg"}],
+            )
+        self.assertIn('alt="Solo Leveling cover"', html)
+        self.assertIn('referrerpolicy="no-referrer"', html)
+
+    def test_public_search_placeholder_renders_without_broken_img(self):
+        with app.app.test_request_context("/"):
+            html = app.render_template(
+                "public_search.html",
+                q="x",
+                results=[{"title": "No Cover", "slug": "no-cover", "cover_url": ""}],
+            )
+        self.assertIn('class="search-card-cover" aria-hidden="true"', html)
+        self.assertNotIn('<img class="search-card-cover"', html)
+
+    def test_sources_page_hides_internal_script_names(self):
+        rows = [
+            {
+                "id": "safe",
+                "display_name": "Safe Source",
+                "domains": ["safe.example"],
+                "status": "working",
+                "language": "en",
+                "health": {},
+                "nsfw": False,
+            }
+        ]
+        with (
+            patch.object(app.source_registry, "public_sources_with_health", return_value=rows),
+            patch.object(app.source_registry, "aggregate_status_counts", return_value={"total": 1, "working": 1, "partial": 0, "broken": 0}),
+            patch.object(app.source_registry, "load_health", return_value={}),
+        ):
+            res = self.client.get("/sources")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertNotIn("scripts/check_sources.py", body)
+
+    def test_privacy_terms_dmca_pages_return_200(self):
+        self.assertEqual(self.client.get("/privacy").status_code, 200)
+        self.assertEqual(self.client.get("/terms").status_code, 200)
+        self.assertEqual(self.client.get("/dmca").status_code, 200)
+
+    def test_unknown_series_slug_shows_friendly_not_found(self):
+        res = self.client.get("/series/slug-that-does-not-exist-anywhere")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("Paste a URL", body)
+        self.assertIn("No sources saved yet", body)
+
+    def test_external_links_use_noopener_noreferrer(self):
+        res = self.client.get("/discover?q=solo")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn('target="_blank" rel="noopener noreferrer"', body)
+
+    def test_check_get_route_is_friendly_and_does_not_404(self):
+        res = self.client.get("/check", follow_redirects=False)
+        self.assertEqual(res.status_code, 302)
+        self.assertIn("/auth", res.headers.get("Location", ""))
+
+    def test_check_get_logged_in_redirects_dashboard(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("checkuser", "checkuser@example.com", generate_password_hash("secret12"), now),
+            )
+            uid = int(conn.execute("SELECT id FROM users WHERE email = ?", ("checkuser@example.com",)).fetchone()["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        res = self.client.get("/check", follow_redirects=False)
+        self.assertEqual(res.status_code, 302)
+        self.assertIn("/app", res.headers.get("Location", ""))
+
+    def test_check_post_routes_remain_auth_protected(self):
+        r1 = self.client.post("/check/1", follow_redirects=False)
+        self.assertEqual(r1.status_code, 302)
+        self.assertIn("/auth", r1.headers.get("Location", ""))
+        r2 = self.client.post("/check-all", follow_redirects=False)
+        self.assertEqual(r2.status_code, 302)
+        self.assertIn("/auth", r2.headers.get("Location", ""))
+
+    def test_sources_page_missing_health_shows_pending_and_unchecked(self):
+        rows = [
+            {
+                "id": "safe",
+                "display_name": "Safe Source",
+                "domains": ["safe.example"],
+                "status": "working",
+                "language": "en",
+                "health": {},
+                "nsfw": False,
+            }
+        ]
+        with (
+            patch.object(app.source_registry, "public_sources_with_health", return_value=rows),
+            patch.object(app.source_registry, "load_health", return_value={}),
+        ):
+            res = self.client.get("/sources")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("Health check pending", body)
+        self.assertIn(">Unchecked<", body)
+        self.assertIn(">—<", body)
+
+    def test_landing_starter_picks_do_not_show_zero_sources_for_curated_titles(self):
+        res = self.client.get("/")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertNotIn("One Piece</h3>\n            <p class=\"series-meta\">Manga · Latest ch. 1113 · 0 sources", body)
+        self.assertNotIn("Jujutsu Kaisen</h3>\n            <p class=\"series-meta\">Manga · Latest ch. 271 · 0 sources", body)
+
+    def test_discover_still_supports_title_search_and_url_paste(self):
+        with patch.object(
+            app,
+            "source_engine_resolve_url",
+            return_value=SourcePreview(
+                source_name="Demo",
+                source_url="https://example.com/series",
+                support_level="manual_only",
+                confidence=0.5,
+                title="Demo",
+            ),
+        ):
+            url_res = self.client.get("/discover?url=https%3A%2F%2Fexample.com%2Fseries")
+        self.assertEqual(url_res.status_code, 200)
+        self.assertIn("URL detection", url_res.get_data(as_text=True))
+        title_res = self.client.get("/discover?q=Solo+Leveling")
+        self.assertEqual(title_res.status_code, 200)
+        self.assertIn("Results for", title_res.get_data(as_text=True))
+
+    def test_demo_search_track_endpoints_renamed_and_legacy_disabled(self):
+        legacy_search = self.client.get("/api/search?q=solo")
+        self.assertEqual(legacy_search.status_code, 410)
+        legacy_track = self.client.post("/api/track", json={"title": "Solo"})
+        self.assertEqual(legacy_track.status_code, 410)
+        demo_search = self.client.get("/api/demo/search?q=solo")
+        self.assertEqual(demo_search.status_code, 200)
+        self.assertTrue((demo_search.get_json() or {}).get("ok"))
+
+    def test_save_progress_normalizes_series_url_before_lookup(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("proguser", "proguser@example.com", generate_password_hash("secret12"), now),
+            )
+            uid = int(conn.execute("SELECT id FROM users WHERE email = ?", ("proguser@example.com",)).fetchone()["id"])
+            conn.execute(
+                "INSERT INTO bookmarks (user_id, title, url, story_id, created_at) VALUES (?, ?, ?, ?, ?)",
+                (uid, "Series", "https://example.com/series/demo", "story:demo", now),
+            )
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        res = self.client.post(
+            "/api/progress",
+            json={
+                "series_url": "https://example.com/series/demo/",
+                "chapter_num": 10,
+                "chapter_label": "Ch. 10",
+                "chapter_url": "https://example.com/series/demo/chapter-10",
+            },
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue((res.get_json() or {}).get("ok"))
+
+    def test_image_proxy_rejects_unknown_domain(self):
+        res = self.client.get("/api/image-proxy?url=https%3A%2F%2Fevil.example%2Fx.jpg")
+        self.assertEqual(res.status_code, 403)
+
+    def test_image_proxy_rejects_private_or_non_https(self):
+        r1 = self.client.get("/api/image-proxy?url=http%3A%2F%2Fuploads.mangadex.org%2Fx.jpg")
+        self.assertEqual(r1.status_code, 400)
+        r2 = self.client.get("/api/image-proxy?url=https%3A%2F%2Flocalhost%2Fx.jpg")
+        self.assertIn(r2.status_code, {400, 403})
+
+    def test_image_proxy_rejects_non_image_content_type(self):
+        class _Resp:
+            status_code = 200
+            headers = {"Content-Type": "text/html"}
+
+            def iter_content(self, chunk_size=65536):
+                yield b"<html></html>"
+
+            def close(self):
+                return None
+
+        with patch.object(app.SESSION, "get", return_value=_Resp()):
+            res = self.client.get("/api/image-proxy?url=https%3A%2F%2Fuploads.mangadex.org%2Fcovers%2Fa%2Fb.jpg")
+        self.assertEqual(res.status_code, 400)
+
+    def test_image_proxy_allows_mangadex_image_host(self):
+        class _Resp:
+            status_code = 200
+            headers = {"Content-Type": "image/jpeg"}
+
+            def iter_content(self, chunk_size=65536):
+                yield b"\xff\xd8\xff\xd9"
+
+            def close(self):
+                return None
+
+        with patch.object(app.SESSION, "get", return_value=_Resp()):
+            res = self.client.get("/api/image-proxy?url=https%3A%2F%2Fuploads.mangadex.org%2Fcovers%2Fa%2Fb.jpg")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.headers.get("Content-Type"), "image/jpeg")
 
 
 if __name__ == "__main__":

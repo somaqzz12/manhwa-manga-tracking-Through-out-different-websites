@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict
 from typing import Any
+from urllib.parse import quote
 from urllib.parse import urlparse
 
 from services import discovery as local_discovery
@@ -33,7 +34,16 @@ def _support_label(level: str) -> str:
         return "Extension-assisted"
     if lv in {"unavailable", "blocked"}:
         return "Unavailable"
+    if lv == "protected":
+        return "Protected"
     return "Manual"
+
+
+def _proxy_cover_url(raw: str) -> str:
+    u = (raw or "").strip()
+    if not u:
+        return ""
+    return "/api/image-proxy?url=" + quote(u, safe="")
 
 
 def _title_key(title: str) -> str:
@@ -72,13 +82,12 @@ def _format_mangadex_row(raw: dict[str, Any]) -> dict[str, Any]:
     latest = raw.get("latest_chapter")
     latest_s = str(latest).strip() if latest is not None else ""
     sc = 1
-    # MangaDex frequently blocks direct hotlinking for covers. Prefer in-app placeholder over
-    # rendering their anti-hotlink image ("You can read this at MangaDex").
+    cover_proxy = _proxy_cover_url(str(raw.get("cover_url") or ""))
     return {
         "title": str(raw.get("title") or "").strip(),
         "slug": mid,
         "description": desc,
-        "cover_url": "",
+        "cover_url": cover_proxy,
         "type": "Manga",
         "source_count": sc,
         "sources_found": sc,
@@ -199,15 +208,21 @@ def discover_search(query: str, *, live: bool = False) -> dict[str, Any]:
         return {"ok": True, "results": [], "is_demo": False}
 
     merged = search_title(q, live=live)
+    notes: list[str] = []
+    title_sources = source_resolver.list_title_search_sources()
+    if not title_sources:
+        notes.append("No server-side title search adapters are enabled yet. Paste a URL or use manual tracking.")
+    elif len(title_sources) == 1 and str(title_sources[0].get("id") or "") == "mangadex":
+        notes.append("Title search is currently strongest on MangaDex. For other sites, paste a series URL.")
     if live:
-        return {"ok": True, "results": merged, "is_demo": False}
+        return {"ok": True, "results": merged, "is_demo": False, "notes": notes}
     if merged:
-        return {"ok": True, "results": merged, "is_demo": False}
+        return {"ok": True, "results": merged, "is_demo": False, "notes": notes}
 
     local = local_discovery.search_local_series(q)[:8]
     local_fmt = [_format_local_demo_row(r) for r in local]
     is_demo = bool(local_fmt)
-    return {"ok": True, "results": local_fmt, "is_demo": is_demo}
+    return {"ok": True, "results": local_fmt, "is_demo": is_demo, "notes": notes}
 
 
 def resolve_url_to_metadata(url: str) -> dict[str, Any] | None:

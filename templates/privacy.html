@@ -4,33 +4,47 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Privacy — Manga Watchlist</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root { --bg: #080b14; --text: #e2e8f0; --muted: #94a3b8; }
-    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 32px 20px 48px; line-height: 1.6; max-width: 640px; margin-left: auto; margin-right: auto; }
-    a { color: #a5b4fc; }
-    h1 { margin-top: 0; }
-    ul { padding-left: 1.25rem; color: #cbd5e1; }
-    .muted { color: var(--muted); font-size: 0.9rem; }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
-<body>
-  <p><a href="{{ url_for('home') }}">← Home</a></p>
-  <h1>Privacy</h1>
-  <p class="muted">What this app stores and how credentials are handled.</p>
-  <h2>Account data</h2>
-  <ul>
-    <li><strong>Username</strong> — your chosen login name.</li>
-    <li><strong>Password</strong> — stored only as a <strong>hash</strong> (one-way). Plain-text passwords are never stored.</li>
-    <li><strong>Email</strong> — a synthetic local address may be generated from your username for legacy schema compatibility.</li>
-  </ul>
-  <h2>Library data</h2>
-  <ul>
-    <li><strong>Bookmarks</strong> — series title, canonical URL, cover URL, last check time, latest chapter metadata, and optional error messages from scrapes.</li>
-    <li><strong>Reading progress</strong> — chapter numbers and labels you mark as read, tied to your account.</li>
-  </ul>
-  <h2>Covers and scraping</h2>
-  <p class="muted">To refresh chapter counts and artwork, the server fetches pages you bookmarked. Those third-party sites may log requests (including IP) like any normal browser visit.</p>
-  <p><a href="{{ url_for('sources_page') }}">Supported sources</a> · <a href="{{ url_for('changelog_page') }}">Changelog</a></p>
+<body class="page-app" data-theme="normal">
+  <div class="app-shell app-shell--full">
+    {% include "partials/shell_topbar.html" %}
+    {% include "partials/library_tools_drawer.html" %}
+    <div class="main dash-main">
+      <main class="page-single-inner" style="max-width:880px;">
+        <h1 class="page-title page-title--display">Privacy</h1>
+        <p class="lead">How Manga Watchlist handles account data, tracking metadata, and third-party source links.</p>
+
+        <section class="panel" style="padding:16px;margin-bottom:14px;">
+          <h2 class="section-title" style="margin-top:0;">What we store</h2>
+          <p>Account data (username/email and password hash), your library entries, source URLs, cover URLs when public, latest chapter labels/URLs, and your reading progress.</p>
+          <p>We do not host manga chapters/pages or panel image files.</p>
+        </section>
+
+        <section class="panel" style="padding:16px;margin-bottom:14px;">
+          <h2 class="section-title" style="margin-top:0;">Cookies and sessions</h2>
+          <p>We use session cookies to keep you logged in and protect account actions. These cookies are required for account features and are not used for ad tracking.</p>
+        </section>
+
+        <section class="panel" style="padding:16px;margin-bottom:14px;">
+          <h2 class="section-title" style="margin-top:0;">Retention and deletion</h2>
+          <p>Library metadata stays until you delete entries or your account. You can request deletion by using account settings or contacting us through the takedown/contact links below.</p>
+        </section>
+
+        <section class="panel" style="padding:16px;margin-bottom:14px;">
+          <h2 class="section-title" style="margin-top:0;">Third-party sites and external links</h2>
+          <p>When you add or refresh source URLs, the app may fetch public page metadata from third-party domains. Those sites may log requests as part of normal web traffic. External source links open outside Manga Watchlist and are not controlled by us.</p>
+          <p>Users are responsible for the URLs they add. Prefer official/licensed sources where possible.</p>
+        </section>
+
+        <section class="panel" style="padding:16px;">
+          <h2 class="section-title" style="margin-top:0;">Extension permissions summary</h2>
+          <p>The browser extension requests limited permissions (for example active tab, storage, and supported-site scripting) to collect tracking metadata. It is designed for metadata capture only and does not proxy/download manga chapter images.</p>
+          <p><a href="{{ url_for('extension_page') }}">Extension details</a> · <a href="{{ url_for('terms_page') }}">Terms</a> · <a href="{{ url_for('dmca_page') }}">DMCA / Takedown</a></p>
+        </section>
+      </main>
+    </div>
+  </div>
+  {% include "partials/menu_drawer_script.html" %}
 </body>
 </html>

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DMCA / Takedown — Manga Watchlist</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="page-app" data-theme="normal">
+  <div class="app-shell app-shell--full">
+    {% include "partials/shell_topbar.html" %}
+    {% include "partials/library_tools_drawer.html" %}
+    <div class="main dash-main">
+      <main class="page-single-inner" style="max-width:860px;">
+        <h1 class="page-title page-title--display">DMCA / Takedown</h1>
+        <p class="lead">Manga Watchlist stores metadata and source links. It does not host manga chapters, pages, or panel images.</p>
+        <p>If you are a rights holder and want us to remove or block specific source links or metadata references, send a request that includes:</p>
+        <ul>
+          <li>Your name and contact information.</li>
+          <li>The URL(s) and title(s) you want reviewed.</li>
+          <li>A statement of your rights and why the material should be removed/blocked.</li>
+          <li>A good-faith statement that the notice is accurate.</li>
+        </ul>
+        <p>Contact: <a href="mailto:takedown@mangawatchlist.local">takedown@mangawatchlist.local</a></p>
+        <p>General policy: we review requests, may disable affected source links, and keep manual tracking available where legally appropriate.</p>
+      </main>
+    </div>
+  </div>
+  {% include "partials/menu_drawer_script.html" %}
+</body>
+</html>

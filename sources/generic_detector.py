@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 
 from services import chapter_parsing
 from sources.base import ChapterResult, SourceAdapter, SourcePreview
+from sources.protection import detect_protected_html
 
 UA = "Mozilla/5.0 MangaTrackerBot/1.0 (+https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites)"
 
@@ -75,6 +76,20 @@ class GenericDetector(SourceAdapter):
                     confidence=0.0,
                     title="",
                     warnings=[f"Site returned HTTP {res.status_code}; automatic metadata is unavailable."],
+                )
+            hdrs = getattr(res, "headers", {}) or {}
+            blocked, reason = detect_protected_html(res.status_code, res.text, dict(hdrs))
+            if blocked:
+                return SourcePreview(
+                    source_name="Unknown Site",
+                    source_url=url,
+                    support_level="protected",
+                    confidence=0.0,
+                    title="",
+                    warnings=[
+                        "This source blocks server-side checks. Use manual tracking or the browser extension.",
+                        f"Detection: {reason}",
+                    ],
                 )
             res.raise_for_status()
         except Exception as exc:

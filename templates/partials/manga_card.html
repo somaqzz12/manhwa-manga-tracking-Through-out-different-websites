@@ -17,10 +17,10 @@
   data-reading="{% if b.read_chapter_num is not none %}1{% else %}0{% endif %}"
   data-error="{% if b.last_error %}1{% else %}0{% endif %}"
   data-last-checked="{{ (b.get('_last_checked') or '')|e }}">
-  <a class="story-card-focus" href="{{ primary_href }}" target="_blank" rel="noreferrer">
+  <a class="story-card-focus" href="{{ primary_href }}" target="_blank" rel="noopener noreferrer">
     <div class="story-card-visual">
       {% if b["cover_url"] %}
-        <img src="{{ b['cover_url'] }}" alt="" class="story-cover" loading="lazy" decoding="async" referrerpolicy="no-referrer" width="300" height="400" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22400%22 viewBox=%220 0 300 400%22%3E%3Cdefs%3E%3ClinearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop stop-color=%22%23f2e5d4%22/%3E%3Cstop offset=%221%22 stop-color=%22%23e4d1ba%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22300%22 height=%22400%22 fill=%22url(%23g)%22/%3E%3Ctext x=%22150%22 y=%22208%22 text-anchor=%22middle%22 font-size=%2240%22 font-family=%22Inter,sans-serif%22 font-weight=%22700%22 fill=%22%237f5438%22%3EMW%3C/text%3E%3C/svg%3E';">
+        <img src="{{ b['cover_url'] }}" alt="{{ b['title']|e }} cover" class="story-cover" loading="lazy" decoding="async" referrerpolicy="no-referrer" width="300" height="400" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22400%22 viewBox=%220 0 300 400%22%3E%3Cdefs%3E%3ClinearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop stop-color=%22%23f2e5d4%22/%3E%3Cstop offset=%221%22 stop-color=%22%23e4d1ba%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22300%22 height=%22400%22 fill=%22url(%23g)%22/%3E%3Ctext x=%22150%22 y=%22208%22 text-anchor=%22middle%22 font-size=%2240%22 font-family=%22Inter,sans-serif%22 font-weight=%22700%22 fill=%22%237f5438%22%3EMW%3C/text%3E%3C/svg%3E';">
       {% else %}
         <div class="story-cover-placeholder">
           <span class="story-cover-placeholder-badge">{{ (b.get('genre') or 'Series')|e }}</span>
@@ -66,14 +66,14 @@
   </a>
   <div class="story-card-toolbar">
     {% if show_continue %}
-      <a class="btn btn-compact primary" href="{{ b['continue_url'] }}" target="_blank" rel="noreferrer">Continue</a>
+      <a class="btn btn-compact primary" href="{{ b['continue_url'] }}" target="_blank" rel="noopener noreferrer">Continue</a>
     {% endif %}
-    <a class="btn btn-compact" href="{{ b['latest_seen_url'] if (b.latest_seen_url or '')|trim else b['url'] }}" target="_blank" rel="noreferrer">Latest</a>
-    <a class="btn btn-compact ghost" href="{{ b['url'] }}" target="_blank" rel="noreferrer">Original site</a>
+    <a class="btn btn-compact" href="{{ b['latest_seen_url'] if (b.latest_seen_url or '')|trim else b['url'] }}" target="_blank" rel="noopener noreferrer">Latest</a>
+    <a class="btn btn-compact ghost" href="{{ b['url'] }}" target="_blank" rel="noopener noreferrer">Original site</a>
     <details class="story-card-menu">
       <summary class="story-card-menu-trigger" aria-label="More actions">⋯</summary>
       <div class="story-card-menu-panel">
-        <a href="{{ b['url'] }}" target="_blank" rel="noreferrer">Listing</a>
+        <a href="{{ b['url'] }}" target="_blank" rel="noopener noreferrer">Listing</a>
         {% if not demo_mode and b.get('has_bookmark', true) %}
         <a href="{{ url_for('edit_bookmark', bookmark_id=b['id'], **edit_link_kw) }}">Edit</a>
         <form action="{{ url_for('check_story_group') }}" method="post" data-loading-form="true">

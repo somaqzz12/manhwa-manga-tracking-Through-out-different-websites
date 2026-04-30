@@ -12,8 +12,21 @@ from bs4 import BeautifulSoup
 from services import chapter_parsing
 from sources.base import ChapterResult, SourceAdapter, SourcePreview
 from sources.generic_detector import absolutize_media_url, img_candidate_urls
+from sources.protection import detect_protected_html
 
-UA = "Mozilla/5.0 MangaTrackerBot/1.0 (+https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites)"
+UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
+DEFAULT_HEADERS = {
+    "User-Agent": UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+}
 
 
 def _split_selectors(csv: str) -> list[str]:
@@ -51,7 +64,7 @@ class CssSourceAdapter(SourceAdapter):
 
     def resolve_url(self, url: str) -> SourcePreview:
         try:
-            res = requests.get(url, headers={"User-Agent": UA}, timeout=15)
+            res = requests.get(url, headers=DEFAULT_HEADERS, timeout=15)
             if res.status_code in (401, 403, 429):
                 return SourcePreview(
                     source_name=self.name,
@@ -60,6 +73,20 @@ class CssSourceAdapter(SourceAdapter):
                     confidence=0.0,
                     title="",
                     warnings=[f"{self.name} returned HTTP {res.status_code}; try Add URL manually."],
+                )
+            hdrs = getattr(res, "headers", {}) or {}
+            blocked, reason = detect_protected_html(res.status_code, res.text, dict(hdrs))
+            if blocked:
+                return SourcePreview(
+                    source_name=self.name,
+                    source_url=url,
+                    support_level="protected",
+                    confidence=0.0,
+                    title="",
+                    warnings=[
+                        "This source blocks server-side checks. Use manual tracking or the browser extension.",
+                        f"Detection: {reason}",
+                    ],
                 )
             res.raise_for_status()
         except Exception as exc:

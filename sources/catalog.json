@@ -14,6 +14,7 @@
       "chapter_number_strategy": "link_text_href",
       "parsing_strategy": "css_chapter_links",
       "page_type": "series",
+      "capabilities": ["url_resolve", "chapter_check"],
       "needs_js": false,
       "notes": "Madara-style variants; selectors may need updates when the theme changes.",
       "sample_series_url": "https://asurascans.com/comics/solo-farming-in-the-tower"
@@ -31,6 +32,7 @@
       "chapter_number_strategy": "link_text_href",
       "parsing_strategy": "css_chapter_links",
       "page_type": "series",
+      "capabilities": ["url_resolve", "chapter_check"],
       "needs_js": false,
       "notes": "",
       "sample_series_url": "https://reaperscans.com/comics/regressor-instruction-manual"
@@ -150,6 +152,7 @@
       "chapter_number_strategy": "api",
       "parsing_strategy": "mangadex_api",
       "page_type": "both",
+      "capabilities": ["url_resolve", "chapter_check", "title_search"],
       "needs_js": false,
       "notes": "Uses official api.mangadex.org for latest chapter; paste title or chapter URL.",
       "sample_series_url": "https://mangadex.org/title/a1c7c817-4e59-43b7-9365-09675a149a6f"
@@ -184,6 +187,7 @@
       "chapter_number_strategy": "link_text_href",
       "parsing_strategy": "css_chapter_links",
       "page_type": "series",
+      "capabilities": ["url_resolve", "chapter_check"],
       "needs_js": false,
       "notes": "",
       "sample_series_url": "https://manhuaplus.com/manga/martial-peak/"

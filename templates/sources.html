@@ -18,26 +18,30 @@
       <div class="page-single-inner" style="max-width:1100px;">
         <h1 class="page-title page-title--display">Supported sources</h1>
         <p class="lead">
-          Curated, SFW catalog entries we surface publicly. Health checks (when you run <code>scripts/check_sources.py</code>) refine status — we don’t claim a site works until the checker proves it.
+          Curated public source catalog for Discovery and URL tracking. We only store metadata and source links; we do not host manga chapters or panels.
         </p>
 
         <div class="source-stats">
           <div class="source-stat"><strong>{{ counts.total }}</strong><span>In this view</span></div>
           <div class="source-stat"><strong>{{ counts.working }}</strong><span>Working today</span></div>
           <div class="source-stat"><strong>{{ counts.partial }}</strong><span>Partial</span></div>
-          <div class="source-stat"><strong>{{ counts.broken }}</strong><span>Broken</span></div>
+          <div class="source-stat"><strong>{% if health_available %}{{ counts.broken }}{% else %}—{% endif %}</strong><span>Broken</span></div>
+          <div class="source-stat"><strong>{{ counts.manual }}</strong><span>Manual</span></div>
+          <div class="source-stat"><strong>{{ counts.requested }}</strong><span>Requested</span></div>
+          <div class="source-stat"><strong>{{ counts.unchecked }}</strong><span>Unchecked</span></div>
         </div>
-        <p class="muted" style="margin-top:-8px;margin-bottom:12px;">
-          <strong>How support works:</strong> automatic adapters and APIs resolve chapters; experimental detection tries generic page patterns; manual keeps URL + progress without scraping; unavailable sites are blocked. Request new domains from Source Requests.
+        <p class="muted" style="margin-top:-8px;margin-bottom:8px;">
+          <strong>Status guide:</strong> <strong>Automatic</strong> = official API or reliable adapter, <strong>Supported</strong> = site adapter, <strong>Experimental</strong> = best-effort detection, <strong>Manual</strong> = URL tracking only, <strong>Unavailable</strong> = blocked/dead/protected, <strong>Unchecked</strong> = health has not been tested yet.
         </p>
+        {% if not health_available %}
+          <p class="muted" style="margin-top:-2px;margin-bottom:8px;">Health check pending. Sources are shown as Unchecked until live checks run.</p>
+        {% endif %}
         {% if health_updated_at %}
-          <p class="muted" style="margin-top:-8px;margin-bottom:24px;">Last health run: <code>{{ health_updated_at }}</code></p>
-        {% else %}
-          <p class="muted" style="margin-top:-8px;margin-bottom:24px;">No health file yet — run <code>python scripts/check_sources.py</code> to populate <code>sources/_health.json</code> (per environment, not in git).</p>
+          <p class="muted" style="margin-top:-2px;margin-bottom:24px;">Last health update: <code>{{ health_updated_at }}</code></p>
         {% endif %}
 
         {% if not source_groups %}
-        <p class="muted" style="margin-bottom:24px;">No curated public sources matched the display filter. Check <code>sources/catalog.json</code> and <code>sources/sources.registry.json</code> policy domains.</p>
+        <p class="muted" style="margin-bottom:24px;">No public sources are available for this filter yet.</p>
         {% endif %}
 
         {% for group_name, group_sources in source_groups %}
@@ -49,7 +53,7 @@
           <p class="source-group-note">First-party adapters for popular readers; best-effort chapter lists and latest updates.</p>
           {% elif group_name == "Experimental" %}
           <p class="source-group-note">Generic detectors — may work on new mirrors; falls back to manual tracking if parsing fails.</p>
-          {% elif group_name == "Extension-assisted" %}
+          {% elif group_name == "Requested" %}
           <p class="source-group-note">Companion catalog entries and requested adapters — use the extension or paste URLs; coverage improves over time.</p>
           {% elif group_name == "Manual" %}
           <p class="source-group-note">Save the listing URL and track progress yourself — no automatic chapter polling.</p>
@@ -62,7 +66,7 @@
           <div class="sources-grid">
             {% for s in group_sources %}
               {% set h = s.health or {} %}
-              {% set eff = (h.get('check_status') or s.status or 'partial')|lower %}
+              {% set eff = (s.effective_status or 'unchecked')|lower %}
               <article class="source-card">
                 <h2>{{ s.display_name }}</h2>
                 <div class="muted" style="font-size:0.88rem;margin-bottom:8px;">
@@ -78,7 +82,7 @@
                   <p class="source-notes">Site adapter — we parse public listing pages for chapter lists and latest numbers.</p>
                 {% elif s.friendly_support == "Experimental" %}
                   <p class="source-notes">Heuristic detection — may work on unfamiliar layouts; you can still track manually.</p>
-                {% elif s.friendly_support == "Extension-assisted" %}
+                {% elif s.friendly_support == "Requested" %}
                   <p class="source-notes">Often added from community catalogs or requests — paste the URL in the app; adapters may land later.</p>
                 {% elif s.friendly_support == "Manual" %}
                   <p class="source-notes">Manual tracking — save the URL and update progress without automatic checks.</p>
@@ -91,7 +95,7 @@
                   <div class="muted" style="font-size:0.85rem;">Checked: {{ h.get('checked_at') }}{% if h.get('chapter_num') is not none %} · latest ch. {{ h.get('chapter_num') }}{% endif %}</div>
                 {% endif %}
                 {% if s.notes %}<p class="source-notes">{{ s.notes }}</p>{% endif %}
-                {% if h.get('error') %}<p class="source-notes">Last probe error: {{ h.get('error') }}</p>{% endif %}
+                {% if h.get('error') %}<p class="source-notes">Last check failed. Try manual tracking or request adapter improvements.</p>{% endif %}
                 <p class="muted" style="margin-top:12px;margin-bottom:0;font-size:0.85rem;">
                   <a href="{{ build_source_bug_report_url(source_id=s.id, domain=(s.domains[0] if s.domains else ''), series_url=s.sample_series_url or '', last_error=h.get('error') or '', parser_version=h.get('parser_version') or '') }}" rel="noopener noreferrer" target="_blank">Report broken source</a>
                 </p>
@@ -103,6 +107,9 @@
 
         <footer class="main-footer">
           <a href="{{ url_for('privacy_page') }}">Privacy</a> ·
+          <a href="{{ url_for('terms_page') }}">Terms</a> ·
+          <a href="{{ url_for('dmca_page') }}">DMCA</a> ·
+          <a href="{{ url_for('about_page') }}">Help</a> ·
           <a href="{{ url_for('changelog_page') }}">Changelog</a> ·
           <a href="{{ bug_report_href }}" rel="noopener noreferrer" target="_blank">GitHub</a>
         </footer>

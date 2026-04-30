@@ -1,11 +1,50 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>About - Manga Watchlist</title></head>
-<body style="font-family:Inter,system-ui,sans-serif;background:#f6efe4;color:#241b16;padding:24px;">
-  <main style="max-width:860px;margin:0 auto;background:#fffaf1;border:1px solid rgba(92,64,45,.2);border-radius:18px;padding:18px;">
-    <h1 style="margin-top:0;">About this product</h1>
-    <p>Search any manga or manhwa. See where it is available. Pick the best source. Track updates from the original site.</p>
-    <p><a href="/">Back to home</a></p>
-  </main>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Help — Manga Watchlist</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="page-app" data-theme="normal">
+  <div class="app-shell app-shell--full">
+    {% include "partials/shell_topbar.html" %}
+    {% include "partials/library_tools_drawer.html" %}
+    <div class="main dash-main">
+      <main class="page-single-inner" style="max-width:880px;">
+        <h1 class="page-title page-title--display">Help / How it works</h1>
+        <p class="lead">Manga Watchlist is a discovery and tracking app. It is not a manga reader and does not host chapters or panel images.</p>
+
+        <section class="panel" style="padding:16px;margin-bottom:14px;">
+          <h2 class="section-title" style="margin-top:0;">Getting started</h2>
+          <p><strong>Search by title:</strong> Use <a href="{{ url_for('discover_page') }}">Discover</a> to search manga/manhwa names and compare available sources.</p>
+          <p><strong>Paste any URL:</strong> You can paste a public source URL. If supported, metadata is resolved automatically; otherwise you can still track it manually.</p>
+          <p><strong>Add to library:</strong> Use the Add button from cards, or go to <a href="{{ url_for('app_add_url') }}">Add URL</a>.</p>
+          <p><strong>Open original site:</strong> External links take you to third-party source sites in a new tab.</p>
+        </section>
+
+        <section class="panel" style="padding:16px;margin-bottom:14px;">
+          <h2 class="section-title" style="margin-top:0;">Support labels</h2>
+          <p><strong>Automatic</strong> — official APIs/feeds with stable metadata resolution.</p>
+          <p><strong>Supported</strong> — site-specific adapters with chapter parsing.</p>
+          <p><strong>Experimental</strong> — generic page detection; quality varies by site layout.</p>
+          <p><strong>Manual</strong> — URL + progress tracking only.</p>
+          <p><strong>Unavailable</strong> — blocked or unsupported for automated access.</p>
+        </section>
+
+        <section class="panel" style="padding:16px;margin-bottom:14px;">
+          <h2 class="section-title" style="margin-top:0;">Browser extension</h2>
+          <p>The extension helps capture page metadata from supported domains and send it to your library. If no verified web store listing is available, install it via manual ZIP/unpacked flow on the <a href="{{ url_for('extension_page') }}">Extension</a> page.</p>
+        </section>
+
+        <section class="panel" style="padding:16px;">
+          <h2 class="section-title" style="margin-top:0;">Safety and responsibilities</h2>
+          <p>We do not host manga chapters/pages. Users are responsible for URLs they add. Source links may point to third-party websites not controlled by Manga Watchlist. Prefer official and licensed sources where available.</p>
+          <p><a href="{{ url_for('privacy_page') }}">Privacy</a> · <a href="{{ url_for('terms_page') }}">Terms</a> · <a href="{{ url_for('dmca_page') }}">DMCA / Takedown</a></p>
+        </section>
+      </main>
+    </div>
+  </div>
+  {% include "partials/menu_drawer_script.html" %}
 </body>
 </html>

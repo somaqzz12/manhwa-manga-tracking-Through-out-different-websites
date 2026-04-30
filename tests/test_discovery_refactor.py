@@ -13,6 +13,9 @@ from sources.adapters.css_source import CssSourceAdapter
 from sources.adapters.mangadex import MangaDexAdapter
 from sources.generic_detector import GenericDetector
 from sources import resolver as source_resolver
+from sources import registry as source_registry_module
+from sources.protection import detect_protected_html
+from services import source_registry
 
 
 class _Resp:
@@ -190,6 +193,42 @@ class DiscoveryRefactorTests(unittest.TestCase):
         ):
             prev = adapter.resolve_url("https://mangakatana.com/m/x")
         self.assertEqual(prev.support_level, "manual_only")
+
+    def test_source_registry_capabilities_helper_defaults(self) -> None:
+        caps = source_registry.get_source_capabilities("https://unknown.example/series/x")
+        self.assertEqual(caps, ["url_resolve"])
+
+    def test_registry_capability_labels_are_honest(self) -> None:
+        md_caps = source_registry_module.get_source_capabilities("mangadex")
+        self.assertIn("title_search", md_caps)
+        self.assertIn("chapter_check", md_caps)
+        asura_caps = source_registry_module.get_source_capabilities("asura")
+        self.assertNotIn("title_search", asura_caps)
+
+    def test_resolver_search_only_calls_title_search_capable_adapters(self) -> None:
+        class _AdapterNoSearch:
+            id = "no-search"
+            domains = ["no.example"]
+
+            def search(self, query: str):
+                raise AssertionError("search should not be called")
+
+        class _AdapterWithSearch:
+            id = "mangadex"
+            domains = ["mangadex.org"]
+
+            def search(self, query: str):
+                return [{"title": "Hit", "url": "https://mangadex.org/title/x"}]
+
+        with patch.object(source_resolver, "ADAPTERS", [_AdapterNoSearch(), _AdapterWithSearch()]):
+            rows = source_resolver.search_title("solo")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["title"], "Hit")
+
+    def test_detect_protected_html_flags_challenge(self) -> None:
+        blocked, reason = detect_protected_html(503, "<html>Cloudflare challenge</html>", {"Content-Type": "text/html"})
+        self.assertTrue(blocked)
+        self.assertTrue(reason)
 
 
 if __name__ == "__main__":
