@@ -7,25 +7,22 @@
   <title>Manga Watchlist</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238b5cf6'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%239880ff'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
 </head>
-<body>
+<body class="page-dashboard">
   <div class="app-shell">
     {% include "partials/app_sidebar.html" %}
 
-    <div class="main">
-      <div class="main-topbar">
-        {% if not demo_mode %}
-        <button type="button" class="btn primary" id="scroll-add-manga">Add manga</button>
-        {% endif %}
-      </div>
+    <div class="main dash-main">
+      {% include "partials/dash_topbar.html" %}
+      {% include "partials/library_tools_drawer.html" %}
 
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
-            <div class="flash">{{ message }}</div>
+            <div class="flash{% if category %} {{ category }}{% endif %}">{{ message }}</div>
           {% endfor %}
         {% endif %}
       {% endwith %}
@@ -36,10 +33,7 @@
 
       {% if show_onboarding and not demo_mode %}
       <div class="flash">
-        <strong>Welcome.</strong> Quick start:
-        (1) Install the <a href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">extension</a>,
-        (2) Add a series URL in <strong>Add manga</strong> below,
-        (3) Use this dashboard to track updates.
+        <strong>Welcome.</strong> Open <strong>Library tools</strong> (gear) to install the extension, add a URL, and use sync icons in the bar above.
         <form action="{{ url_for('onboarding_dismiss') }}" method="post" style="display:inline;margin-left:12px;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-compact ghost" style="margin-left:8px;">Dismiss</button>
@@ -54,7 +48,7 @@
       {% endif %}
 
       {% if not demo_mode and rss_feed_url %}
-      <details class="disclosure">
+      <details class="disclosure disclosure--compact">
         <summary>Private RSS feed</summary>
         <p class="muted" style="margin:10px 0 8px;font-size:0.88rem;">Treat as a secret URL (anyone with it can read titles).</p>
         <input class="input-full" readonly style="border-radius:14px;padding:10px 14px;width:100%;" value="{{ rss_feed_url }}">
@@ -62,7 +56,7 @@
       {% endif %}
 
       {% if not demo_mode and duplicate_hints %}
-      <details class="disclosure">
+      <details class="disclosure disclosure--compact">
         <summary>Possible duplicate listings</summary>
         <p class="muted" style="margin:10px 0 14px;font-size:0.9rem;">
           Same normalized title on different sites — merge to one story card (lowest bookmark id is the merge target).
@@ -92,9 +86,9 @@
       </details>
       {% endif %}
 
-      <header class="hero">
+      <header class="hero hero--gallery">
         <div>
-          <h1 class="page-title">Your stories</h1>
+          <h1 class="page-title page-title--display">Your stories</h1>
           <p class="hero-meta muted">
             {% if not demo_mode %}
               {% if behind_count %}{{ behind_count }} series with unread chapters · {% endif %}~{{ total_unread }} unread chapter{{ 's' if total_unread != 1 else '' }} total
@@ -102,26 +96,6 @@
               Sample library
             {% endif %}
           </p>
-        </div>
-        <div class="hero-actions">
-          {% if not demo_mode %}
-          <form action="/check-all" method="post" data-loading-form="true" id="check-stale-form" style="margin:0;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="q" value="{{ search_q or '' }}">
-            <input type="hidden" name="sort" value="{{ sort }}">
-            <input type="hidden" name="page" value="{{ page }}">
-            <button id="check-stale-btn" class="btn ghost" type="submit" data-loading-text="…">Check stale</button>
-          </form>
-          <form action="/check-all" method="post" data-loading-form="true" id="force-check-all-form" style="margin:0;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="q" value="{{ search_q or '' }}">
-            <input type="hidden" name="sort" value="{{ sort }}">
-            <input type="hidden" name="page" value="{{ page }}">
-            <input type="hidden" name="force" value="1">
-            <button id="force-check-all-btn" class="btn primary" type="submit" data-loading-text="…">Check all</button>
-          </form>
-          <span id="check-all-status-label" class="muted" style="font-size:0.88rem;">{{ check_all_status_text }}</span>
-          {% endif %}
         </div>
       </header>
 
@@ -134,154 +108,38 @@
       </div>
 
       {% if insights and insights.get('hints') %}
-      <section class="section-block">
-        <h2 class="section-title">For you</h2>
-        {% for hint in insights.hints %}
-          <div class="flash" style="font-weight:400;line-height:1.45;">{{ hint }}</div>
-        {% endfor %}
-      </section>
+      <div class="insights-toast" id="insights-toast" role="status" hidden>
+        <div class="insights-toast-inner">
+          <span class="insights-toast-label">Insights</span>
+          {% for hint in insights.hints %}
+            <p class="insights-toast-text">{{ hint }}</p>
+          {% endfor %}
+          <button type="button" class="insights-toast-dismiss" id="insights-dismiss" aria-label="Dismiss insights">×</button>
+        </div>
+      </div>
       {% endif %}
 
       {% if all_caught_up and not demo_mode and total_count > 0 %}
-      <p class="flash">You are caught up — no unread chapters across tracked series.</p>
+      <p class="flash flash--inline">You are caught up — no unread chapters across tracked series.</p>
       {% endif %}
 
-      <section class="section-block panel add-manga-panel" id="add-manga">
-        <h2 class="section-title" style="margin-top:0;">Add manga</h2>
-        {% if not demo_mode %}
-        <form action="/add" method="post" data-loading-form="true">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="q" value="{{ search_q or '' }}">
-          <input type="hidden" name="sort" value="{{ sort }}">
-          <input type="hidden" name="page" value="{{ page }}">
-          <div class="field">
-            <label for="add-title">Series title</label>
-            <input id="add-title" class="input-full" name="title" placeholder="e.g. Solo Leveling" required autocomplete="off">
-          </div>
-          <div class="field">
-            <label for="add-url">Series listing URL</label>
-            <input id="add-url" class="input-full" name="url" placeholder="https://…" required autocomplete="off">
-          </div>
-          <div class="add-manga-actions">
-            <button class="btn primary" type="submit" data-loading-text="…">Add to library</button>
-            <a class="btn ghost" href="{{ url_for('sources_page') }}">Supported sources</a>
-          </div>
-        </form>
-
-        <div class="import-row">
-          <h3 class="section-title" style="font-size:1rem;margin-bottom:8px;">Restore backup</h3>
-          <p class="muted" style="margin:0 0 14px;font-size:0.88rem;">Import merges into your library (skips duplicate URLs). Export before large imports.</p>
-          <form action="/import" method="post" enctype="multipart/form-data" data-loading-form="true">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="q" value="{{ search_q or '' }}">
-            <input type="hidden" name="sort" value="{{ sort }}">
-            <input type="hidden" name="page" value="{{ page }}">
-            <div class="field">
-              <label for="backup-file">JSON backup file</label>
-              <input id="backup-file" class="file-input" type="file" name="backup_file" accept="application/json,.json" required>
-            </div>
-            <div class="add-manga-actions">
-              <button class="btn" type="submit" data-loading-text="…">Import JSON</button>
-              <a class="btn ghost" href="/export">Export backup</a>
-            </div>
-          </form>
-        </div>
-        {% else %}
-        <p class="muted" style="margin:0;">Adding series is disabled in demo mode.</p>
-        {% endif %}
-      </section>
-
+      {% if bookmarks and bookmarks|length > 0 %}
       <div class="story-grid section-block" id="series-grid">
         {% for b in bookmarks %}
-          {% set show_continue = (b.continue_url or '')|trim %}
-          {% set last_read_num = b.read_chapter_num %}
-          {% set latest_num = b.latest_seen_num %}
-          {% set unr = (b.unread_count or 0)|float %}
-          <article
-            class="story-card"
-            data-genre="{{ (b.get('genre') or '')|lower }}"
-            data-updates="{% if b.new_update or unr > 0 %}1{% else %}0{% endif %}"
-            data-reading="{% if b.read_chapter_num is not none %}1{% else %}0{% endif %}"
-            data-error="{% if b.last_error %}1{% else %}0{% endif %}"
-            data-last-checked="{{ (b.get('_last_checked') or '')|e }}">
-            {% if b["cover_url"] %}
-              <img src="{{ b['cover_url'] }}" alt="" class="story-cover" loading="lazy" referrerpolicy="origin">
-            {% else %}
-              <div class="story-cover-placeholder">No cover</div>
-            {% endif %}
-            <div class="story-body">
-              <h2 class="story-title">{{ b["title"] }}</h2>
-              <div class="story-badges">
-                {% if b["new_update"] %}<span class="story-badge story-badge--new">New</span>{% endif %}
-                {% if unr > 0 %}<span class="story-badge story-badge--unread">+{{ b.unread_count|clean }} unread</span>{% endif %}
-                {% if b.last_error %}<span class="story-badge story-badge--err" title="{{ b.last_error|e }}">Check error</span>{% endif %}
-                {% if not b["new_update"] and unr <= 0 and not b.last_error %}<span class="story-badge">OK</span>{% endif %}
-                {% if (b.get('source_count') or 1) > 1 %}
-                <span class="story-badge" title="{% if ui_show_source_hosts and b.get('source_hosts') %}{{ b.source_hosts | join(', ') }}{% else %}Multiple sources{% endif %}">{{ b.source_count }} sources</span>
-                {% endif %}
-              </div>
-              <div class="story-progress">
-                <div class="progress-row">
-                  <span>Last read</span>
-                  {% if last_read_num is not none %}
-                    {% if (b.read_source_url or '')|trim %}
-                      <a href="{{ b.read_source_url }}" target="_blank" rel="noreferrer">Ch. {{ last_read_num|clean }}</a>
-                    {% else %}
-                      <strong>Ch. {{ last_read_num|clean }}</strong>
-                    {% endif %}
-                  {% else %}
-                    <strong>Not started</strong>
-                  {% endif %}
-                </div>
-                <div class="progress-row">
-                  <span>Latest</span>
-                  {% if latest_num is not none %}
-                    {% if (b.latest_seen_url or '')|trim %}
-                      <a href="{{ b.latest_seen_url }}" target="_blank" rel="noreferrer">Ch. {{ latest_num|clean }}</a>
-                    {% else %}
-                      <strong>Ch. {{ latest_num|clean }}</strong>
-                    {% endif %}
-                  {% else %}
-                    <strong>Unknown</strong>
-                  {% endif %}
-                </div>
-                {% if unr > 0 %}
-                <div class="progress-row unread">
-                  <span>Unread</span>
-                  <strong>+{{ b.unread_count|clean }}</strong>
-                </div>
-                {% endif %}
-              </div>
-            </div>
-            <div class="story-actions">
-              {% if show_continue %}
-                <a class="btn btn-compact primary" href="{{ b['continue_url'] }}" target="_blank" rel="noreferrer">Continue</a>
-              {% endif %}
-              <a class="btn btn-compact" href="{{ b['latest_seen_url'] if (b.latest_seen_url or '')|trim else b['url'] }}" target="_blank" rel="noreferrer">Latest</a>
-              <a class="btn btn-compact ghost" href="{{ b['url'] }}" target="_blank" rel="noreferrer">Listing</a>
-              {% if not demo_mode %}
-              <a class="btn btn-compact ghost" href="{{ url_for('edit_bookmark', bookmark_id=b['id'], **edit_link_kw) }}">Edit</a>
-              <form action="{{ url_for('check_story_group') }}" method="post" data-loading-form="true" style="display:inline;margin:0;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="story_id" value="{{ b['story_id'] }}">
-                <input type="hidden" name="q" value="{{ search_q or '' }}">
-                <input type="hidden" name="sort" value="{{ sort }}">
-                <input type="hidden" name="page" value="{{ page }}">
-                <button class="btn btn-compact ghost" type="submit" data-loading-text="…">Check{% if (b.get('source_count') or 1) > 1 %} sources{% endif %}</button>
-              </form>
-              {% endif %}
-              {% set report_href = source_bug_report_href(b) %}
-              {% if not demo_mode and report_href and report_href != '#' %}
-              <a class="btn btn-compact ghost" href="{{ report_href }}" target="_blank" rel="noopener noreferrer">Report</a>
-              {% endif %}
-            </div>
-          </article>
-        {% else %}
-          <div class="flash" style="grid-column:1/-1;">
-            {% if demo_mode %}No demo cards (unexpected).{% else %}Add your first series in <strong>Add manga</strong> above, then run a check.{% endif %}
-          </div>
+          {% include "partials/manga_card.html" %}
         {% endfor %}
       </div>
+      {% else %}
+      <div class="library-empty" id="library-empty">
+        <p class="library-empty-title">Your library is a blank canvas</p>
+        <p class="library-empty-sub muted">Add a series URL to start tracking chapters and covers.</p>
+        {% if not demo_mode %}
+        <button type="button" class="btn primary" id="empty-add-first">Add your first series</button>
+        {% else %}
+        <a class="btn primary" href="{{ url_for('auth_page') }}">Sign in for your library</a>
+        {% endif %}
+      </div>
+      {% endif %}
 
       {% if total_pages and total_pages > 1 %}
         <div class="pagination">
@@ -299,11 +157,9 @@
         </div>
       {% endif %}
 
-      <footer class="main-footer">
+      <footer class="main-footer main-footer--minimal">
         <a href="{{ url_for('sources_page') }}">Sources</a>
         · <a href="{{ url_for('privacy_page') }}">Privacy</a>
-        · <a href="{{ url_for('changelog_page') }}">Changelog</a>
-        · <a href="{{ url_for('demo_dashboard') }}">Demo</a>
       </footer>
     </div>
   </div>
@@ -311,9 +167,48 @@
   <script>
     const DEAD_SERIES_DAYS = {{ dead_series_days|int }};
 
-    document.getElementById("scroll-add-manga")?.addEventListener("click", () => {
-      document.getElementById("add-manga")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      document.getElementById("add-url")?.focus();
+    (function libraryDrawer() {
+      const panel = document.getElementById("library-tools-panel");
+      const backdrop = document.getElementById("library-tools-backdrop");
+      const toggle = document.getElementById("library-tools-toggle");
+      const closeBtn = document.getElementById("library-tools-close");
+      if (!panel || !toggle) return;
+
+      function openDrawer() {
+        panel.classList.add("is-open");
+        backdrop.classList.add("is-open");
+        panel.setAttribute("aria-hidden", "false");
+        backdrop.setAttribute("aria-hidden", "false");
+        toggle.setAttribute("aria-expanded", "true");
+        document.body.classList.add("drawer-open");
+      }
+      function closeDrawer() {
+        panel.classList.remove("is-open");
+        backdrop.classList.remove("is-open");
+        panel.setAttribute("aria-hidden", "true");
+        backdrop.setAttribute("aria-hidden", "true");
+        toggle.setAttribute("aria-expanded", "false");
+        document.body.classList.remove("drawer-open");
+      }
+      function toggleDrawer() {
+        if (panel.classList.contains("is-open")) closeDrawer();
+        else openDrawer();
+      }
+      toggle.addEventListener("click", toggleDrawer);
+      closeBtn?.addEventListener("click", closeDrawer);
+      backdrop?.addEventListener("click", closeDrawer);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && panel.classList.contains("is-open")) closeDrawer();
+      });
+      window.openLibraryTools = openDrawer;
+      window.focusAddManga = () => {
+        openDrawer();
+        setTimeout(() => document.getElementById("add-url")?.focus(), 200);
+      };
+    })();
+
+    document.getElementById("empty-add-first")?.addEventListener("click", () => {
+      window.focusAddManga?.();
     });
 
     (function tabFilter() {
@@ -452,6 +347,47 @@
         }
       });
     });
+
+    (function coverAspectPref() {
+      const sel = document.getElementById("coverAspectSelect");
+      if (!sel) return;
+      const STORAGE = "mt-cover-aspect";
+      function apply(v) {
+        document.body.classList.toggle("cover-aspect-169", v === "16-9");
+      }
+      try {
+        const v = localStorage.getItem(STORAGE) || "2-3";
+        sel.value = v === "16-9" ? "16-9" : "2-3";
+        apply(sel.value);
+      } catch (_) {
+        sel.value = "2-3";
+      }
+      sel.addEventListener("change", () => {
+        apply(sel.value);
+        try {
+          localStorage.setItem(STORAGE, sel.value);
+        } catch (_) {}
+      });
+    })();
+
+    (function insightsToast() {
+      const toast = document.getElementById("insights-toast");
+      const dismiss = document.getElementById("insights-dismiss");
+      if (!toast) return;
+      const key = "mt-insights-dismissed";
+      try {
+        if (localStorage.getItem(key) === "1") return;
+        toast.hidden = false;
+      } catch (_) {
+        toast.hidden = false;
+      }
+      dismiss?.addEventListener("click", () => {
+        toast.hidden = true;
+        try {
+          localStorage.setItem(key, "1");
+        } catch (_) {}
+      });
+    })();
   </script>
 </body>
 </html>

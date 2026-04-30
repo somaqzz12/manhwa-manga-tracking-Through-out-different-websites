@@ -1,0 +1,101 @@
+{# Right drawer: add manga, backup, sort, genre, extension note. #}
+{% set _sq = search_q|default('', true) %}
+{% set _sort = sort|default('added', true) %}
+{% set _page = page|default(1, true) %}
+
+<div class="drawer-backdrop" id="library-tools-backdrop" aria-hidden="true"></div>
+<aside class="library-drawer" id="library-tools-panel" aria-hidden="true" aria-labelledby="library-tools-title">
+  <div class="library-drawer-head">
+    <h2 id="library-tools-title" class="library-drawer-title">Library tools</h2>
+    <button type="button" class="dash-icon-btn library-drawer-close" id="library-tools-close" aria-label="Close">×</button>
+  </div>
+  <div class="library-drawer-body">
+
+    <section class="library-drawer-section">
+      <span class="sidebar-label">Genre filter</span>
+      <select id="genreFilter" class="sidebar-select" aria-label="Filter by genre">
+        <option value="">All genres</option>
+        <option value="action">Action</option>
+        <option value="fantasy">Fantasy</option>
+        <option value="romance">Romance</option>
+        <option value="comedy">Comedy</option>
+        <option value="drama">Drama</option>
+      </select>
+    </section>
+
+    <section class="library-drawer-section">
+      <form method="get" action="{{ url_for('index') }}">
+        <span class="sidebar-label">Sort</span>
+        <input type="hidden" name="q" value="{{ _sq }}" />
+        <input type="hidden" name="page" value="1" />
+        <select name="sort" class="sidebar-select" aria-label="Sort library" onchange="this.form.submit()">
+          <option value="added" {% if _sort == 'added' %}selected{% endif %}>Date added</option>
+          <option value="title" {% if _sort == 'title' %}selected{% endif %}>Title A–Z</option>
+          <option value="updated" {% if _sort == 'updated' %}selected{% endif %}>Last checked</option>
+          <option value="unread" {% if _sort == 'unread' %}selected{% endif %}>Most unread</option>
+        </select>
+      </form>
+    </section>
+
+    <section class="library-drawer-section">
+      <span class="sidebar-label">Cover shape</span>
+      <select id="coverAspectSelect" class="sidebar-select" aria-label="Cover image aspect ratio">
+        <option value="2-3">2:3 (standard)</option>
+        <option value="16-9">16:9 (widescreen)</option>
+      </select>
+      <p class="muted" style="margin:8px 0 0;font-size:0.78rem;line-height:1.4;">Saved on this device. 16:9 crops tall covers.</p>
+    </section>
+
+    {% if not demo_mode %}
+    <section class="panel add-manga-panel" id="add-manga">
+      <h3 class="section-title" style="margin-top:0;">Add manga</h3>
+      <form action="/add" method="post" data-loading-form="true">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="q" value="{{ _sq }}">
+        <input type="hidden" name="sort" value="{{ _sort }}">
+        <input type="hidden" name="page" value="{{ _page }}">
+        <div class="field">
+          <label for="add-title">Series title</label>
+          <input id="add-title" class="input-full" name="title" placeholder="e.g. Solo Leveling" required autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="add-url">Series listing URL</label>
+          <input id="add-url" class="input-full" name="url" placeholder="https://…" required autocomplete="off">
+        </div>
+        <div class="add-manga-actions">
+          <button class="btn primary" type="submit" data-loading-text="…">Add to library</button>
+          <a class="btn ghost" href="{{ url_for('sources_page') }}">Supported sources</a>
+        </div>
+      </form>
+
+      <div class="import-row">
+        <h3 class="section-title" style="font-size:1rem;margin-bottom:8px;">Restore backup</h3>
+        <p class="muted" style="margin:0 0 14px;font-size:0.88rem;">Import merges into your library (skips duplicate URLs). Export before large imports.</p>
+        <form action="/import" method="post" enctype="multipart/form-data" data-loading-form="true">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="q" value="{{ _sq }}">
+          <input type="hidden" name="sort" value="{{ _sort }}">
+          <input type="hidden" name="page" value="{{ _page }}">
+          <div class="field">
+            <label for="backup-file">JSON backup file</label>
+            <input id="backup-file" class="file-input" type="file" name="backup_file" accept="application/json,.json" required>
+          </div>
+          <div class="add-manga-actions">
+            <button class="btn" type="submit" data-loading-text="…">Import JSON</button>
+            <a class="btn ghost" href="/export">Export backup</a>
+          </div>
+        </form>
+      </div>
+    </section>
+    {% else %}
+    <p class="muted" style="margin:0;">Adding series is disabled in demo mode.</p>
+    {% endif %}
+
+    <section class="library-drawer-section muted" style="font-size:0.85rem;line-height:1.5;">
+      <strong class="sidebar-label">Extension</strong>
+      Install the browser extension from the ZIP to capture series from supported readers.
+      <a href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Download extension (ZIP)</a>
+      — then use <code>chrome://extensions</code> → Developer mode → Load unpacked.
+    </section>
+  </div>
+</aside>

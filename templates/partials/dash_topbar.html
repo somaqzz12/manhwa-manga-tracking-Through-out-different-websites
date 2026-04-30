@@ -1,0 +1,45 @@
+{# Sticky dashboard bar: brand, search, sync icons, library tools. Expects: search_q, sort, page, demo_mode, csrf_token #}
+{% set _sq = search_q|default('', true) %}
+{% set _sort = sort|default('added', true) %}
+{% set _page = page|default(1, true) %}
+<header class="dash-topbar" role="banner">
+  <a class="dash-topbar-brand" href="{{ url_for('index') }}" title="Manga Watchlist">
+    <span class="dash-topbar-logo" aria-hidden="true">MW</span>
+    <span class="dash-topbar-wordmark">Manga Watchlist</span>
+  </a>
+
+  <form class="dash-topbar-search" method="get" action="{{ url_for('index') }}" role="search">
+    <input type="search" name="q" value="{{ _sq }}" placeholder="Search your library…" autocomplete="off" aria-label="Search library" />
+    <input type="hidden" name="sort" value="{{ _sort }}" />
+    <input type="hidden" name="page" value="1" />
+    <button type="submit" class="dash-topbar-search-submit" aria-label="Search">⌕</button>
+  </form>
+
+  <div class="dash-topbar-actions">
+    {% if not demo_mode %}
+    <span id="check-all-status-label" class="dash-topbar-status muted" role="status">{{ check_all_status_text }}</span>
+    <form action="/check-all" method="post" data-loading-form="true" id="check-stale-form" class="dash-sync-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="q" value="{{ _sq }}">
+      <input type="hidden" name="sort" value="{{ _sort }}">
+      <input type="hidden" name="page" value="{{ _page }}">
+      <button id="check-stale-btn" class="dash-icon-btn" type="submit" data-loading-text="…" title="Check stale series" aria-label="Check stale">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M12 18v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M3 12h3M18 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/><circle cx="12" cy="12" r="4"/></svg>
+      </button>
+    </form>
+    <form action="/check-all" method="post" data-loading-form="true" id="force-check-all-form" class="dash-sync-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="q" value="{{ _sq }}">
+      <input type="hidden" name="sort" value="{{ _sort }}">
+      <input type="hidden" name="page" value="{{ _page }}">
+      <input type="hidden" name="force" value="1">
+      <button id="force-check-all-btn" class="dash-icon-btn dash-icon-btn--accent" type="submit" data-loading-text="…" title="Check entire library" aria-label="Check all">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.8 1 6.4 2.6L21 3"/><path d="M21 3v6h-6"/></svg>
+      </button>
+    </form>
+    {% endif %}
+    <button type="button" class="dash-icon-btn" id="library-tools-toggle" aria-expanded="false" aria-controls="library-tools-panel" title="Library tools" aria-label="Open library tools">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+  </div>
+</header>

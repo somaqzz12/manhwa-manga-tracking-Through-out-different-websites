@@ -1,0 +1,78 @@
+{# Expects: b, demo_mode, edit_link_kw, search_q, sort, page, ui_show_source_hosts #}
+{% set show_continue = (b.continue_url or '')|trim %}
+{% set last_read_num = b.read_chapter_num %}
+{% set latest_num = b.latest_seen_num %}
+{% set unr = (b.unread_count or 0)|float %}
+{% set primary_href = show_continue or ((b.latest_seen_url or '')|trim or b['url']) %}
+{% set ns = namespace(pct=0.0) %}
+{% if latest_num is not none and latest_num|float > 0 and last_read_num is not none %}
+  {% set r = (last_read_num|float) / (latest_num|float) * 100 %}
+  {% set ns.pct = r if r < 100 else 100 %}
+{% endif %}
+<article
+  class="story-card"
+  data-genre="{{ (b.get('genre') or '')|lower }}"
+  data-updates="{% if b.new_update or unr > 0 %}1{% else %}0{% endif %}"
+  data-reading="{% if b.read_chapter_num is not none %}1{% else %}0{% endif %}"
+  data-error="{% if b.last_error %}1{% else %}0{% endif %}"
+  data-last-checked="{{ (b.get('_last_checked') or '')|e }}">
+  <a class="story-card-focus" href="{{ primary_href }}" target="_blank" rel="noreferrer">
+    <div class="story-card-visual">
+      {% if b["cover_url"] %}
+        <img src="{{ b['cover_url'] }}" alt="" class="story-cover" loading="lazy" decoding="async" referrerpolicy="origin" width="300" height="400">
+      {% else %}
+        <div class="story-cover-placeholder">No cover</div>
+      {% endif %}
+      {% if unr > 0 %}
+        <span class="story-unread-badge" title="{{ b.unread_count|clean }} unread">{{ b.unread_count|clean }}</span>
+        <span class="story-unread-glow" aria-hidden="true"></span>
+      {% elif b["new_update"] %}
+        <span class="story-unread-dot" title="New update" aria-hidden="true"></span>
+      {% endif %}
+      <div class="story-card-progresstrack" role="presentation">
+        <span class="story-card-progressfill" style="width: {{ '%.1f'|format(ns.pct) }}%;"></span>
+      </div>
+    </div>
+    <div class="story-body">
+      <h2 class="story-title">{{ b["title"] }}</h2>
+      <div class="story-meta-line muted">
+        {% if last_read_num is not none %}Ch. {{ last_read_num|clean }}{% else %}Not started{% endif %}
+        <span aria-hidden="true"> · </span>
+        {% if latest_num is not none %}Latest {{ latest_num|clean }}{% else %}Latest ?{% endif %}
+      </div>
+      {% if b.last_error %}
+        <span class="story-inline-err" title="{{ b.last_error|e }}">Check error</span>
+      {% endif %}
+    </div>
+  </a>
+  <div class="story-card-toolbar">
+    {% if show_continue %}
+      <a class="btn btn-compact primary" href="{{ b['continue_url'] }}" target="_blank" rel="noreferrer">Continue</a>
+    {% endif %}
+    <a class="btn btn-compact" href="{{ b['latest_seen_url'] if (b.latest_seen_url or '')|trim else b['url'] }}" target="_blank" rel="noreferrer">Latest</a>
+    <details class="story-card-menu">
+      <summary class="story-card-menu-trigger" aria-label="More actions">⋯</summary>
+      <div class="story-card-menu-panel">
+        <a href="{{ b['url'] }}" target="_blank" rel="noreferrer">Listing</a>
+        {% if not demo_mode %}
+        <a href="{{ url_for('edit_bookmark', bookmark_id=b['id'], **edit_link_kw) }}">Edit</a>
+        <form action="{{ url_for('check_story_group') }}" method="post" data-loading-form="true">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="story_id" value="{{ b['story_id'] }}">
+          <input type="hidden" name="q" value="{{ search_q or '' }}">
+          <input type="hidden" name="sort" value="{{ sort }}">
+          <input type="hidden" name="page" value="{{ page }}">
+          <button type="submit" class="link-btn" data-loading-text="…">Check{% if (b.get('source_count') or 1) > 1 %} sources{% endif %}</button>
+        </form>
+        {% set report_href = source_bug_report_href(b) %}
+        {% if report_href and report_href != '#' %}
+        <a href="{{ report_href }}" target="_blank" rel="noopener noreferrer">Report</a>
+        {% endif %}
+        {% endif %}
+        {% if (b.get('source_count') or 1) > 1 %}
+        <span class="story-menu-note muted" title="{% if ui_show_source_hosts and b.get('source_hosts') %}{{ b.source_hosts | join(', ') }}{% else %}Multiple sources{% endif %}">{{ b.source_count }} sources</span>
+        {% endif %}
+      </div>
+    </details>
+  </div>
+</article>

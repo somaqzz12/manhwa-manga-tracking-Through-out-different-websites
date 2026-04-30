@@ -1,47 +1,9 @@
-{# Shared nav for dashboard shell. Uses request.endpoint, demo_mode, search_q, sort, page. #}
-{% set _sq = search_q|default('', true) %}
-{% set _sort = sort|default('added', true) %}
-{% set _page = page|default(1, true) %}
-
+{# Nav-only sidebar; search & library tools live in dashboard topbar + drawer. #}
 <aside class="sidebar" aria-label="Main navigation">
   <a class="sidebar-brand" href="{{ url_for('index') }}">
     <span class="sidebar-logo" aria-hidden="true">MW</span>
     <span>Manga Watchlist{% if demo_mode %} <span class="muted" style="font-size:0.75rem;font-weight:500;">(demo)</span>{% endif %}</span>
   </a>
-
-  <form class="sidebar-search" method="get" action="{{ url_for('index') }}" role="search">
-    <span class="sidebar-label">Search library</span>
-    <div class="sidebar-search-row">
-      <input class="sidebar-search-input" type="search" name="q" value="{{ _sq }}" placeholder="Titles…" autocomplete="off" />
-      <input type="hidden" name="sort" value="{{ _sort }}" />
-      <input type="hidden" name="page" value="1" />
-      <button type="submit" class="btn primary" style="padding:11px 18px;">Go</button>
-    </div>
-  </form>
-
-  <div>
-    <span class="sidebar-label">Genre filter</span>
-    <select id="genreFilter" class="sidebar-select" aria-label="Filter by genre">
-      <option value="">All genres</option>
-      <option value="action">Action</option>
-      <option value="fantasy">Fantasy</option>
-      <option value="romance">Romance</option>
-      <option value="comedy">Comedy</option>
-      <option value="drama">Drama</option>
-    </select>
-  </div>
-
-  <form class="sidebar-sort" method="get" action="{{ url_for('index') }}">
-    <span class="sidebar-label">Sort</span>
-    <input type="hidden" name="q" value="{{ _sq }}" />
-    <input type="hidden" name="page" value="1" />
-    <select name="sort" class="sidebar-select" aria-label="Sort library" onchange="this.form.submit()">
-      <option value="added" {% if _sort == 'added' %}selected{% endif %}>Date added</option>
-      <option value="title" {% if _sort == 'title' %}selected{% endif %}>Title A–Z</option>
-      <option value="updated" {% if _sort == 'updated' %}selected{% endif %}>Last checked</option>
-      <option value="unread" {% if _sort == 'unread' %}selected{% endif %}>Most unread</option>
-    </select>
-  </form>
 
   <nav class="sidebar-nav" aria-label="Library">
     <a class="sidebar-link {% if request.endpoint == 'index' %}is-active{% endif %}" href="{{ url_for('index') }}">All stories</a>
@@ -50,14 +12,17 @@
     {% endif %}
   </nav>
 
-  <nav class="sidebar-nav" aria-label="Resources">
-    <a class="sidebar-link {% if request.endpoint == 'sources_page' %}is-active{% endif %}" href="{{ url_for('sources_page') }}">Sources</a>
-    <a class="sidebar-link {% if request.endpoint == 'source_requests_page' %}is-active{% endif %}" href="{{ url_for('source_requests_page') }}">Source requests</a>
-    <a class="sidebar-link sidebar-link--external" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Extension ZIP</a>
-    <a class="sidebar-link {% if request.endpoint == 'privacy_page' %}is-active{% endif %}" href="{{ url_for('privacy_page') }}">Privacy</a>
-    <a class="sidebar-link {% if request.endpoint == 'changelog_page' %}is-active{% endif %}" href="{{ url_for('changelog_page') }}">Changelog</a>
-    <a class="sidebar-link {% if request.endpoint == 'demo_dashboard' %}is-active{% endif %}" href="{{ url_for('demo_dashboard') }}">Demo</a>
-  </nav>
+  <details class="sidebar-disclosure">
+    <summary class="sidebar-disclosure-summary">More</summary>
+    <nav class="sidebar-nav sidebar-nav--nested" aria-label="Resources">
+      <a class="sidebar-link {% if request.endpoint == 'sources_page' %}is-active{% endif %}" href="{{ url_for('sources_page') }}">Sources</a>
+      <a class="sidebar-link {% if request.endpoint == 'source_requests_page' %}is-active{% endif %}" href="{{ url_for('source_requests_page') }}">Source requests</a>
+      <a class="sidebar-link sidebar-link--external" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Extension ZIP</a>
+      <a class="sidebar-link {% if request.endpoint == 'privacy_page' %}is-active{% endif %}" href="{{ url_for('privacy_page') }}">Privacy</a>
+      <a class="sidebar-link {% if request.endpoint == 'changelog_page' %}is-active{% endif %}" href="{{ url_for('changelog_page') }}">Changelog</a>
+      <a class="sidebar-link {% if request.endpoint == 'demo_dashboard' %}is-active{% endif %}" href="{{ url_for('demo_dashboard') }}">Demo</a>
+    </nav>
+  </details>
 
   <nav class="sidebar-nav sidebar-nav--push" aria-label="Account">
     {% if current_user is defined and current_user and not demo_mode|default(false) %}
@@ -68,7 +33,7 @@
       <button type="submit" class="sidebar-link" style="border:none;width:100%;" data-loading-text="…">Log out</button>
     </form>
     {% elif demo_mode|default(false) %}
-    <a class="sidebar-link" href="{{ url_for('auth_page') }}" style="background:rgba(139,92,246,.2);">Sign in</a>
+    <a class="sidebar-link" href="{{ url_for('auth_page') }}" style="background:rgba(152,128,255,.18);border-color:rgba(152,128,255,.35);">Sign in</a>
     {% else %}
     <a class="sidebar-link" href="{{ url_for('auth_page') }}">Sign in</a>
     {% endif %}
