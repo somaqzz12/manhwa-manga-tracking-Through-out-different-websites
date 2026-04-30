@@ -232,7 +232,7 @@ Continuous integration (`.github/workflows/ci.yml`) validates the source catalog
 
 ## License
 
-Copyright (c) Osamah. **Manga Watchlist** (code, docs, and extension in this repository) is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE) (SPDX: `PolyForm-Noncommercial-1.0.0`).
+Copyright (c) Alex Rowan. **Manga Watchlist** (code, docs, and extension in this repository) is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE) (SPDX: `PolyForm-Noncommercial-1.0.0`).
 
 In plain language: you may **use, study, change, and share** this project for **noncommercial** purposes (personal use, learning, hobby projects, and similar). Uses that are primarily **commercial**—for example selling access, running a paid competing hosted service based on this codebase, or redistributing as part of a paid product—are **not** covered by that license; you need **separate written permission** from the copyright holder.
 

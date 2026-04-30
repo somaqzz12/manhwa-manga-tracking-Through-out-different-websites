@@ -1,0 +1,63 @@
+body.public-simple {
+  font-family: Inter, system-ui, sans-serif;
+  margin: 0;
+  padding: 24px;
+  background: #f6efe4;
+  color: #241b16;
+}
+
+.public-simple .box {
+  max-width: 900px;
+  margin: 0 auto;
+  background: #fffaf1;
+  border: 1px solid rgba(92, 64, 45, 0.2);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.public-simple .box.box--narrow {
+  max-width: 860px;
+}
+
+.public-simple input,
+.public-simple button,
+.public-simple a.btn {
+  padding: 11px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(92, 64, 45, 0.25);
+  min-width: 0;
+  text-decoration: none;
+  font: inherit;
+}
+
+.public-simple button {
+  background: #9a6a45;
+  color: #fffaf1;
+  border: none;
+  cursor: pointer;
+}
+
+.public-simple .url-input {
+  min-width: 300px;
+  flex: 1;
+}
+
+.public-simple .search-input {
+  min-width: 320px;
+}
+
+.public-simple table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.public-simple td,
+.public-simple th {
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(92, 64, 45, 0.2);
+  text-align: left;
+}
+
+.public-simple a {
+  color: #7f5438;
+}

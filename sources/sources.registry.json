@@ -1,0 +1,202 @@
+[
+  {
+    "id": "mangadex",
+    "name": "MangaDex",
+    "homepage": "https://mangadex.org",
+    "domains": ["mangadex.org"],
+    "source_type": "official_public_api",
+    "support_level": "official_api",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low"
+  },
+  {
+    "id": "mangaplus",
+    "name": "MANGA Plus",
+    "homepage": "https://mangaplus.shueisha.co.jp",
+    "domains": ["mangaplus.shueisha.co.jp"],
+    "source_type": "official_site",
+    "support_level": "site_adapter",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low"
+  },
+  {
+    "id": "nicoseiga",
+    "name": "Nico Seiga",
+    "homepage": "https://seiga.nicovideo.jp",
+    "domains": ["seiga.nicovideo.jp"],
+    "source_type": "official_site",
+    "support_level": "site_adapter",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low"
+  },
+  {
+    "id": "comicwalker",
+    "name": "ComicWalker",
+    "homepage": "https://comic-walker.com",
+    "domains": ["comic-walker.com", "comicwalker-api.nicomanga.jp"],
+    "source_type": "official_site",
+    "support_level": "site_adapter",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low"
+  },
+  {
+    "id": "webtoon",
+    "name": "WEBTOON",
+    "homepage": "https://www.webtoons.com",
+    "domains": ["webtoons.com", "www.webtoons.com"],
+    "source_type": "official_site",
+    "support_level": "generic_detector",
+    "adapter_status": "planned",
+    "risk_level": "low"
+  },
+  {
+    "id": "tapas",
+    "name": "Tapas",
+    "homepage": "https://tapas.io",
+    "domains": ["tapas.io", "api.tapas.io"],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "experimental_later",
+    "risk_level": "low"
+  },
+  {
+    "id": "tappytoon",
+    "name": "Tappytoon",
+    "homepage": "https://www.tappytoon.com",
+    "domains": ["tappytoon.com", "www.tappytoon.com"],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "low"
+  },
+  {
+    "id": "lezhin",
+    "name": "Lezhin Comics",
+    "homepage": "https://www.lezhinus.com/en",
+    "domains": ["lezhinus.com", "www.lezhinus.com", "lezhin.com"],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "low"
+  },
+  {
+    "id": "pocketcomics",
+    "name": "Pocket Comics",
+    "homepage": "https://www.pocketcomics.com",
+    "domains": ["pocketcomics.com", "www.pocketcomics.com"],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "low"
+  },
+  {
+    "id": "bilibili",
+    "name": "Bilibili Comics",
+    "homepage": "https://www.bilibilicomics.com",
+    "domains": ["bilibilicomics.com", "www.bilibilicomics.com"],
+    "source_type": "official_site",
+    "support_level": "site_adapter",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low"
+  },
+  {
+    "id": "webcomics",
+    "name": "WebComics",
+    "homepage": "https://www.webcomicsapp.com",
+    "domains": ["webcomicsapp.com", "www.webcomicsapp.com"],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "planned",
+    "risk_level": "low"
+  },
+  {
+    "id": "asura",
+    "name": "Asura",
+    "homepage": "https://www.asurascans.com",
+    "domains": ["asurascans.com", "www.asurascans.com", "asuracomic.net"],
+    "source_type": "scanlation_site",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "high"
+  },
+  {
+    "id": "reaper",
+    "name": "Reaper Scans",
+    "homepage": "https://reaperscans.com",
+    "domains": ["reaperscans.com"],
+    "source_type": "scanlation_site",
+    "support_level": "blocked",
+    "adapter_status": "not_enabled",
+    "risk_level": "high"
+  },
+  {
+    "id": "flamescans",
+    "name": "Flame Scans",
+    "homepage": "https://flamescans.org",
+    "domains": ["flamescans.org", "flamescans.com"],
+    "source_type": "scanlation_site",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "high"
+  },
+  {
+    "id": "luminous",
+    "name": "Luminous Scans",
+    "homepage": "https://luminous-scans.com",
+    "domains": ["luminous-scans.com", "luminousscans.com"],
+    "source_type": "scanlation_site",
+    "support_level": "blocked",
+    "adapter_status": "not_enabled",
+    "risk_level": "high"
+  },
+  {
+    "id": "mangabuddy",
+    "name": "MangaBuddy",
+    "homepage": "https://mangabuddy.com",
+    "domains": ["mangabuddy.com"],
+    "source_type": "aggregator",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "high"
+  },
+  {
+    "id": "mangareader",
+    "name": "MangaReader",
+    "homepage": "https://mangareader.to",
+    "domains": ["mangareader.to"],
+    "source_type": "aggregator",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "high"
+  },
+  {
+    "id": "mangakakalot",
+    "name": "MangaKakalot",
+    "homepage": "https://mangakakalot.com",
+    "domains": ["mangakakalot.com", "mangakakalot.gg"],
+    "source_type": "aggregator",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "high"
+  },
+  {
+    "id": "mangapark",
+    "name": "MangaPark",
+    "homepage": "https://mangapark.net",
+    "domains": ["mangapark.net", "mangapark.io"],
+    "source_type": "aggregator",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "high"
+  },
+  {
+    "id": "manhwaclan",
+    "name": "Manhwa Clan",
+    "homepage": "https://manhwaclan.com",
+    "domains": ["manhwaclan.com"],
+    "source_type": "aggregator",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "high"
+  }
+]

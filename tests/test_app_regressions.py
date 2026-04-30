@@ -8,6 +8,7 @@ os.environ.setdefault("DISABLE_AUTO_CHECK", "1")
 os.environ.setdefault("FLASK_DEBUG", "1")
 
 import app  # noqa: E402
+from sources.base import SourcePreview
 
 
 class AppRegressionTests(unittest.TestCase):
@@ -119,6 +120,74 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn("healthy", ids)
         self.assertNotIn("broken", ids)
         self.assertNotIn("current", ids)
+
+    def test_api_resolve_url_manual_fallback_on_detection_failure(self):
+        with patch.object(app, "is_public_http_url", return_value=True), patch.object(
+            app, "source_engine_resolve_url", side_effect=RuntimeError("boom")
+        ):
+            res = self.client.post("/api/resolve-url", json={"url": "https://unknown.example/series/test"})
+        self.assertEqual(res.status_code, 200)
+        payload = res.get_json()
+        self.assertTrue(payload.get("ok"))
+        self.assertEqual(payload.get("support_level"), "manual_only")
+        self.assertEqual(payload.get("status"), "manual")
+
+    def test_unknown_domain_falls_back_to_generic_or_manual_safely(self):
+        preview = SourcePreview(
+            source_name="Unknown Site",
+            source_url="https://mangadexx.org/title/fake",
+            support_level="manual_only",
+            confidence=0.2,
+            title="",
+            warnings=["Automatic detection failed"],
+        )
+        with patch.object(app, "is_public_http_url", return_value=True), patch.object(
+            app, "source_engine_resolve_url", return_value=preview
+        ):
+            res = self.client.post("/api/resolve-url", json={"url": "https://mangadexx.org/title/fake"})
+        self.assertEqual(res.status_code, 200)
+        payload = res.get_json()
+        self.assertTrue(payload.get("ok"))
+        self.assertIn(payload.get("support_level"), ("manual_only", "generic_detector"))
+
+    def test_resolve_url_supported_then_manual_contract(self):
+        supported = SourcePreview(
+            source_name="MangaDex",
+            source_url="https://mangadex.org/title/abc",
+            support_level="official_api",
+            confidence=0.95,
+            title="Demo",
+            latest_chapter="123",
+        )
+        manual = SourcePreview(
+            source_name="Unknown Site",
+            source_url="https://unknown.example/title/abc",
+            support_level="manual_only",
+            confidence=0.1,
+            title="",
+        )
+        with patch.object(app, "is_public_http_url", return_value=True), patch.object(
+            app, "source_engine_resolve_url", side_effect=[supported, manual]
+        ):
+            ok_res = self.client.post("/api/resolve-url", json={"url": "https://mangadex.org/title/abc"})
+            manual_res = self.client.post("/api/resolve-url", json={"url": "https://unknown.example/title/abc"})
+        self.assertEqual(ok_res.status_code, 200)
+        self.assertEqual(manual_res.status_code, 200)
+        self.assertEqual((ok_res.get_json() or {}).get("status"), "supported")
+        self.assertEqual((manual_res.get_json() or {}).get("support_level"), "manual_only")
+
+    def test_resolve_url_rejects_private_and_invalid_schemes(self):
+        bad_urls = [
+            "http://localhost:8000",
+            "http://127.0.0.1",
+            "file:///etc/passwd",
+            "ftp://example.com",
+        ]
+        for raw in bad_urls:
+            res = self.client.post("/api/resolve-url", json={"url": raw})
+            self.assertEqual(res.status_code, 400, msg=f"expected 400 for {raw}")
+            payload = res.get_json() or {}
+            self.assertFalse(payload.get("ok", False))
 
 
 if __name__ == "__main__":

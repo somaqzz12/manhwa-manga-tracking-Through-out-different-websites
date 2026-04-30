@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Series Detail</title></head>
+<body style="font-family:Inter,system-ui,sans-serif;background:#f6efe4;color:#241b16;padding:24px;">
+  <main style="max-width:920px;margin:0 auto;background:#fffaf1;border:1px solid rgba(92,64,45,.2);border-radius:18px;padding:18px;">
+    <h1 style="margin-top:0;">Series detail #{{ series_id }}</h1>
+    <p>Source comparison and recommendation preview.</p>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr><th style="text-align:left;padding:8px;">Source</th><th style="text-align:left;padding:8px;">Latest</th><th style="text-align:left;padding:8px;">Note</th><th style="text-align:left;padding:8px;">Label</th></tr></thead>
+      <tbody>
+        {% for row in source_preview %}
+        <tr>
+          <td style="padding:8px;border-top:1px solid rgba(92,64,45,.2);">{{ row.source_name }}</td>
+          <td style="padding:8px;border-top:1px solid rgba(92,64,45,.2);">{{ row.latest }}</td>
+          <td style="padding:8px;border-top:1px solid rgba(92,64,45,.2);">{{ row.note }}</td>
+          <td style="padding:8px;border-top:1px solid rgba(92,64,45,.2);">{{ row.label }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p><a href="/app">Back to dashboard</a></p>
+  </main>
+</body>
+</html>

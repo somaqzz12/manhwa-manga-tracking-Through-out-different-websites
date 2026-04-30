@@ -2,6 +2,7 @@ import math
 import os
 import re
 import smtplib
+from dataclasses import asdict
 from collections import defaultdict
 import sqlite3
 import json
@@ -26,11 +27,19 @@ from flask import Flask, flash, jsonify, redirect, render_template, request, ses
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
+from routes.api_discovery import register_api_discovery_routes
+from routes.public import register_public_routes
 from werkzeug.security import check_password_hash, generate_password_hash
 from services import chapter_parsing as chapter
+from services import discovery
 from services import reading_insights
 from services import source_registry
 from services import story_groups
+from sources import registry as policy_registry
+from sources.resolver import normalize_url as source_engine_normalize_url
+from sources.resolver import resolve_url as source_engine_resolve_url
+from sources.resolver import search_title as source_engine_search_title
+from sources.registry import supported_source_policy
 try:
     import psycopg2
     import psycopg2.extras
@@ -236,9 +245,16 @@ IMPORT_MAX_ITEMS = int(os.getenv("IMPORT_MAX_ITEMS", "20000"))
 AUTH_RATE_LIMIT_PER_IP = os.getenv("AUTH_RATE_LIMIT_PER_IP", "10/minute;60/hour")
 AUTH_RATE_LIMIT_PER_USER = os.getenv("AUTH_RATE_LIMIT_PER_USER", "8/minute;30/hour")
 DEAD_SERIES_WARNING_DAYS = max(1, int(os.getenv("DEAD_SERIES_WARNING_DAYS", "120")))
+RESOLVE_URL_MAX_LEN = int(os.getenv("RESOLVE_URL_MAX_LEN", "2048"))
+DISCOVER_QUERY_MAX_LEN = int(os.getenv("DISCOVER_QUERY_MAX_LEN", "120"))
+RESOLVE_CACHE_TTL_SECONDS = int(os.getenv("RESOLVE_CACHE_TTL_SECONDS", "120"))
 _PUBLIC_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,40}[a-z0-9])?$")
 if not APP_DEBUG and not os.getenv("SECRET_KEY"):
     raise RuntimeError("SECRET_KEY must be set in production")
+
+_RESOLVE_CACHE_LOCK = threading.Lock()
+_RESOLVE_CACHE: dict[str, tuple[float, dict]] = {}
+_DISCOVER_LIVE_CACHE: dict[str, tuple[float, dict]] = {}
 
 
 _DEFAULT_GITHUB_URL = "https://github.com/somaqzz12/manhwa-manga-tracking-Through-out-different-websites"
@@ -1460,6 +1476,24 @@ def _api_v1_rate_limit_key() -> str:
     return get_remote_address()
 
 
+def _cache_get(cache: dict[str, tuple[float, dict]], key: str, ttl_seconds: int) -> Optional[dict]:
+    now = time.time()
+    with _RESOLVE_CACHE_LOCK:
+        item = cache.get(key)
+        if not item:
+            return None
+        ts, payload = item
+        if now - ts > ttl_seconds:
+            cache.pop(key, None)
+            return None
+        return dict(payload)
+
+
+def _cache_set(cache: dict[str, tuple[float, dict]], key: str, payload: dict) -> None:
+    with _RESOLVE_CACHE_LOCK:
+        cache[key] = (time.time(), dict(payload))
+
+
 def _image_url_from_node(node, base_url: str) -> Optional[str]:
     if node is None:
         return None
@@ -2266,6 +2300,21 @@ def logout():
 @app.route("/sources")
 def sources_page():
     sources = source_registry.sources_with_health()
+    policy_by_domain: dict[str, dict] = {}
+    for row in policy_registry.SOURCE_REGISTRY:
+        for dom in row.get("domains") or []:
+            d = str(dom).strip().lower().lstrip(".")
+            if d and d not in policy_by_domain:
+                policy_by_domain[d] = row
+    for src in sources:
+        matched = None
+        for dom in src.get("domains") or []:
+            key = str(dom).strip().lower().lstrip(".")
+            if key in policy_by_domain:
+                matched = policy_by_domain[key]
+                break
+        src["policy_support_level"] = (matched or {}).get("support_level") or ""
+        src["policy_risk_level"] = (matched or {}).get("risk_level") or ""
     counts = source_registry.aggregate_status_counts()
     health = source_registry.load_health()
     return render_template(
@@ -2557,6 +2606,35 @@ def source_requests_vote(req_id: int):
     return redirect(url_for("source_requests_page"))
 
 
+def _record_source_candidate(domain: str, title_hint: str, url_example: str) -> None:
+    d = (domain or "").strip().lower()[:120]
+    t = (title_hint or "").strip()[:200]
+    u = (url_example or "").strip()[:500]
+    if not d:
+        return
+    with get_conn() as conn:
+        existing = conn.execute("SELECT id FROM source_requests WHERE domain = ?", (d,)).fetchone()
+        if existing:
+            conn.execute(
+                """
+                UPDATE source_requests
+                SET votes = votes + 1,
+                    title_hint = CASE WHEN title_hint IS NULL OR title_hint = '' THEN ? ELSE title_hint END,
+                    url_example = CASE WHEN url_example IS NULL OR url_example = '' THEN ? ELSE url_example END
+                WHERE id = ?
+                """,
+                (t or None, u or None, int(existing["id"])),
+            )
+            return
+        conn.execute(
+            """
+            INSERT INTO source_requests (domain, title_hint, url_example, created_at, votes)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (d, t or d, u or None, _now_iso_z(), 1),
+        )
+
+
 @csrf.exempt
 @app.route("/api/import/mal", methods=["POST"])
 def api_import_mal_stub():
@@ -2598,13 +2676,110 @@ def api_registry_public():
     return resp
 
 
-@app.route("/")
+LANDING_TRENDING_DEMO = {
+    "trending_now": [
+        {"title": "Solo Leveling", "slug": "solo-leveling", "watchers": 1240},
+        {"title": "Omniscient Reader", "slug": "omniscient-reader", "watchers": 968},
+        {"title": "Blue Lock", "slug": "blue-lock", "watchers": 851},
+    ],
+    "most_watched": [
+        {"title": "Jujutsu Kaisen", "slug": "jujutsu-kaisen", "watchers": 2218},
+        {"title": "One Piece", "slug": "one-piece", "watchers": 2144},
+        {"title": "Tower of God", "slug": "tower-of-god", "watchers": 1622},
+    ],
+    "recently_updated": [
+        {"title": "Sakamoto Days", "chapter": "Ch. 170"},
+        {"title": "Nano Machine", "chapter": "Ch. 229"},
+        {"title": "Dandadan", "chapter": "Ch. 192"},
+    ],
+}
+
+LANDING_SOURCE_PREVIEW = [
+    {"source_name": "Asura", "latest": "Ch. 179", "note": "Fast updates", "label": "Recommended"},
+    {"source_name": "Reaper", "latest": "Ch. 178", "note": "Backup mirror", "label": "Backup"},
+    {"source_name": "MangaDex", "latest": "Ch. 200", "note": "Public catalog", "label": "Official/API"},
+    {"source_name": "Unknown", "latest": "Manual", "note": "User-added", "label": "Manual only"},
+]
+
+DEMO_SOURCE_RESULTS = [
+    {"sourceName": "Asura", "supportLabel": "Supported", "latestChapter": "179", "confidence": 0.94},
+    {"sourceName": "Reaper", "supportLabel": "Supported", "latestChapter": "178", "confidence": 0.88},
+    {"sourceName": "MangaDex", "supportLabel": "Official API", "latestChapter": "200", "confidence": 0.96},
+    {"sourceName": "Manual", "supportLabel": "Manual", "latestChapter": None, "confidence": 0.42},
+]
+
+
 def home():
     if not login_required():
-        return render_template("landing.html")
+        return render_template(
+            "landing_v2.html",
+            trending=LANDING_TRENDING_DEMO,
+            source_preview=LANDING_SOURCE_PREVIEW,
+        )
     return redirect(url_for("index"))
 
 
+def public_search():
+    return redirect(url_for("discover_page", q=(request.args.get("q") or "").strip()))
+
+
+def discover_page():
+    q = (request.args.get("q") or "").strip()
+    url_q = (request.args.get("url") or "").strip()
+    local = discovery.search_local_series(q) if q else []
+    results = local[:8]
+    trend = discovery.trending_snapshot()
+    resolved = None
+    if url_q:
+        try:
+            preview = source_engine_resolve_url(url_q)
+            resolved = asdict(preview)
+            resolved["status"] = "supported" if preview.support_level != "manual" else "manual"
+            resolved["supportLabel"] = preview.support_level.replace("_", " ").title()
+            resolved["chaptersFound"] = len(preview.chapters or [])
+        except Exception as exc:
+            resolved = {"ok": False, "error": str(exc), "input_url": url_q}
+    return render_template(
+        "discover.html",
+        q=q,
+        url_q=url_q,
+        results=results,
+        trending=trend,
+        source_policy=supported_source_policy(),
+        resolved=resolved,
+    )
+
+
+def public_series(slug: str):
+    safe_slug = (slug or "").strip().lower()[:120]
+    row = next((it for it in discovery.search_local_series(safe_slug.replace("-", " ")) if it.get("slug") == safe_slug), None)
+    if row is None:
+        row = discovery.get_series_by_id(1 if safe_slug == "solo-leveling" else 0)
+    return render_template(
+        "public_series.html",
+        slug=safe_slug,
+        title=(row.get("title") if row else safe_slug.replace("-", " ").title()) if safe_slug else "Series",
+        source_preview=(row.get("sources") if row else LANDING_SOURCE_PREVIEW),
+    )
+
+
+def about_page():
+    return render_template("about.html")
+
+
+register_public_routes(
+    app,
+    {
+        "home": home,
+        "public_search": public_search,
+        "discover_page": discover_page,
+        "public_series": public_series,
+        "about_page": about_page,
+    },
+)
+
+
+@app.route("/app")
 @app.route("/dashboard")
 def index():
     if not login_required():
@@ -2695,6 +2870,50 @@ def index():
         stale_story_count=stale_story_count,
         dead_series_days=DEAD_SERIES_WARNING_DAYS,
     )
+
+
+@app.route("/app/library")
+def app_library():
+    return redirect(url_for("index"))
+
+
+@app.route("/app/add")
+def app_add_url():
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    return render_template("app_add.html")
+
+
+@app.route("/app/search")
+def app_search():
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    return redirect(url_for("public_search", q=(request.args.get("q") or "")))
+
+
+@app.route("/app/series/<int:series_id>")
+def app_series_detail(series_id: int):
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    return render_template(
+        "app_series.html",
+        series_id=series_id,
+        source_preview=LANDING_SOURCE_PREVIEW,
+    )
+
+
+@app.route("/app/requests")
+def app_requests():
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    return redirect(url_for("source_requests_page"))
+
+
+@app.route("/app/settings")
+def app_settings():
+    if not login_required():
+        return redirect(url_for("auth_page"))
+    return redirect(url_for("account_settings"))
 
 
 @app.route("/next")
@@ -3249,6 +3468,13 @@ def ensure_series():
     if not is_public_http_url(url):
         return jsonify({"ok": False, "error": "blocked URL"}), 400
     canonical_url = resolve_series_listing_url(url)
+    try:
+        profile = source_registry.get_profile_for_url(canonical_url)
+    except Exception:
+        profile = None
+    if not profile:
+        host = urlparse(canonical_url).netloc.lower().replace("www.", "").split(":")[0].strip(".")
+        _record_source_candidate(host, title, canonical_url)
     cover_url = scrape_series_cover(canonical_url, title)
     sk_norm = series_key.strip().lower() if series_key else ""
     story_ident = story_groups.story_id_from_series_key(sk_norm) if sk_norm else story_groups.new_solo_story_id()
@@ -3579,6 +3805,210 @@ def api_alt_sources():
             }
         )
     return jsonify({"ok": True, "current_source_id": curr_id, "alternatives": alternatives[:40]})
+
+
+def api_resolve_url():
+    data = request.get_json(silent=True) or {}
+    raw_url = (data.get("url") or "").strip()[: RESOLVE_URL_MAX_LEN + 1]
+    if not raw_url:
+        return jsonify({"ok": False, "error": "url is required"}), 400
+    if len(raw_url) > RESOLVE_URL_MAX_LEN:
+        return jsonify({"ok": False, "error": "url is too long"}), 400
+    raw_parsed = urlparse(raw_url)
+    if raw_parsed.scheme and raw_parsed.scheme not in ("http", "https"):
+        return jsonify({"ok": False, "error": "url must use http or https"}), 400
+    try:
+        normalized = source_engine_normalize_url(raw_url)
+    except Exception:
+        return jsonify({"ok": False, "error": "invalid url"}), 400
+    parsed = urlparse(normalized)
+    if parsed.scheme not in ("http", "https"):
+        return jsonify({"ok": False, "error": "url must use http or https"}), 400
+    if not is_public_http_url(normalized):
+        return jsonify({"ok": False, "error": "url must be a public http(s) address"}), 400
+
+    cached = _cache_get(_RESOLVE_CACHE, normalized, RESOLVE_CACHE_TTL_SECONDS)
+    if cached is not None:
+        return jsonify(cached)
+    try:
+        preview = source_engine_resolve_url(normalized)
+    except Exception:
+        fallback = {
+            "ok": True,
+            "status": "manual",
+            "support_level": "manual_only",
+            "supportLabel": "Manual Only",
+            "source_name": "Manual",
+            "source_url": normalized,
+            "title": "",
+            "chaptersFound": 0,
+            "warnings": ["Automatic detection failed. Manual tracking is available."],
+        }
+        _cache_set(_RESOLVE_CACHE, normalized, fallback)
+        return jsonify(fallback)
+    payload = asdict(preview)
+    payload["status"] = "supported" if preview.support_level not in ("manual_only", "blocked") else "manual"
+    payload["supportLabel"] = preview.support_level.replace("_", " ").title()
+    payload["chaptersFound"] = len(preview.chapters or [])
+    payload["ok"] = True
+    if payload.get("support_level") == "manual_only":
+        warnings = list(payload.get("warnings") or [])
+        warnings.append("Automatic detection is unavailable for this URL. You can still track it manually.")
+        payload["warnings"] = warnings
+    _cache_set(_RESOLVE_CACHE, normalized, payload)
+    return jsonify(payload)
+
+
+@csrf.exempt
+@app.route("/api/track", methods=["POST"])
+def api_track_series():
+    data = request.get_json(silent=True) or {}
+    return jsonify({"ok": True, "status": "queued", "series": data.get("series") or data.get("title") or "series"})
+
+
+@app.route("/api/search", methods=["GET"])
+def api_public_search():
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify({"ok": True, "items": []})
+    return jsonify(
+        {
+            "ok": True,
+            "items": [
+                {"title": q.title(), "slug": re.sub(r"[^a-z0-9]+", "-", q.lower()).strip("-"), "foundOn": 5, "recommended": "Asura"}
+            ],
+        }
+    )
+
+
+@app.route("/api/series/<int:series_id>/sources", methods=["GET"])
+def api_series_sources(series_id: int):
+    return jsonify({"ok": True, "seriesId": series_id, "sources": LANDING_SOURCE_PREVIEW})
+
+
+@csrf.exempt
+@app.route("/api/source-request", methods=["POST"])
+def api_source_request():
+    data = request.get_json(silent=True) or {}
+    domain = (data.get("domain") or "").strip()[:255]
+    if not domain:
+        return jsonify({"ok": False, "error": "domain is required"}), 400
+    return jsonify({"ok": True, "status": "requested", "domain": domain})
+
+
+def api_trending():
+    return jsonify({"ok": True, "is_demo": True, **LANDING_TRENDING_DEMO})
+
+
+@app.route("/api/recent-updates", methods=["GET"])
+def api_recent_updates():
+    return jsonify({"ok": True, "items": LANDING_TRENDING_DEMO["recently_updated"]})
+
+
+@app.route("/api/discover/supported-sources", methods=["GET"])
+def api_discover_supported_sources():
+    return jsonify({"ok": True, "tiers": supported_source_policy()})
+
+
+@app.route("/api/discover/search", methods=["GET"])
+def api_discover_search():
+    q = (request.args.get("q") or "").strip()[:DISCOVER_QUERY_MAX_LEN]
+    if not q:
+        return jsonify({"ok": True, "items": []})
+    items = discovery.search_local_series(q)
+    return jsonify({"ok": True, "items": items})
+
+
+@app.route("/api/discover/series/<int:series_id>", methods=["GET"])
+def api_discover_series(series_id: int):
+    row = discovery.get_series_by_id(series_id)
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    return jsonify({"ok": True, "series": row})
+
+
+@app.route("/api/discover/series/<int:series_id>/sources", methods=["GET"])
+def api_discover_series_sources(series_id: int):
+    row = discovery.get_series_by_id(series_id)
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    return jsonify({"ok": True, "series_id": series_id, "sources": row.get("sources", [])})
+
+
+def api_discover_search_live():
+    data = request.get_json(silent=True) or {}
+    q = (data.get("q") or "").strip()[:DISCOVER_QUERY_MAX_LEN]
+    if not q:
+        return jsonify({"ok": False, "error": "q is required"}), 400
+    cached = _cache_get(_DISCOVER_LIVE_CACHE, q.lower(), 60)
+    if cached is not None:
+        return jsonify(cached)
+    live = source_engine_search_title(q)
+    merged = discovery.merge_live_results(live)
+    payload = {"ok": True, "items": merged, "sources_checked": len(live)}
+    _cache_set(_DISCOVER_LIVE_CACHE, q.lower(), payload)
+    return jsonify(payload)
+
+
+register_api_discovery_routes(
+    app,
+    {
+        "api_resolve_url": api_resolve_url,
+        "api_discover_search_live": api_discover_search_live,
+        "api_trending": api_trending,
+    },
+    csrf=csrf,
+    limiter=limiter,
+    rate_limit_key_func=_api_v1_rate_limit_key,
+)
+
+
+@csrf.exempt
+@app.route("/api/tracker/add-series", methods=["POST"])
+def api_tracker_add_series():
+    user_id = api_session_user_id()
+    if user_id is None:
+        return jsonify({"ok": False, "error": "authentication required"}), 401
+    data = request.get_json(silent=True) or {}
+    series_id = int(data.get("series_id") or 0)
+    mode = (data.get("mode") or "recommended").strip().lower()
+    manual_url = (data.get("manual_url") or "").strip()
+    manual_title = (data.get("manual_title") or "").strip()[:220]
+    if mode == "manual":
+        if not manual_url or not is_public_http_url(manual_url):
+            return jsonify({"ok": False, "error": "valid manual_url is required"}), 400
+        canonical_url = resolve_series_listing_url(manual_url)
+        title = manual_title or "Manual series"
+        now = _now_iso_z()
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO bookmarks (user_id, title, url, cover_url, story_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, title, canonical_url, "", story_groups.new_solo_story_id(), now),
+            )
+        return jsonify({"ok": True, "mode": mode, "added": [{"source": "Manual", "url": canonical_url}]})
+    row = discovery.get_series_by_id(series_id)
+    if not row:
+        return jsonify({"ok": False, "error": "series not found"}), 404
+    sources = row.get("sources") or []
+    if not sources:
+        return jsonify({"ok": False, "error": "no sources available"}), 400
+    selected = sources[:1] if mode == "recommended" else [s for s in sources if s.get("health_status") == "working"]
+    added = []
+    with get_conn() as conn:
+        for src in selected:
+            src_url = (src.get("url") or "").strip()
+            if not src_url:
+                continue
+            if not is_public_http_url(src_url):
+                continue
+            canonical_url = resolve_series_listing_url(src_url)
+            now = _now_iso_z()
+            conn.execute(
+                "INSERT OR IGNORE INTO bookmarks (user_id, title, url, cover_url, story_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, row.get("title"), canonical_url, row.get("cover_url"), story_groups.new_solo_story_id(), now),
+            )
+            added.append({"source": src.get("source_name"), "url": canonical_url})
+    return jsonify({"ok": True, "mode": mode, "added": added})
 
 
 @csrf.exempt
@@ -3975,6 +4405,21 @@ def admin_user_detail(user_id: int):
         user=user,
         bookmarks=bookmarks,
         progress=progress,
+        admin_link_kw=_admin_link_kw(),
+    )
+
+
+@app.route("/admin/source-registry-status", methods=["GET"])
+def admin_source_registry_status():
+    if not admin_view_authorized():
+        if not login_required():
+            return redirect(url_for("auth_page", mode="login"))
+        return abort(403)
+    rows = source_registry.sources_with_health()
+    rows = sorted(rows, key=lambda r: ((r.get("registry_origin") or "zzz"), r.get("display_name") or r.get("id") or ""))
+    return render_template(
+        "admin_source_registry_status.html",
+        rows=rows,
         admin_link_kw=_admin_link_kw(),
     )
 

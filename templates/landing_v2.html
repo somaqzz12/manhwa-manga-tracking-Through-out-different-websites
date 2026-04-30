@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="{{ site_description }}">
+  <title>Manga Watchlist - Discover and Track</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#f6efe4; --panel:#fffaf1; --panel-soft:rgba(255,250,241,.8); --text:#241b16; --muted:#746355; --border:rgba(92,64,45,.2); --accent:#9a6a45; --accent-h:#7f5438; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:Inter,system-ui,sans-serif; color:var(--text); background:radial-gradient(circle at 20% 10%, rgba(255,255,255,.8), transparent 35%), radial-gradient(circle at 80% 0%, rgba(220,190,150,.2), transparent 30%), var(--bg); }
+    .wrap { max-width:1100px; margin:0 auto; padding:24px 18px 56px; }
+    .hero,.block{ background:var(--panel-soft); border:1px solid var(--border); border-radius:24px; backdrop-filter:blur(14px); padding:26px; margin-bottom:16px; }
+    h1,h2,h3 { font-family:Fraunces, "Playfair Display", serif; margin:0 0 10px; }
+    h1 { font-size:clamp(2rem,4vw,2.7rem); line-height:1.06; }
+    p { margin:0 0 10px; color:var(--muted); line-height:1.6; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .btn { display:inline-block; padding:12px 18px; border-radius:999px; text-decoration:none; border:1px solid var(--border); color:var(--text); font-weight:600; background:#fff; }
+    .btn.primary { background:var(--accent); color:#fffaf1; border-color:transparent; }
+    .btn.primary:hover { background:var(--accent-h); }
+    .search { display:flex; gap:8px; margin-top:10px; }
+    .search input { flex:1; border:1px solid var(--border); border-radius:999px; padding:12px 14px; font:inherit; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+    .card { background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:14px; }
+    .list { margin:0; padding-left:18px; color:var(--muted); }
+    .table { width:100%; border-collapse:collapse; }
+    .table td,.table th { border-bottom:1px solid var(--border); padding:10px 8px; text-align:left; font-size:.92rem; }
+    .label { font-size:.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+    nav { display:flex; gap:12px; justify-content:flex-end; margin-bottom:12px; }
+    nav a { color:var(--muted); text-decoration:none; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a href="/">Home</a>
+      <a href="/search">Discover</a>
+      <a href="/sources">Supported Sources</a>
+      <a href="/app">Dashboard</a>
+      <a href="/app/add">Add URL</a>
+    </nav>
+
+    <section class="hero">
+      <h1>Your website-first manga tracker.</h1>
+      <p>Search manga/manhwa titles, paste any source URL, compare known websites, and add the best source to your tracker.</p>
+      <p>The extension is an optional companion detection tool. Discovery, comparison, and tracking flow stay on the website.</p>
+      <div class="row">
+        <a class="btn primary" href="/discover">Discover titles</a>
+        <a class="btn" href="/app">Open tracker</a>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Search any manga or manhwa</h2>
+      <form action="/search" method="get" class="search">
+        <input type="text" name="q" placeholder="Solo Leveling" aria-label="Search manga or manhwa">
+        <button class="btn primary" type="submit">Search</button>
+      </form>
+      <div class="card" style="margin-top:12px;">
+        <strong>Solo Leveling</strong>
+        <p>Found on 5 sources · Recommended: Asura · Latest known chapter: 179</p>
+        <a class="btn" href="/series/solo-leveling">View sources</a>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Featured examples</h2>
+      <p>Preview data for layout and UX. Real trend analytics can be connected later.</p>
+      <div class="grid">
+        <div class="card"><span class="label">Trending now</span><ul class="list">{% for item in trending.trending_now %}<li>{{ item.title }}</li>{% endfor %}</ul></div>
+        <div class="card"><span class="label">Most watched</span><ul class="list">{% for item in trending.most_watched %}<li>{{ item.title }}</li>{% endfor %}</ul></div>
+        <div class="card"><span class="label">Recently updated</span><ul class="list">{% for item in trending.recently_updated %}<li>{{ item.title }} ({{ item.chapter }})</li>{% endfor %}</ul></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Source comparison preview</h2>
+      <table class="table">
+        <thead><tr><th>Source</th><th>Latest</th><th>Note</th><th>Label</th></tr></thead>
+        <tbody>
+          {% for row in source_preview %}
+          <tr><td>{{ row.source_name }}</td><td>{{ row.latest }}</td><td>{{ row.note }}</td><td>{{ row.label }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="block">
+      <h2>How it works</h2>
+      <p>Paste any URL. Supported sources become automatic. Unsupported sources become manual. Requested sources become future adapters.</p>
+    </section>
+
+    <section class="block">
+      <h2>Supported sources</h2>
+      <div class="grid">
+        <div class="card"><span class="label">Official/Public</span><ul class="list"><li>MangaDex</li><li>MANGA Plus</li><li>Nico Seiga</li><li>ComicWalker</li></ul></div>
+        <div class="card"><span class="label">Adapter support</span><ul class="list"><li>Asura</li><li>Reaper</li><li>Flame</li><li>More coming</li></ul></div>
+        <div class="card"><span class="label">Fallback</span><ul class="list"><li>Generic manga page detector</li><li>Extension-assisted detection</li><li>Manual tracking</li></ul></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Ready to start?</h2>
+      <div class="row">
+        <a class="btn primary" href="/app">Open Dashboard</a>
+        <a class="btn" href="/app/add">Add URL</a>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

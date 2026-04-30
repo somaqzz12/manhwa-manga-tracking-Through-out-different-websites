@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Discover - Manga Watchlist</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/public-pages.css') }}">
+</head>
+<body class="public-simple">
+  <div class="box box--narrow">
+    <h1>Search any manga/manhwa</h1>
+    <form method="get" action="/search">
+      <input class="search-input" name="q" value="{{ q }}" placeholder="Solo Leveling">
+      <button type="submit">Search</button>
+      <a href="/">Back home</a>
+    </form>
+    {% if result %}
+    <hr>
+    <h2 style="margin-bottom:4px;">{{ result.title }}</h2>
+    <p>Found on {{ result.found_on }} sources<br>Recommended: {{ result.recommended }}<br>Latest known chapter: {{ result.latest_chapter }}</p>
+    <a href="/series/{{ result.title|lower|replace(' ', '-') }}">View sources</a>
+    {% endif %}
+  </div>
+</body>
+</html>

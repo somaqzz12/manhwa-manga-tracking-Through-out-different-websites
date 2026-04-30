@@ -27,6 +27,9 @@
           <div class="source-stat"><strong>{{ counts.partial }}</strong><span>Partial</span></div>
           <div class="source-stat"><strong>{{ counts.broken }}</strong><span>Broken</span></div>
         </div>
+        <p class="muted" style="margin-top:-8px;margin-bottom:12px;">
+          Source support policy: <strong>official_api</strong> and <strong>site_adapter</strong> are automatic, <strong>generic_detector</strong> is experimental, <strong>manual_only</strong> allows URL/progress tracking only, <strong>blocked</strong> is not supported.
+        </p>
         {% if health_updated_at %}
           <p class="muted" style="margin-top:-8px;margin-bottom:24px;">Last health run: <code>{{ health_updated_at }}</code></p>
         {% else %}
@@ -41,11 +44,26 @@
               <h2>{{ s.display_name }}</h2>
               <div class="muted" style="font-size:0.88rem;margin-bottom:8px;">
                 <span class="status-pill {{ eff }}">{{ eff }}</span>
+                {% if s.policy_support_level %}
+                <span class="status-pill policy {{ s.policy_support_level }}">{{ s.policy_support_level }}</span>
+                {% endif %}
+                {% if s.policy_risk_level %}
+                <span class="status-pill risk {{ s.policy_risk_level }}">risk: {{ s.policy_risk_level }}</span>
+                {% endif %}
                 <span>{{ s.domains | join(', ') }}</span>
                 · {{ s.language }} · {{ s.content_type }}
                 {% if s.nsfw %}· NSFW{% endif %}
                 {% if s.needs_js %}· needs JS{% endif %}
               </div>
+              {% if s.policy_support_level == 'official_api' or s.policy_support_level == 'site_adapter' %}
+                <p class="source-notes">Supported automatically. We can detect metadata, chapter lists, and latest updates from this source.</p>
+              {% elif s.policy_support_level == 'generic_detector' %}
+                <p class="source-notes">Experimental detection. We try to read public metadata and chapter hints; if it fails, manual tracking still works.</p>
+              {% elif s.policy_support_level == 'manual_only' %}
+                <p class="source-notes">Manual tracking only. Save this URL and track progress, but automatic chapter checks are disabled.</p>
+              {% elif s.policy_support_level == 'blocked' %}
+                <p class="source-notes">This source is not supported because it is unavailable, unsafe, or requires access methods this project does not use.</p>
+              {% endif %}
               {% if s.extension or s.package %}
                 <div class="muted" style="font-size:0.8rem;margin-bottom:8px;">
                   {% if s.extension %}<span>{{ s.extension }}</span>{% endif %}

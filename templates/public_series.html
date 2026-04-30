@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} - Source comparison</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/public-pages.css') }}">
+</head>
+<body class="public-simple">
+  <div class="box">
+    <a href="/search">← Back to search</a>
+    <h1>{{ title }}</h1>
+    <p>Compare known source websites and pick the best tracking path.</p>
+    <table>
+      <thead><tr><th>Source</th><th>Latest</th><th>Note</th><th>Label</th></tr></thead>
+      <tbody>
+        {% for row in source_preview %}
+        <tr>
+          <td>{{ row.source_name or row.display_name }}</td>
+          <td>{{ row.latest or row.latest_chapter or "?" }}</td>
+          <td>{{ row.note or row.health_status or "-" }}</td>
+          <td>{{ row.label or row.support_level or "-" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

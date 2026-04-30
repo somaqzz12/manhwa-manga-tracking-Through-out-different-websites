@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Discover - Manga Watchlist</title>
+  <style>
+    body{font-family:Inter,system-ui,sans-serif;margin:0;background:#f6efe4;color:#241b16}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    .panel{background:#fffaf1;border:1px solid rgba(92,64,45,.22);border-radius:18px;padding:16px;margin-bottom:14px}
+    .search{display:flex;gap:8px;flex-wrap:wrap}
+    input{flex:1;min-width:280px;padding:11px 14px;border:1px solid rgba(92,64,45,.25);border-radius:999px}
+    button,a.btn{padding:11px 14px;border:none;border-radius:999px;background:#9a6a45;color:#fffaf1;text-decoration:none;cursor:pointer}
+    .ghost{background:#fffaf1;color:#241b16;border:1px solid rgba(92,64,45,.25)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+    .card{background:#fff;border:1px solid rgba(92,64,45,.2);border-radius:14px;padding:12px}
+    .meta{font-size:.88rem;color:#746355}
+    .warn{padding:10px;border:1px solid rgba(146,64,14,.25);background:#fffbeb;border-radius:12px;color:#92400e}
+    table{width:100%;border-collapse:collapse}
+    td,th{padding:8px;border-bottom:1px solid rgba(92,64,45,.2);text-align:left}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1 style="margin:0 0 10px;">Discovery + Source Comparison</h1>
+      <p style="margin:0 0 10px;color:#746355;">The website is the main product: search titles, compare all known sources, pick the best website, and add to tracker. Extension support is optional companion detection only.</p>
+      <form class="search" method="get" action="/discover">
+        <input name="q" value="{{ q }}" placeholder="Search manga or manhwa title...">
+        <button type="submit">Search titles</button>
+        <button id="liveBtn" type="button" class="ghost">Search supported websites</button>
+      </form>
+      <form class="search" method="get" action="/discover" style="margin-top:10px;">
+        <input name="url" value="{{ url_q or '' }}" placeholder="Paste any source URL to resolve">
+        <button type="submit">Resolve URL</button>
+      </form>
+    </div>
+
+    {% if resolved %}
+    <div class="panel">
+      <h2 style="margin:0 0 10px;">URL detection</h2>
+      {% if resolved.error %}
+        <div class="warn">Could not auto-detect this URL. You can still track it manually.</div>
+      {% else %}
+        <div class="meta"><strong>{{ resolved.title or "Unknown title" }}</strong></div>
+        <div class="meta">Source: {{ resolved.source_name or "Unknown" }} · Support: {{ resolved.supportLabel }} · Chapters found: {{ resolved.chaptersFound }}</div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button onclick="addManual('{{ (resolved.canonical_series_url or resolved.input_url or url_q or '')|e }}','{{ (resolved.title or '')|e }}')">Add to tracker (manual fallback)</button>
+        </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      <h2 style="margin:0 0 10px;">Featured examples</h2>
+      <p class="meta" style="margin:0 0 10px;">Demo content for discovery UI preview; not live popularity analytics yet.</p>
+      <div class="grid">
+        <div class="card"><strong>Trending now</strong><div class="meta">{{ trending.trending_now|join(", ") }}</div></div>
+        <div class="card"><strong>Most watched</strong><div class="meta">{{ trending.most_watched|join(", ") }}</div></div>
+        <div class="card"><strong>Recently updated</strong><div class="meta">{{ trending.recently_updated|join(", ") }}</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 style="margin:0 0 10px;">Supported sources policy</h2>
+      <div class="grid">
+        <div class="card"><strong>Official/Public</strong><div class="meta">{% for s in source_policy.official_public %}{{ s.name }}{% if not loop.last %}, {% endif %}{% endfor %}</div></div>
+        <div class="card"><strong>Adapter support</strong><div class="meta">{% for s in source_policy.adapter_support %}{{ s.name }}{% if not loop.last %}, {% endif %}{% endfor %}</div></div>
+        <div class="card"><strong>Fallback</strong><div class="meta">{% for s in source_policy.fallback %}{{ s.name }}{% if not loop.last %}, {% endif %}{% endfor %}</div></div>
+      </div>
+    </div>
+
+    <div id="results">
+      {% for r in results %}
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+          <div>
+            <h3 style="margin:0 0 6px;">{{ r.title }}</h3>
+            <div class="meta">{{ r.description }}</div>
+            <div class="meta">{{ r.type|title }} · {{ r.status|title }} · Latest chapter: {{ r.latest_chapter or "?" }}</div>
+            <div class="meta">Known websites: {{ r.sources_found }} · Best source: {{ r.recommended_source or "Manual" }}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a class="btn ghost" href="/series/{{ r.slug }}">View comparison</a>
+            <button onclick="addSeries({{ r.id }}, 'recommended')">Add best source</button>
+            <button class="ghost" onclick="addSeries({{ r.id }}, 'all')">Add all working</button>
+          </div>
+        </div>
+        {% if r.sources %}
+        <table style="margin-top:10px;">
+          <thead><tr><th>Source website</th><th>Latest</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>
+            {% for s in r.sources %}
+            <tr>
+              <td>{{ s.source_name }}</td>
+              <td>{{ s.latest_chapter or "?" }}</td>
+              <td>{{ s.label }}</td>
+              <td>{% if s.url %}<a class="btn ghost" href="{{ s.url }}" target="_blank" rel="noopener">Open</a>{% else %}<span class="meta">Manual only</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <script>
+    async function addSeries(seriesId, mode) {
+      const res = await fetch("/api/tracker/add-series", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({series_id: seriesId, mode})
+      });
+      const data = await res.json();
+      alert(data.ok ? `Added ${data.added.length} source(s)` : (data.error || "Failed"));
+    }
+    async function addManual(url, title) {
+      const res = await fetch("/api/tracker/add-series", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({mode:"manual", manual_url:url, manual_title:title})
+      });
+      const data = await res.json();
+      alert(data.ok ? "Added manual tracker entry" : (data.error || "Failed"));
+    }
+    document.getElementById("liveBtn").addEventListener("click", async () => {
+      const q = new URLSearchParams(location.search).get("q") || "";
+      if (!q) { alert("Type a query first."); return; }
+      const res = await fetch("/api/discover/search-live", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({q})
+      });
+      const data = await res.json();
+      if (!data.ok) { alert(data.error || "Search failed"); return; }
+      const host = document.getElementById("results");
+      host.innerHTML = data.items.map((r) => `
+        <div class="panel">
+          <h3 style="margin:0 0 6px;">${r.title}</h3>
+          <div class="meta">Found on ${r.sources_found || 0} sources · Recommended: ${r.recommended_source || "Manual"}</div>
+          <a class="btn ghost" href="/series/${r.slug}">View comparison</a>
+        </div>`).join("");
+    });
+  </script>
+</body>
+</html>

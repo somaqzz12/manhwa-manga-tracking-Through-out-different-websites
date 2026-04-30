@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Add URL - Manga Watchlist</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/public-pages.css') }}">
+</head>
+<body class="public-simple">
+  <main class="box box--narrow">
+    <h1 style="margin-top:0;">Add URL</h1>
+    <p>Paste a series URL. The resolver detects source support and suggests the best option.</p>
+    <form id="resolveForm" style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input class="url-input" id="urlInput" type="url" placeholder="https://example.com/series/solo-leveling" required>
+      <button type="submit">Resolve URL</button>
+    </form>
+    <div id="out" style="margin-top:14px;white-space:pre-wrap;background:#fff;padding:12px;border-radius:12px;border:1px solid rgba(92,64,45,.2);"></div>
+    <p><a href="/app">Back to dashboard</a></p>
+  </main>
+  <script>
+    document.getElementById("resolveForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const url = document.getElementById("urlInput").value.trim();
+      const res = await fetch("/api/resolve-url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        document.getElementById("out").innerHTML = `<p><strong>Could not detect this source.</strong></p><p>${data.error || "Unknown error"}</p>`;
+        return;
+      }
+      const chapters = Array.isArray(data.chapters) ? data.chapters.length : (data.chaptersFound || 0);
+      const warnings = Array.isArray(data.warnings) && data.warnings.length
+        ? `<ul>${data.warnings.map((w) => `<li>${w}</li>`).join("")}</ul>`
+        : "<p>No warnings.</p>";
+      document.getElementById("out").innerHTML = `
+        <h3 style="margin:0 0 8px;">${data.title || "Unknown title"}</h3>
+        <p style="margin:0 0 4px;"><strong>Source:</strong> ${data.source_name || "-"}</p>
+        <p style="margin:0 0 4px;"><strong>Support:</strong> ${data.support_level || "-"}</p>
+        <p style="margin:0 0 4px;"><strong>Latest chapter:</strong> ${data.latest_chapter || "Unknown"}</p>
+        <p style="margin:0 0 10px;"><strong>Chapters found:</strong> ${chapters}</p>
+        ${warnings}
+      `;
+    });
+  </script>
+</body>
+</html>

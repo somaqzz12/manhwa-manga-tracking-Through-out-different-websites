@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Source Registry Status - Manga Watchlist</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="page-app">
+  <div class="main" style="max-width:1200px;margin:0 auto;">
+    <h1 class="page-title page-title--display">Source Registry Status</h1>
+    <p class="muted">Debug view for precedence verification (curated vs manifest origin).</p>
+    <div style="overflow:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>ID</th>
+            <th>Origin</th>
+            <th>Parsing Strategy</th>
+            <th>Status</th>
+            <th>Domains</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td>{{ r.display_name or r.id }}</td>
+            <td><code>{{ r.id }}</code></td>
+            <td>{{ r.registry_origin or "unknown" }}</td>
+            <td><code>{{ r.parsing_strategy or "css_chapter_links" }}</code></td>
+            <td>{{ r.status }}</td>
+            <td>{{ (r.domains or [])|join(', ') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

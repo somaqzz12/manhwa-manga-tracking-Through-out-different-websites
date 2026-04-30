@@ -26,7 +26,7 @@ export const extensionPrivacyHref =
   process.env.NEXT_PUBLIC_EXTENSION_PRIVACY_URL?.trim() || "/privacy";
 
 export const authorName =
-  process.env.NEXT_PUBLIC_AUTHOR_NAME?.trim() || "Osamah";
+  process.env.NEXT_PUBLIC_AUTHOR_NAME?.trim() || "Alex Rowan";
 
 /** Public web app URL where users register and sign in. */
 export const dashboardUrl =

@@ -190,66 +190,86 @@ def _flatten_tachiyomi_manifest(payload: Any) -> list[dict]:
     return out
 
 
-def _collect_source_dicts_from_dir(sources_dir: Path) -> list[dict]:
-    out: list[dict] = []
-    if not sources_dir.is_dir():
-        return out
+def _load_curated_catalog_records(sources_dir: Path) -> list[dict]:
+    curated_path = sources_dir / "catalog.json"
+    if not curated_path.is_file():
+        return []
+    try:
+        payload = _load_json_file(curated_path)
+    except Exception as exc:
+        log.error("failed to read %s: %s", curated_path, exc)
+        return []
+    if not isinstance(payload, dict):
+        return []
+    srcs = payload.get("sources")
+    if not isinstance(srcs, list):
+        return []
+    return [row for row in srcs if isinstance(row, dict)]
+
+
+def _load_manifest_records(sources_dir: Path) -> list[dict]:
     manifest_path = sources_dir / "sources.manifest.json"
-    if manifest_path.is_file():
-        try:
-            payload = _load_json_file(manifest_path)
-            return _flatten_tachiyomi_manifest(payload)
-        except Exception as exc:
-            log.error("failed to read %s: %s", manifest_path, exc)
-            return []
-    for path in sorted(sources_dir.glob("*.json")):
-        name = path.name.lower()
-        if name.startswith("_") or name in ("health.json", "sources.manifest.json"):
-            continue
-        try:
-            payload = _load_json_file(path)
-        except Exception as exc:
-            log.error("failed to read %s: %s", path, exc)
-            continue
-        if isinstance(payload, dict) and isinstance(payload.get("sources"), list):
-            for item in payload["sources"]:
-                if isinstance(item, dict):
-                    out.append(item)
-        elif isinstance(payload, list):
-            out.extend(_flatten_tachiyomi_manifest(payload))
-        elif isinstance(payload, dict) and "id" in payload:
-            out.append(payload)
-    return out
+    if not manifest_path.is_file():
+        return []
+    try:
+        payload = _load_json_file(manifest_path)
+    except Exception as exc:
+        log.error("failed to read %s: %s", manifest_path, exc)
+        return []
+    return _flatten_tachiyomi_manifest(payload)
 
 
 def _load_catalog() -> list[dict]:
     sources_dir = _env_sources_dir()
-    records: list[dict] = []
+    curated_records = _load_curated_catalog_records(sources_dir)
+    manifest_records = _load_manifest_records(sources_dir)
 
-    dir_records = _collect_source_dicts_from_dir(sources_dir)
-    if dir_records:
-        records = dir_records
-    else:
+    # Fallback for older deployments that only have a single JSON path configured.
+    if not curated_records and not manifest_records:
         legacy = _env_legacy_sources_json()
         if legacy and legacy.is_file():
             try:
                 payload = _load_json_file(legacy)
                 arr = payload.get("sources") if isinstance(payload, dict) else None
                 if isinstance(arr, list):
-                    records = [x for x in arr if isinstance(x, dict)]
+                    curated_records = [x for x in arr if isinstance(x, dict)]
             except Exception as exc:
                 log.error("legacy sources.json failed (%s): %s", legacy, exc)
 
     normalized: list[dict] = []
     seen_ids: set[str] = set()
-    for raw in records:
+    curated_domains: set[str] = set()
+
+    # 1) Curated catalog is always loaded first and wins.
+    for raw in curated_records:
         norm = normalize_source_record(raw)
         if not norm:
             continue
         if norm["id"] in seen_ids:
-            log.warning("duplicate source id %s; skipping duplicate", norm["id"])
+            log.warning("duplicate curated source id %s; skipping duplicate", norm["id"])
             continue
         seen_ids.add(norm["id"])
+        for d in norm["domains"]:
+            curated_domains.add(_normalize_registry_host(d))
+        norm["registry_origin"] = "curated"
+        normalized.append(norm)
+
+    # 2) Manifest fills only gaps; it must not override curated domains.
+    for raw in manifest_records:
+        norm = normalize_source_record(raw)
+        if not norm:
+            continue
+        overlap = False
+        for d in norm["domains"]:
+            if _normalize_registry_host(d) in curated_domains:
+                overlap = True
+                break
+        if overlap:
+            continue
+        if norm["id"] in seen_ids:
+            continue
+        seen_ids.add(norm["id"])
+        norm["registry_origin"] = "manifest"
         normalized.append(norm)
 
     domain_rows: list[tuple[str, dict]] = []
