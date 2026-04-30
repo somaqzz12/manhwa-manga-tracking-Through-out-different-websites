@@ -1526,3 +1526,119 @@ details.disclosure summary {
 .edit-form-panel select.field-input {
   border-radius: 14px;
 }
+
+/* ——— Mobile polish ——— */
+@media (max-width: 768px) {
+  .main,
+  .dash-main {
+    padding: 18px 14px 44px;
+  }
+
+  .dash-topbar {
+    gap: 10px;
+    min-height: 50px;
+    margin: -18px -14px 14px;
+    padding: 8px 14px 10px;
+  }
+
+  .dash-topbar-search {
+    order: 3;
+    width: 100%;
+    max-width: none;
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .dash-topbar-actions {
+    margin-left: auto;
+    gap: 6px;
+  }
+
+  .dash-topbar-status {
+    display: none;
+  }
+
+  .dash-icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+  }
+
+  .library-drawer {
+    width: 100vw;
+    border-left: none;
+  }
+
+  .library-drawer-head {
+    padding: 14px;
+  }
+
+  .library-drawer-body {
+    padding: 12px 14px 24px;
+  }
+
+  .hero {
+    margin-bottom: 14px;
+  }
+
+  .page-title {
+    font-size: clamp(1.35rem, 6vw, 1.9rem);
+  }
+
+  .filter-tabs {
+    margin-bottom: 14px;
+  }
+
+  .filter-tab {
+    padding: 8px 13px;
+    font-size: 0.82rem;
+  }
+
+  .story-grid {
+    grid-template-columns: repeat(auto-fill, minmax(142px, 1fr));
+    gap: 12px;
+  }
+
+  .story-body {
+    padding: 10px 10px 8px;
+  }
+
+  .story-title {
+    font-size: 0.84rem;
+  }
+
+  .story-card-toolbar {
+    gap: 5px;
+    padding: 0 10px 10px;
+  }
+
+  .story-card-toolbar .btn {
+    padding: 6px 10px;
+    font-size: 0.74rem;
+  }
+
+  .story-cover-chip {
+    font-size: 0.64rem;
+  }
+
+  .queue-card {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .story-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .story-unread-badge {
+    min-width: 22px;
+    height: 22px;
+    font-size: 0.66rem;
+    padding: 0 6px;
+  }
+
+  .library-empty {
+    padding: 40px 14px 50px;
+  }
+}
