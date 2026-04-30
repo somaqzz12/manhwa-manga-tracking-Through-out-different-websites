@@ -2273,6 +2273,11 @@ def sources_page():
         sources=sources,
         counts=counts,
         health_updated_at=health.get("updated_at"),
+        current_user=get_current_user(),
+        demo_mode=False,
+        search_q="",
+        sort="added",
+        page=1,
     )
 
 
@@ -2345,16 +2350,37 @@ def delete_account():
         flash("The built-in local demo user cannot be deleted from this screen.", "error")
         return redirect(url_for("index"))
     if request.method == "GET":
-        return render_template("delete_account.html", current_user=current_user)
+        return render_template(
+            "delete_account.html",
+            current_user=current_user,
+            demo_mode=False,
+            search_q="",
+            sort="added",
+            page=1,
+        )
     password = request.form.get("password") or ""
     if not password:
         flash("Enter your password to confirm account deletion.", "error")
-        return render_template("delete_account.html", current_user=current_user)
+        return render_template(
+            "delete_account.html",
+            current_user=current_user,
+            demo_mode=False,
+            search_q="",
+            sort="added",
+            page=1,
+        )
     with get_conn() as conn:
         row = conn.execute("SELECT id, password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
         if row is None or not check_password_hash(row["password_hash"], password):
             flash("Incorrect password.", "error")
-            return render_template("delete_account.html", current_user=current_user)
+            return render_template(
+                "delete_account.html",
+                current_user=current_user,
+                demo_mode=False,
+                search_q="",
+                sort="added",
+                page=1,
+            )
         conn.execute("DELETE FROM reading_progress WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM bookmarks WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
@@ -2452,6 +2478,10 @@ def account_settings():
         notify_email_chapters=int(row["notify_email_chapters"] or 0) if row else 0,
         api_token_preview=tok_preview,
         public_list_url=public_url,
+        demo_mode=False,
+        search_q="",
+        sort="added",
+        page=1,
     )
 
 
@@ -2507,7 +2537,15 @@ def source_requests_page():
             LIMIT 200
             """
         ).fetchall()
-    return render_template("source_requests.html", rows=rows)
+    return render_template(
+        "source_requests.html",
+        rows=rows,
+        current_user=get_current_user(),
+        demo_mode=False,
+        search_q="",
+        sort="added",
+        page=1,
+    )
 
 
 @app.route("/source-requests/<int:req_id>/vote", methods=["POST"])
@@ -2677,6 +2715,10 @@ def next_up():
             current_user=current_user,
             insights={},
             ui_show_source_hosts=UI_SHOW_SOURCE_HOSTS,
+            demo_mode=False,
+            search_q="",
+            sort="added",
+            page=1,
         )
     story_cards = _build_sorted_story_cards(raw_rows, raw_by_id, "unread")
     insights = reading_insights.build_insights(story_cards)
@@ -2687,6 +2729,10 @@ def next_up():
         current_user=current_user,
         insights=insights,
         ui_show_source_hosts=UI_SHOW_SOURCE_HOSTS,
+        demo_mode=False,
+        search_q="",
+        sort="added",
+        page=1,
     )
 
 
@@ -3046,6 +3092,13 @@ def edit_bookmark(bookmark_id: int):
         return_page = max(1, int(rp or "1"))
     except ValueError:
         return_page = 1
+    sidebar_ctx = {
+        "current_user": get_current_user(),
+        "demo_mode": False,
+        "search_q": return_q,
+        "sort": return_sort,
+        "page": return_page,
+    }
     with get_conn() as conn:
         row = conn.execute(
             "SELECT id, title, url, story_id FROM bookmarks WHERE id = ? AND user_id = ?",
@@ -3076,6 +3129,7 @@ def edit_bookmark(bookmark_id: int):
                 return_sort=return_sort,
                 return_page=return_page,
                 edit_back_kw=_index_redirect_kwargs(return_q, return_sort, return_page),
+                **sidebar_ctx,
             )
         if merge_with:
             try:
@@ -3112,6 +3166,7 @@ def edit_bookmark(bookmark_id: int):
                 return_sort=return_sort,
                 return_page=return_page,
                 edit_back_kw=_index_redirect_kwargs(return_q, return_sort, return_page),
+                **sidebar_ctx,
             )
         old_url = (row["url"] or "").strip()
         new_url = url.strip()
@@ -3132,6 +3187,7 @@ def edit_bookmark(bookmark_id: int):
                     return_sort=return_sort,
                     return_page=return_page,
                     edit_back_kw=_index_redirect_kwargs(return_q, return_sort, return_page),
+                    **sidebar_ctx,
                 )
             if url_changed:
                 conn.execute(
@@ -3164,6 +3220,7 @@ def edit_bookmark(bookmark_id: int):
         return_sort=return_sort,
         return_page=return_page,
         edit_back_kw=_index_redirect_kwargs(return_q, return_sort, return_page),
+        **sidebar_ctx,
     )
 
 

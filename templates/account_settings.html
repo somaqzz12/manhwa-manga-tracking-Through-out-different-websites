@@ -4,105 +4,91 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Account settings — Manga Watchlist</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root { --bg: #0f1218; --text: #e8ecf3; --muted: #93a4bd; --border: rgba(255,255,255,.1); --accent:#7c6cf5;}
-    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 32px 20px;}
-    .wrap { max-width: 560px; margin: 0 auto; }
-    h1 { font-size: 1.35rem; margin: 0 0 8px; }
-    .lead { color: var(--muted); font-size: 0.93rem; margin: 0 0 22px; line-height: 1.5; }
-    section { background: rgba(15,23,42,.45); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; }
-    h2 { font-size: 0.95rem; margin: 0 0 12px; font-weight: 600; }
-    label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 6px; }
-    input[type="text"], input[type="url"] { width: 100%; box-sizing: border-box; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--border); background: rgba(0,0,0,.25); color: var(--text); font: inherit; }
-    .row { margin-bottom: 14px; }
-    .row:last-child { margin-bottom: 0; }
-    .btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 16px; border-radius: 10px; border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--text); font: inherit; cursor: pointer; text-decoration: none; font-size: 0.88rem;}
-    .btn:hover { background: rgba(255,255,255,.1); }
-    .btn.primary { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600;}
-    .btn.primary:hover { filter: brightness(1.05); }
-    .muted { color: var(--muted); font-size: 0.85rem; line-height: 1.45; margin: 0 0 10px; }
-    .flash { padding: 10px 12px; border-radius: 10px; margin-bottom: 14px; font-size: 0.88rem; border: 1px solid rgba(110,190,255,.35); background: rgba(59,130,246,.12);}
-    .flash.error { border-color: rgba(248,113,113,.45); background: rgba(248,113,113,.1); }
-    .check { display: flex; align-items: flex-start; gap: 10px; font-size: 0.88rem; }
-    .footer { margin-top: 22px; font-size: 0.9rem;}
-    .footer a { color: #a5b4fc; }
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238b5cf6'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
 </head>
 <body>
-  <div class="wrap">
-    <h1>Account settings</h1>
-    <p class="lead">Integrations and optional public sharing. RSS URL is private — anyone with the link can read your titles.</p>
+  <div class="app-shell">
+    {% include "partials/app_sidebar.html" %}
+    <div class="main">
+      <div class="page-single-inner" style="max-width:640px;">
+        <h1 class="page-title" style="margin-bottom:8px;">Account settings</h1>
+        <p class="lead">Integrations and optional public sharing. RSS URL is private — anyone with the link can read your titles.</p>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash{% if category == 'error' %} error{% endif %}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash{% if category == 'error' %} error{% endif %}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
 
-    <form method="post" action="{{ url_for('account_settings') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <form method="post" action="{{ url_for('account_settings') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-      <section>
-        <h2>RSS</h2>
-        <p class="muted">Copy into Feedly, Inoreader, or any RSS client.</p>
-        {% if rss_feed_url %}
-        <input type="text" readonly value="{{ rss_feed_url }}">
-        {% else %}
-        <p class="muted">Unavailable — open the dashboard once to generate a token.</p>
-        {% endif %}
-      </section>
+          <section class="settings-section">
+            <h2>RSS</h2>
+            <p class="muted">Copy into Feedly, Inoreader, or any RSS client.</p>
+            {% if rss_feed_url %}
+            <input type="text" readonly value="{{ rss_feed_url }}">
+            {% else %}
+            <p class="muted">Unavailable — open the dashboard once to generate a token.</p>
+            {% endif %}
+          </section>
 
-      <section>
-        <h2>Chapter webhooks &amp; email</h2>
-        <div class="row">
-          <label for="wh">Optional JSON webhook URL</label>
-          <input id="wh" name="webhook_url" type="url" placeholder="https://example.com/hook" value="{{ webhook_url or '' }}" autocomplete="off">
-        </div>
-        <div class="row check">
-          <input id="em" type="checkbox" name="notify_email_chapters" value="1" {% if notify_email_chapters %}checked{% endif %}>
-          <label for="em" style="margin:0;">Email me when a new chapter is detected (requires <code>SMTP_*</code> server env and a real account email)</label>
-        </div>
-      </section>
+          <section class="settings-section">
+            <h2>Chapter webhooks &amp; email</h2>
+            <div class="row">
+              <label for="wh">Optional JSON webhook URL</label>
+              <input id="wh" name="webhook_url" type="url" placeholder="https://example.com/hook" value="{{ webhook_url or '' }}" autocomplete="off">
+            </div>
+            <div class="row check" style="display:flex;align-items:flex-start;gap:10px;font-size:0.88rem;">
+              <input id="em" type="checkbox" name="notify_email_chapters" value="1" {% if notify_email_chapters %}checked{% endif %} style="margin-top:3px;">
+              <label for="em" style="margin:0;">Email me when a new chapter is detected (requires <code>SMTP_*</code> server env and a real account email)</label>
+            </div>
+          </section>
 
-      <section>
-        <h2>Public read-only list</h2>
-        <p class="muted">Optional slug for a shareable page of titles and progress (no login required).</p>
-        <div class="row">
-          <label for="slug">Slug (3–42 chars, lowercase, digits, hyphens)</label>
-          <input id="slug" name="public_list_slug" type="text" value="{{ public_list_slug or '' }}" placeholder="my-handle" autocomplete="off">
-        </div>
-        {% if public_list_url %}
-        <p class="muted">Live URL: <a href="{{ public_list_url }}" style="color:#a5b4fc;">{{ public_list_url }}</a></p>
-        {% endif %}
-      </section>
+          <section class="settings-section">
+            <h2>Public read-only list</h2>
+            <p class="muted">Optional slug for a shareable page of titles and progress (no login required).</p>
+            <div class="row">
+              <label for="slug">Slug (3–42 chars, lowercase, digits, hyphens)</label>
+              <input id="slug" name="public_list_slug" type="text" value="{{ public_list_slug or '' }}" placeholder="my-handle" autocomplete="off">
+            </div>
+            {% if public_list_url %}
+            <p class="muted">Live URL: <a href="{{ public_list_url }}">{{ public_list_url }}</a></p>
+            {% endif %}
+          </section>
 
-      <section>
-        <h2>API token</h2>
-        <p class="muted">Use <code>Authorization: Bearer …</code> on <code>GET /api/v1/bookmarks</code>. Issuing a new token revokes the previous one.</p>
-        {% if api_token_preview %}
-        <p class="muted">Current token (masked): <strong>{{ api_token_preview }}</strong></p>
-        {% else %}
-        <p class="muted">No token issued yet.</p>
-        {% endif %}
-      </section>
+          <section class="settings-section">
+            <h2>API token</h2>
+            <p class="muted">Use <code>Authorization: Bearer …</code> on <code>GET /api/v1/bookmarks</code>. Issuing a new token revokes the previous one.</p>
+            {% if api_token_preview %}
+            <p class="muted">Current token (masked): <strong>{{ api_token_preview }}</strong></p>
+            {% else %}
+            <p class="muted">No token issued yet.</p>
+            {% endif %}
+          </section>
 
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px;">
-        <button type="submit" class="btn primary" name="action" value="save">Save settings</button>
-        <a class="btn" href="{{ url_for('index') }}">Back to dashboard</a>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px;">
+            <button type="submit" class="btn primary" name="action" value="save">Save settings</button>
+            <a class="btn ghost" href="{{ url_for('index') }}">Back to dashboard</a>
+          </div>
+        </form>
+
+        <form method="post" action="{{ url_for('account_settings') }}" style="margin-bottom:24px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="issue_api_token">
+          <button type="submit" class="btn primary">Issue new API token</button>
+          <span class="muted" style="display:inline-block;margin-left:10px;font-size:0.85rem;">Revokes existing token immediately.</span>
+        </form>
+
+        <p class="muted" style="margin-top:8px;"><a href="{{ url_for('delete_account') }}">Delete account</a></p>
       </div>
-    </form>
-
-    <form method="post" action="{{ url_for('account_settings') }}" style="margin-bottom:24px;">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="action" value="issue_api_token">
-      <button type="submit" class="btn primary">Issue new API token</button>
-      <span class="muted" style="display:inline-block;margin-left:10px;font-size:0.85rem;">Revokes existing token immediately.</span>
-    </form>
-
-    <p class="footer"><a href="{{ url_for('delete_account') }}">Delete account</a></p>
+    </div>
   </div>
 </body>
 </html>

@@ -1,273 +1,95 @@
 <!doctype html>
-<html lang="en" class="">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="{{ site_description }}">
-  <title>Edit series - Manga Watchlist</title>
+  <title>Edit series — Manga Watchlist</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
-  <style>
-    :root {
-      --bg: #f5f1e8;
-      --text: #1a1a1a;
-      --muted: #6f6f6f;
-      --border: #1a1a1a;
-    }
-    .dark {
-      --bg: #0f0f10;
-      --text: #eaeaea;
-      --muted: #9a9a9a;
-      --border: #eaeaea;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      font-family: "Inter", system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      padding: 48px 20px 32px;
-      transition: background 220ms ease, color 220ms ease;
-      background-image:
-        radial-gradient(ellipse 880px 460px at 92% -8%, rgba(124, 92, 255, 0.09), transparent 52%),
-        radial-gradient(ellipse 560px 380px at 6% 100%, rgba(167, 139, 250, 0.06), transparent 48%);
-    }
-    .page-tools {
-      position: fixed;
-      top: 20px;
-      right: 24px;
-      z-index: 10;
-    }
-    .btn {
-      padding: 10px 18px;
-      border-radius: 999px;
-      font-size: 14px;
-      background: rgba(255, 255, 255, 0.35);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border: 1px solid rgba(0, 0, 0, 0.15);
-      color: #1a1a1a;
-      transition: all 0.2s ease;
-      cursor: pointer;
-      font: inherit;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .btn:hover {
-      transform: translateY(-2px);
-      background: rgba(255, 255, 255, 0.55);
-    }
-    .dark .btn {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      color: #eaeaea;
-    }
-    .dark .btn:hover {
-      background: rgba(255, 255, 255, 0.14);
-    }
-    .btn.btn-primary {
-      width: 100%;
-      margin-top: 8px;
-      background: linear-gradient(135deg, #7c5cff, #a78bfa);
-      color: #fff;
-      border: none;
-      box-shadow: 0 6px 20px rgba(124, 92, 255, 0.3);
-    }
-    .dark .btn.btn-primary {
-      color: #fff;
-    }
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      background: linear-gradient(135deg, #8b6dff, #b59bfa);
-      box-shadow: 0 8px 24px rgba(124, 92, 255, 0.4);
-    }
-    .glass {
-      background: rgba(255, 255, 255, 0.25);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border: 1px solid rgba(0, 0, 0, 0.08);
-      border-radius: 18px;
-    }
-    .dark .glass {
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-    }
-    .card-wrap {
-      position: relative;
-      width: min(520px, 100%);
-    }
-    .back-row {
-      margin-bottom: 14px;
-    }
-    .back-dash {
-      font-size: 0.875rem;
-      font-weight: 500;
-      text-decoration: none;
-    }
-    .card {
-      width: 100%;
-      padding: 28px 32px 26px;
-    }
-    h1 {
-      margin: 0 0 22px;
-      font-family: "Playfair Display", serif;
-      font-size: 1.75rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      color: var(--text);
-    }
-    label {
-      display: block;
-      font-size: 0.8125rem;
-      font-weight: 500;
-      color: var(--muted);
-      margin-bottom: 8px;
-    }
-    .input {
-      width: 100%;
-      margin-bottom: 16px;
-      border-radius: 999px;
-      padding: 12px 16px;
-      background: rgba(255, 255, 255, 0.4);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border: 1px solid rgba(0, 0, 0, 0.1);
-      color: var(--text);
-      font-family: inherit;
-      font-size: 0.9375rem;
-      outline: none;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    }
-    .dark .input {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-    }
-    .input::placeholder { color: color-mix(in srgb, var(--muted) 75%, transparent); }
-    .input:focus {
-      border-color: rgba(124, 92, 255, 0.55);
-      box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.2);
-    }
-    button.is-loading { cursor: wait; opacity: 0.92; }
-    .btn-spinner {
-      display: inline-block;
-      width: 1.25rem;
-      height: 1.25rem;
-      border: 2px solid rgba(255, 255, 255, 0.35);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin 0.75s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .flash-msgs { margin-bottom: 18px; }
-    .flash {
-      padding: 12px 16px;
-      border-radius: 14px;
-      margin-bottom: 10px;
-      font-size: 0.875rem;
-      font-weight: 600;
-      border: 1px solid rgba(0, 0, 0, 0.1);
-      background: rgba(255, 255, 255, 0.35);
-      backdrop-filter: blur(10px);
-    }
-    .dark .flash {
-      border-color: rgba(255, 255, 255, 0.12);
-      background: rgba(255, 255, 255, 0.06);
-    }
-    .flash.success { color: #166534; border-color: rgba(22, 163, 74, 0.35); }
-    .flash.warning { color: #854d0e; border-color: rgba(234, 179, 8, 0.4); }
-    .flash.error { color: #991b1b; border-color: rgba(239, 68, 68, 0.35); }
-    .dark .flash.success { color: #bbf7d0; border-color: rgba(34, 197, 94, 0.35); }
-    .dark .flash.warning { color: #fde68a; border-color: rgba(250, 204, 21, 0.35); }
-    .dark .flash.error { color: #fecaca; border-color: rgba(248, 113, 113, 0.35); }
-    @media (max-width: 375px) {
-      .card { padding: 22px 20px; }
-    }
-  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238b5cf6'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
 </head>
 <body>
-  <div class="page-tools">
-    <button id="themeToggle" class="btn" type="button" aria-label="Toggle theme">☾</button>
-  </div>
-  <div class="card-wrap">
-    <div class="back-row">
-      <a class="back-dash btn" href="{{ url_for('index', **edit_back_kw) }}">← Back to dashboard</a>
-    </div>
-    <div class="card glass">
-      <h1>Edit series</h1>
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <div class="flash-msgs" role="region" aria-label="Notifications">
-            {% for category, message in messages %}
-              <div class="flash {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </div>
+  <div class="app-shell">
+    {% include "partials/app_sidebar.html" %}
+    <div class="main">
+      <div class="page-single-inner" style="max-width:560px;">
+        <p style="margin:0 0 18px;">
+          <a class="btn ghost" href="{{ url_for('index', **edit_back_kw) }}">← Back to dashboard</a>
+        </p>
+
+        <h1 class="page-title" style="font-size:1.45rem;margin-bottom:10px;">Edit series</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div role="region" aria-label="Notifications" style="margin-bottom:16px;">
+              {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <section class="settings-section">
+          <form method="post" id="editBookmarkForm" data-loading-form="true">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="q" value="{{ return_q or '' }}">
+            <input type="hidden" name="sort" value="{{ return_sort }}">
+            <input type="hidden" name="page" value="{{ return_page }}">
+            <div class="row">
+              <label for="edit-title">Title</label>
+              <input id="edit-title" name="title" value="{{ bookmark['title'] }}" placeholder="Series title" aria-label="Title" required>
+            </div>
+            <div class="row">
+              <label for="edit-url">Series URL</label>
+              <input id="edit-url" name="url" type="text" value="{{ bookmark['url'] }}" placeholder="https://…" aria-label="Series URL" required>
+            </div>
+            <button id="editSubmit" class="btn primary" type="submit" style="width:100%;margin-top:4px;">Save changes</button>
+          </form>
+        </section>
+
+        {% if merge_choices %}
+        <section class="settings-section">
+          <form method="post" id="mergeStoryForm" data-loading-form="true">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="title" value="{{ bookmark['title'] }}">
+            <input type="hidden" name="url" value="{{ bookmark['url'] }}">
+            <input type="hidden" name="q" value="{{ return_q or '' }}">
+            <input type="hidden" name="sort" value="{{ return_sort }}">
+            <input type="hidden" name="page" value="{{ return_page }}">
+            <input type="hidden" name="merge_only" value="1">
+            <h2 style="margin-top:0;">Same story, different site</h2>
+            <p class="muted" style="margin:0 0 14px;line-height:1.45;font-size:0.9rem;">Pick another entry to merge. The dashboard shows one card and uses the <strong>highest</strong> reported latest chapter across linked URLs.</p>
+            <div class="row">
+              <label for="merge-with">Link with</label>
+              <select id="merge-with" name="merge_with_bookmark_id">
+                <option value="">Choose a series…</option>
+                {% for o in merge_choices %}
+                  <option value="{{ o['id'] }}">{{ o['title'] }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button class="btn primary" type="submit" style="width:100%;">Link alternate source</button>
+          </form>
+        </section>
         {% endif %}
-      {% endwith %}
-      <form method="post" id="editBookmarkForm" data-loading-form="true">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="q" value="{{ return_q or '' }}">
-        <input type="hidden" name="sort" value="{{ return_sort }}">
-        <input type="hidden" name="page" value="{{ return_page }}">
-        <label for="edit-title">Title</label>
-        <input id="edit-title" class="input" name="title" value="{{ bookmark['title'] }}" placeholder="Series title" aria-label="Title" required>
-        <label for="edit-url">Series URL</label>
-        <input id="edit-url" class="input" name="url" type="text" value="{{ bookmark['url'] }}" placeholder="https://…" aria-label="Series URL" required>
-        <button id="editSubmit" class="btn btn-primary" type="submit" data-loading-text="">Save changes</button>
-      </form>
-      {% if merge_choices %}
-      <form method="post" id="mergeStoryForm" style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(0,0,0,0.08);" data-loading-form="true">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="title" value="{{ bookmark['title'] }}">
-        <input type="hidden" name="url" value="{{ bookmark['url'] }}">
-        <input type="hidden" name="q" value="{{ return_q or '' }}">
-        <input type="hidden" name="sort" value="{{ return_sort }}">
-        <input type="hidden" name="page" value="{{ return_page }}">
-        <input type="hidden" name="merge_only" value="1">
-        <h2 style="font-size:1rem;margin:0 0 10px;font-family:inherit;font-weight:600;">Same story, different site</h2>
-        <p style="font-size:0.85rem;color:var(--muted);margin:0 0 12px;line-height:1.45;">Pick another entry to merge. The dashboard shows one card and uses the <strong>highest</strong> reported latest chapter across linked URLs.</p>
-        <label for="merge-with">Link with</label>
-        <select id="merge-with" name="merge_with_bookmark_id" class="input" style="border-radius:14px;">
-          <option value="">Choose a series…</option>
-          {% for o in merge_choices %}
-            <option value="{{ o['id'] }}">{{ o['title'] }}</option>
-          {% endfor %}
-        </select>
-        <button class="btn btn-primary" type="submit" style="margin-top:10px;">Link alternate source</button>
-      </form>
-      {% endif %}
+      </div>
     </div>
   </div>
   <script>
-    const toggle = document.getElementById("themeToggle");
-    toggle.onclick = () => {
-      document.documentElement.classList.toggle("dark");
-      localStorage.setItem(
-        "theme",
-        document.documentElement.classList.contains("dark") ? "dark" : "light"
-      );
-    };
-    if (localStorage.getItem("theme") === "dark") {
-      document.documentElement.classList.add("dark");
-    }
-
     const form = document.getElementById("editBookmarkForm");
     const submitBtn = document.getElementById("editSubmit");
-    form.addEventListener("submit", () => {
-      submitBtn.dataset.originalHtml = submitBtn.innerHTML;
-      submitBtn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
-      submitBtn.disabled = true;
-      submitBtn.classList.add("is-loading");
-      submitBtn.setAttribute("aria-busy", "true");
-    });
+    if (form && submitBtn) {
+      form.addEventListener("submit", () => {
+        submitBtn.dataset.originalHtml = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
+        submitBtn.disabled = true;
+        submitBtn.classList.add("is-loading");
+        submitBtn.setAttribute("aria-busy", "true");
+      });
+    }
   </script>
 </body>
 </html>
