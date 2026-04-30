@@ -179,6 +179,29 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn("Safety", body)
         self.assertIn("scripting", body.lower())
 
+    def test_homepage_has_unified_search_routing(self):
+        res = self.client.get("/")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("Search manga, manhwa, or paste a URL...", body)
+        self.assertIn('id="hero-discover-form"', body)
+        self.assertIn('id="hero-q"', body)
+        self.assertIn("?url=", body)
+
+    def test_discover_query_specific_results_or_empty_state(self):
+        hit = self.client.get("/discover?q=solo")
+        self.assertEqual(hit.status_code, 200)
+        hit_body = hit.get_data(as_text=True)
+        self.assertIn('Results for "solo".', hit_body)
+        self.assertIn("Solo Leveling", hit_body)
+
+        miss = self.client.get("/discover?q=zzzz-nothing-found")
+        self.assertEqual(miss.status_code, 200)
+        miss_body = miss.get_data(as_text=True)
+        self.assertIn("No matches yet", miss_body)
+        self.assertIn("Search supported sites live", miss_body)
+        self.assertIn("Paste URL", miss_body)
+
     def test_login_register_path_aliases(self):
         r1 = self.client.get("/login", follow_redirects=False)
         self.assertEqual(r1.status_code, 302)
@@ -220,6 +243,7 @@ class AppRegressionTests(unittest.TestCase):
         body = res.get_data(as_text=True)
         self.assertIn("Add URL", body)
         self.assertIn("https://example.com/m", body)
+        self.assertIn("requestSubmit()", body)
 
     def test_api_resolve_url_manual_fallback_on_detection_failure(self):
         with patch.object(app, "is_public_http_url", return_value=True), patch.object(
@@ -526,6 +550,44 @@ class AppRegressionTests(unittest.TestCase):
             json={"url": "https://example.com/series/demo", "support_level": "manual_only", "title": "Demo"},
         )
         self.assertEqual(res.status_code, 401)
+
+    def test_dashboard_empty_state_shows_add_and_discover_actions(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("emptydash", "emptydash@example.com", generate_password_hash("secret12"), now),
+            )
+            uid = int(conn.execute("SELECT id FROM users WHERE email = ?", ("emptydash@example.com",)).fetchone()["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        res = self.client.get("/app")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn('href="/app/add"', body)
+        self.assertIn('href="/discover"', body)
+
+    def test_discover_and_home_cards_have_real_action_hrefs(self):
+        discover_res = self.client.get("/discover")
+        self.assertEqual(discover_res.status_code, 200)
+        discover_body = discover_res.get_data(as_text=True)
+        self.assertIn("/discover?q=", discover_body)
+        self.assertIn("/app/add?title=", discover_body)
+
+        home_res = self.client.get("/")
+        self.assertEqual(home_res.status_code, 200)
+        home_body = home_res.get_data(as_text=True)
+        self.assertIn("/discover?q=", home_body)
+        self.assertIn("/app/add?title=", home_body)
+
+    def test_demo_sections_are_labeled(self):
+        discover_res = self.client.get("/discover")
+        self.assertEqual(discover_res.status_code, 200)
+        body = discover_res.get_data(as_text=True)
+        self.assertIn("Starter picks · Demo", body)
+        self.assertIn("Recently updated examples · Demo", body)
 
     def test_add_from_preview_manual_only_requires_title_when_missing(self):
         from werkzeug.security import generate_password_hash

@@ -4,6 +4,12 @@
     <span class="dash-topbar-logo" aria-hidden="true">MW</span>
     <span class="dash-topbar-wordmark">Manga Watchlist</span>
   </a>
+  <nav class="shell-nav" aria-label="Public">
+    <a href="{{ url_for('discover_page') }}">Discover</a>
+    <a href="{{ url_for('sources_page') }}">Sources</a>
+    <a href="{{ url_for('extension_page') }}">Extension</a>
+    <a class="shell-nav-app" href="{{ url_for('index') }}">Open App</a>
+  </nav>
   <div class="dash-topbar-actions dash-topbar-actions--shell">
     <button type="button" class="dash-icon-btn mobile-menu-button" id="library-tools-toggle" aria-expanded="false" aria-controls="library-tools-panel" title="Menu" aria-label="Open menu">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>

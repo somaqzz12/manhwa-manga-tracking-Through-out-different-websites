@@ -33,6 +33,7 @@ from routes.public import register_public_routes
 from werkzeug.security import check_password_hash, generate_password_hash
 from services import chapter_parsing as chapter
 from services import discovery
+from services import discovery_home
 from services import reading_insights
 from services import source_registry
 from services import story_groups
@@ -2845,68 +2846,17 @@ LANDING_RECENT_UPDATES_DEMO = [
 ]
 
 
-def _landing_series_card(slug: str) -> Optional[dict]:
-    from services import discovery
-
-    by_slug = {row["slug"]: row for row in discovery.LOCAL_DISCOVERY_CATALOG}
-    raw = by_slug.get(slug)
-    if not raw:
-        return None
-    d = discovery._decorate_series(raw)
-    st = (d.get("type") or "manga").strip().lower()
-    type_label = "Manhwa" if st == "manhwa" else "Manga"
-    return {
-        "slug": d["slug"],
-        "title": d["title"],
-        "type_label": type_label,
-        "latest_chapter": d.get("latest_chapter") or "?",
-        "sources_found": int(d.get("sources_found") or 0),
-        "cover_url": (d.get("cover_url") or "").strip(),
-    }
-
-
-def _landing_cards_for_slugs(slugs: list[str]) -> list[dict]:
-    out: list[dict] = []
-    for s in slugs:
-        row = _landing_series_card(s)
-        if row:
-            out.append(row)
-    return out
-
-
 def home():
-    trending_slugs = [
-        "solo-leveling",
-        "omniscient-reader",
-        "tower-of-god",
-        "the-beginning-after-the-end",
-        "jujutsu-kaisen",
-        "one-piece",
-    ]
-    manhwa_slugs = [
-        "solo-leveling",
-        "tower-of-god",
-        "omniscient-reader",
-        "the-beginning-after-the-end",
-        "lookism",
-        "eleceed",
-    ]
-    manga_slugs = [
-        "one-piece",
-        "jujutsu-kaisen",
-        "chainsaw-man",
-        "blue-lock",
-        "vinland-saga",
-        "berserk",
-    ]
+    home_data = discovery_home.build_discovery_home_data(supported_source_policy())
     return render_template(
         "landing_v2.html",
-        trending=LANDING_TRENDING_DEMO,
-        source_preview=LANDING_SOURCE_PREVIEW,
-        landing_trending_cards=_landing_cards_for_slugs(trending_slugs),
-        landing_popular_manhwa=_landing_cards_for_slugs(manhwa_slugs),
-        landing_popular_manga=_landing_cards_for_slugs(manga_slugs),
-        landing_recent_updates=LANDING_RECENT_UPDATES_DEMO,
+        landing_trending_cards=home_data["starter_picks"],
+        landing_popular_manhwa=home_data["popular_manhwa"],
+        landing_popular_manga=home_data["popular_manga"],
+        landing_recent_updates=home_data["recently_updated_examples"],
+        landing_source_comparison=home_data["source_comparison_example"],
+        landing_source_summary=home_data["supported_source_summary"],
+        landing_is_demo=home_data["is_demo"],
         current_user=get_current_user(),
     )
 
@@ -2920,7 +2870,7 @@ def discover_page():
     url_q = (request.args.get("url") or "").strip()
     local = discovery.search_local_series(q) if q else []
     results = local[:8]
-    trend = discovery.trending_snapshot()
+    home_data = discovery_home.build_discovery_home_data(supported_source_policy())
     resolved = None
     if url_q:
         try:
@@ -2936,7 +2886,7 @@ def discover_page():
         q=q,
         url_q=url_q,
         results=results,
-        trending=trend,
+        trending=discovery.trending_snapshot(),
         source_policy=supported_source_policy(),
         resolved=resolved,
         current_user=get_current_user(),
@@ -2946,6 +2896,12 @@ def discover_page():
         page=1,
         check_all_status_text="",
         total_count=0,
+        landing_starter_picks=home_data["starter_picks"],
+        landing_popular_manhwa=home_data["popular_manhwa"],
+        landing_popular_manga=home_data["popular_manga"],
+        landing_recent_updates=home_data["recently_updated_examples"],
+        landing_source_comparison=home_data["source_comparison_example"],
+        landing_is_demo=home_data["is_demo"],
     )
 
 

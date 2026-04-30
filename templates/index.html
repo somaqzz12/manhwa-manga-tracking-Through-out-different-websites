@@ -134,7 +134,10 @@
         <p class="library-empty-title">Your library is a blank canvas</p>
         <p class="library-empty-sub muted">Add a series URL to start tracking chapters and covers.</p>
         {% if not demo_mode %}
-        <button type="button" class="btn primary" id="empty-add-first">Add your first series</button>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+          <a class="btn primary" href="{{ url_for('app_add_url') }}">Add URL</a>
+          <a class="btn ghost" href="{{ url_for('discover_page') }}">Discover</a>
+        </div>
         {% else %}
         <a class="btn primary" href="{{ url_for('auth_page') }}">Sign in for your library</a>
         {% endif %}
@@ -168,10 +171,6 @@
   {% include "partials/menu_drawer_script.html" %}
   <script>
     const DEAD_SERIES_DAYS = {{ dead_series_days|int }};
-
-    document.getElementById("empty-add-first")?.addEventListener("click", () => {
-      window.focusAddManga?.();
-    });
 
     (function tabFilter() {
       const tabs = document.querySelectorAll(".filter-tab");

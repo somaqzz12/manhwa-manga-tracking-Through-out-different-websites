@@ -561,6 +561,33 @@ button.is-loading {
   margin-left: auto;
 }
 
+.shell-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: 8px;
+}
+
+.shell-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.shell-nav a:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.shell-nav .shell-nav-app {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-solid) 86%, transparent);
+  color: var(--text);
+}
+
 .drawer-nav {
   display: flex;
   flex-direction: column;
@@ -999,11 +1026,36 @@ button.is-loading {
 .story-cover-placeholder {
   aspect-ratio: 2 / 3;
   width: 100%;
+  position: relative;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--panel-solid) 70%, var(--bg) 30%);
-  color: var(--muted);
-  font-size: 0.82rem;
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--accent) 14%, var(--panel-solid)),
+    color-mix(in srgb, var(--accent-2) 10%, var(--panel-2))
+  );
+  color: color-mix(in srgb, var(--accent) 70%, var(--text));
+}
+
+.story-cover-placeholder-text {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.story-cover-placeholder-badge {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: color-mix(in srgb, var(--panel-solid) 88%, transparent);
 }
 
 body.page-dashboard.cover-aspect-169 .story-cover,
@@ -2677,7 +2729,7 @@ body {
 }
 
 .story-card-visual {
-  height: 360px;
+  height: 272px;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
@@ -2730,11 +2782,15 @@ body {
 
 @media (max-width: 899px) {
   .story-card-visual {
-    height: 248px;
+    height: 224px;
   }
 
   .story-grid {
     grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
     gap: 14px;
+  }
+
+  .shell-nav {
+    display: none;
   }
 }

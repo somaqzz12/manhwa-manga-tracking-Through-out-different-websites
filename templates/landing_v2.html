@@ -344,7 +344,7 @@
     </section>
 
     <section class="block">
-      <p class="section-note">Featured examples</p>
+      <p class="section-note">Featured examples{% if landing_is_demo %} · Demo{% endif %}</p>
       <h2>Starter picks</h2>
       <p class="section-lead" style="font-size:0.95rem;">Popular titles people often track — try the discovery flow with familiar manga and manhwa (not live rankings).</p>
       <div class="card-grid card-grid--six" style="margin-top:18px;">
@@ -370,7 +370,7 @@
     </section>
 
     <section class="block">
-      <p class="section-note">Featured examples</p>
+      <p class="section-note">Featured examples{% if landing_is_demo %} · Demo{% endif %}</p>
       <h2>Popular manhwa</h2>
       <div class="card-grid" style="margin-top:18px;">
         {% for card in landing_popular_manhwa %}
@@ -395,7 +395,7 @@
     </section>
 
     <section class="block">
-      <p class="section-note">Featured examples</p>
+      <p class="section-note">Featured examples{% if landing_is_demo %} · Demo{% endif %}</p>
       <h2>Popular manga</h2>
       <div class="card-grid" style="margin-top:18px;">
         {% for card in landing_popular_manga %}
@@ -425,10 +425,9 @@
       <table class="table" style="margin-top:14px;">
         <thead><tr><th>Source</th><th>Support</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td>MangaDex</td><td>Automatic</td><td>Public metadata &amp; catalog API</td></tr>
-          <tr><td>WEBTOON</td><td>Manual</td><td>Official publisher site — track the URL yourself</td></tr>
-          <tr><td>Asura</td><td>Manual only</td><td>User-added mirror — auto checks may be limited</td></tr>
-          <tr><td>Unknown site</td><td>Requested</td><td>Future adapter — request from Source Requests</td></tr>
+          {% for row in landing_source_comparison %}
+          <tr><td>{{ row.source|e }}</td><td>{{ row.support|e }}</td><td>{{ row.notes|e }}</td></tr>
+          {% endfor %}
         </tbody>
       </table>
       <p class="compare-rec">Recommended: <strong>MangaDex</strong> for automatic chapter checks when healthy.</p>
