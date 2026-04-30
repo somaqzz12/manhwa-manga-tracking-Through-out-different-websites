@@ -120,6 +120,7 @@ All configuration is via environment variables. The `Required?` column is what t
 
 ## Source catalog and health checks
 
+- The committed `sources/sources.manifest.json` is filtered to non-NSFW public sources. Raw upstream manifests are local-only and ignored by Git.
 - **Validate structure:** `python scripts/validate_catalog.py` — fails if any source is missing `sample_series_url` or domains (use in CI).
 - **Probe all samples:** `python scripts/check_sources.py` — writes `sources/_health.json` (gitignored; generate on each server or in release automation) used by `/sources` and `GET /api/registry/public`.
 - **Scheduler:** When `SOURCE_HEALTH_INTERVAL_HOURS` is greater than `0`, the same probe runs on that interval in-process (single leader; see `SCHEDULER_LEADER`).

@@ -3,6 +3,8 @@ import os
 import json
 import tempfile
 import shutil
+from pathlib import Path
+from urllib.parse import urlparse
 from unittest.mock import patch
 
 from services import source_registry
@@ -114,6 +116,94 @@ class SourceRegistryTests(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def test_public_snapshot_excludes_nsfw_sources(self):
+        tmp = tempfile.mkdtemp(prefix="src-reg-")
+        try:
+            catalog = {
+                "version": 1,
+                "sources": [
+                    {
+                        "id": "safe_source",
+                        "display_name": "Safe Source",
+                        "domains": ["safe.example"],
+                        "parsing_strategy": "css_chapter_links",
+                        "chapter_link_selector": "a.ch",
+                        "nsfw": False,
+                    },
+                    {
+                        "id": "nsfw_source",
+                        "display_name": "NSFW Source",
+                        "domains": ["adult.example"],
+                        "parsing_strategy": "css_chapter_links",
+                        "chapter_link_selector": "a.ch",
+                        "nsfw": True,
+                    },
+                ],
+            }
+            with open(os.path.join(tmp, "catalog.json"), "w", encoding="utf-8") as f:
+                json.dump(catalog, f)
+            os.environ["SOURCES_DIR"] = tmp
+            source_registry._SOURCES_MTIME = source_registry._SOURCES_NEVER_LOADED
+
+            snapshot = source_registry.public_api_snapshot()
+            self.assertEqual(snapshot.get("source_count"), 1)
+            domains = snapshot.get("domains") or []
+            self.assertIn("safe.example", domains)
+            self.assertNotIn("adult.example", domains)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_manifest_import_skips_nsfw_extensions(self):
+        tmp = tempfile.mkdtemp(prefix="src-reg-")
+        try:
+            catalog = {"version": 1, "sources": []}
+            manifest = [
+                {
+                    "name": "Safe Ext",
+                    "pkg": "pkg.safe",
+                    "nsfw": False,
+                    "sources": [{"id": "safe", "name": "Safe", "baseUrl": "https://safe.example"}],
+                },
+                {
+                    "name": "Adult Ext",
+                    "pkg": "pkg.adult",
+                    "nsfw": True,
+                    "sources": [{"id": "adult", "name": "Adult", "baseUrl": "https://nhentai.xxx"}],
+                },
+            ]
+            with open(os.path.join(tmp, "catalog.json"), "w", encoding="utf-8") as f:
+                json.dump(catalog, f)
+            with open(os.path.join(tmp, "sources.manifest.json"), "w", encoding="utf-8") as f:
+                json.dump(manifest, f)
+            os.environ["SOURCES_DIR"] = tmp
+            source_registry._SOURCES_MTIME = source_registry._SOURCES_NEVER_LOADED
+
+            rows = source_registry.list_sources()
+            domains = {d for r in rows for d in (r.get("domains") or [])}
+            self.assertIn("safe.example", domains)
+            self.assertNotIn("nhentai.xxx", domains)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SourceManifestRepositoryPolicyTests(unittest.TestCase):
+    def test_committed_manifest_has_no_nsfw_or_local_urls(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        manifest_path = repo_root / "sources" / "sources.manifest.json"
+        payload = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+        self.assertIsInstance(payload, list)
+
+        blocked_hosts = {"localhost", "127.0.0.1", "0.0.0.0"}
+        for ext in payload:
+            self.assertFalse(bool(ext.get("nsfw", False)), "nsfw extension must not be committed")
+            for src in ext.get("sources") or []:
+                self.assertFalse(bool(src.get("nsfw", False)), "nsfw source must not be committed")
+                base = str(src.get("baseUrl") or "")
+                self.assertTrue(base.startswith("http://") or base.startswith("https://"))
+                parsed_host = (urlparse(base).hostname or "").lower()
+                self.assertTrue(parsed_host)
+                self.assertNotIn(parsed_host, blocked_hosts)
