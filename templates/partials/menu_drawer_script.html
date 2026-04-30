@@ -2,36 +2,51 @@
 (function libraryDrawer() {
   const panel = document.getElementById("library-tools-panel");
   const backdrop = document.getElementById("library-tools-backdrop");
-  const toggle = document.getElementById("library-tools-toggle");
+  const mobileToggle = document.getElementById("library-tools-toggle");
+  const settingsToggle = document.getElementById("library-tools-settings-toggle");
+  const titleEl = document.getElementById("library-menu-title");
   const closeBtn = document.getElementById("library-tools-close");
-  if (!panel || !toggle) return;
+  const toggles = [mobileToggle, settingsToggle].filter(Boolean);
+  if (!panel || toggles.length === 0) return;
+  const desktopMq = window.matchMedia("(min-width: 900px)");
+
+  function syncDrawerMode() {
+    const isDesktop = desktopMq.matches;
+    if (titleEl) titleEl.textContent = isDesktop ? "Settings" : "Menu";
+    panel.classList.toggle("is-desktop", isDesktop);
+    panel.classList.toggle("is-mobile", !isDesktop);
+    if (isDesktop) closeDrawer();
+  }
 
   function openDrawer() {
     panel.classList.add("is-open");
-    backdrop.classList.add("is-open");
+    backdrop?.classList.add("is-open");
     panel.setAttribute("aria-hidden", "false");
-    backdrop.setAttribute("aria-hidden", "false");
-    toggle.setAttribute("aria-expanded", "true");
+    backdrop?.setAttribute("aria-hidden", "false");
+    toggles.forEach((btn) => btn.setAttribute("aria-expanded", "true"));
     document.body.classList.add("drawer-open");
   }
   function closeDrawer() {
     panel.classList.remove("is-open");
-    backdrop.classList.remove("is-open");
+    backdrop?.classList.remove("is-open");
     panel.setAttribute("aria-hidden", "true");
-    backdrop.setAttribute("aria-hidden", "true");
-    toggle.setAttribute("aria-expanded", "false");
+    backdrop?.setAttribute("aria-hidden", "true");
+    toggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
     document.body.classList.remove("drawer-open");
   }
-  function toggleDrawer() {
+  function toggleDrawer(e) {
+    if (e) e.preventDefault();
     if (panel.classList.contains("is-open")) closeDrawer();
     else openDrawer();
   }
-  toggle.addEventListener("click", toggleDrawer);
+  toggles.forEach((btn) => btn.addEventListener("click", toggleDrawer));
   closeBtn?.addEventListener("click", closeDrawer);
   backdrop?.addEventListener("click", closeDrawer);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && panel.classList.contains("is-open")) closeDrawer();
   });
+  syncDrawerMode();
+  desktopMq.addEventListener("change", syncDrawerMode);
   window.openLibraryTools = openDrawer;
   window.focusAddManga = () => {
     openDrawer();
@@ -40,24 +55,34 @@
 })();
 
 (function themeMode() {
-  const STORAGE = "mt-theme";
+  const STORAGE = "manga-theme";
+  const validThemes = ["normal", "dark"];
   const select = document.getElementById("themeSelect");
+  const root = document.documentElement;
   const body = document.body;
-  if (!body) return;
+  if (!body || !root) return;
 
-  function apply(theme) {
-    const next = theme === "light" ? "light" : "dark";
-    body.setAttribute("data-theme", next);
-    if (select) select.value = next;
+  function getInitialTheme() {
+    const saved = localStorage.getItem(STORAGE);
+    if (!validThemes.includes(saved)) {
+      localStorage.setItem(STORAGE, "normal");
+      return "normal";
+    }
+    return saved || "normal";
   }
 
-  const saved = localStorage.getItem(STORAGE) || "dark";
-  apply(saved);
+  function apply(theme) {
+    const next = validThemes.includes(theme) ? theme : "normal";
+    root.setAttribute("data-theme", next);
+    body.setAttribute("data-theme", next);
+    if (select) select.value = next;
+    localStorage.setItem(STORAGE, next);
+  }
+
+  apply(getInitialTheme());
 
   select?.addEventListener("change", () => {
-    const val = select.value === "light" ? "light" : "dark";
-    localStorage.setItem(STORAGE, val);
-    apply(val);
+    apply(select.value);
   });
 })();
 </script>

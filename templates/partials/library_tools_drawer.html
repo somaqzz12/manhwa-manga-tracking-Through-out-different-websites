@@ -11,7 +11,7 @@
   </div>
   <div class="library-drawer-body">
 
-    <nav class="drawer-nav" aria-label="Site">
+    <nav class="drawer-nav mobile-nav-section" aria-label="Site">
       <span class="sidebar-label">Navigate</span>
       <a class="drawer-nav-link {% if request.endpoint == 'index' %}is-active{% endif %}" href="{{ url_for('index') }}">Dashboard</a>
       {% if current_user is defined and current_user and not demo_mode|default(false) %}
@@ -25,11 +25,11 @@
       <a class="drawer-nav-link {% if request.endpoint == 'demo_dashboard' %}is-active{% endif %}" href="{{ url_for('demo_dashboard') }}">Demo</a>
     </nav>
 
-    <section class="library-drawer-section">
+    <section class="library-drawer-section drawer-settings-section">
       <span class="sidebar-label">Theme</span>
       <select id="themeSelect" class="sidebar-select" aria-label="Theme mode">
+        <option value="normal">Normal mode</option>
         <option value="dark">Dark mode</option>
-        <option value="light">Normal mode</option>
       </select>
       <p class="muted" style="margin:8px 0 0;font-size:0.78rem;line-height:1.4;">Saved on this device and used app-wide.</p>
     </section>
