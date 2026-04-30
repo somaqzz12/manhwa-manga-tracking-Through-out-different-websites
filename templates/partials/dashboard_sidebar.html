@@ -4,29 +4,36 @@
       <span class="dashboard-mark">MW</span>
       <span class="sidebar-brand-text">
         <strong class="sidebar-title">Manga Watchlist</strong>
-        <small class="sidebar-subtitle">Reading Tracker</small>
+        <small class="sidebar-subtitle">Reading tracker</small>
       </span>
     </a>
   </div>
 
   <div class="dashboard-sidebar-search sidebar-search">
-    <input id="sidebarSearch" type="search" placeholder="Search titles..." autocomplete="off">
+    <input id="sidebarSearch" type="search" placeholder="Filter library titles…" autocomplete="off">
   </div>
 
   <nav class="dashboard-sidebar-nav sidebar-nav">
-    <a class="dashboard-nav-item sidebar-link is-active active" href="{{ url_for('index') }}"><span>Your Library</span> <span class="dashboard-nav-ct">{{ total_count or 0 }}</span></a>
-    <a class="dashboard-nav-item sidebar-link" href="{{ url_for('app_add_url') }}"><span>Add URL</span></a>
+    <span class="dashboard-nav-label sidebar-section-label">Library</span>
+    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'index' %} is-active{% endif %}" href="{{ url_for('index') }}"><span>Reading library</span> <span class="dashboard-nav-ct">{{ total_count or 0 }}</span></a>
+    <a class="dashboard-nav-item sidebar-link sidebar-link--primary{% if request.endpoint == 'app_add_url' %} is-active{% endif %}" href="{{ url_for('app_add_url') }}"><span>Add URL</span></a>
+    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'discover_page' %} is-active{% endif %}" href="{{ url_for('discover_page') }}"><span>Discover</span></a>
     {% if current_user is defined and current_user and not demo_mode|default(false) %}
-    <a class="dashboard-nav-item sidebar-link" href="{{ url_for('next_up') }}"><span>Next up</span></a>
+    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'next_up' %} is-active{% endif %}" href="{{ url_for('next_up') }}"><span>Next up</span></a>
     {% endif %}
-    <span class="dashboard-nav-label sidebar-section-label">Manage</span>
-    <a class="dashboard-nav-item sidebar-link" href="{{ url_for('sources_page') }}"><span>Sources</span></a>
-    <a class="dashboard-nav-item sidebar-link" href="{{ url_for('source_requests_page') }}"><span>Source requests</span></a>
-    <a class="dashboard-nav-item sidebar-link" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer"><span>Extension ZIP</span></a>
+
+    <span class="dashboard-nav-label sidebar-section-label">Catalog</span>
+    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'sources_page' %} is-active{% endif %}" href="{{ url_for('sources_page') }}"><span>Sources</span></a>
+    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'source_requests_page' %} is-active{% endif %}" href="{{ url_for('source_requests_page') }}"><span>Source requests</span></a>
+
+    <span class="dashboard-nav-label sidebar-section-label">Tools</span>
+    <a class="dashboard-nav-item sidebar-link sidebar-link--external" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer"><span>Extension</span></a>
+    <a class="dashboard-nav-item sidebar-link" href="/export" title="Download JSON backup. Import from the menu (☰) → Restore backup."><span>Import / Export</span></a>
+
     <div class="sidebar-bottom">
       <span class="dashboard-nav-label sidebar-section-label">Account</span>
-      <a class="dashboard-nav-item sidebar-link" href="{{ url_for('account_settings') }}"><span>Settings</span></a>
-      <a class="dashboard-nav-item sidebar-link" href="{{ url_for('privacy_page') }}"><span>Privacy</span></a>
+      <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'account_settings' %} is-active{% endif %}" href="{{ url_for('account_settings') }}"><span>Settings</span></a>
+      <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'privacy_page' %} is-active{% endif %}" href="{{ url_for('privacy_page') }}"><span>Privacy</span></a>
     </div>
   </nav>
 </aside>

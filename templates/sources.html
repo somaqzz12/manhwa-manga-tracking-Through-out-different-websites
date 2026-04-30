@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%239880ff'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%239b6b43'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
 </head>
 <body class="page-app" data-theme="normal">
   <div class="app-shell app-shell--full">
@@ -18,70 +18,88 @@
       <div class="page-single-inner" style="max-width:1100px;">
         <h1 class="page-title page-title--display">Supported sources</h1>
         <p class="lead">
-          Open-source tracker with a growing <strong>source engine</strong>. Status reflects catalog defaults and (when present) the last <code>scripts/check_sources.py</code> run — we do not claim sites work until the checker proves it.
+          Curated, SFW catalog entries we surface publicly. Health checks (when you run <code>scripts/check_sources.py</code>) refine status — we don’t claim a site works until the checker proves it.
         </p>
 
         <div class="source-stats">
-          <div class="source-stat"><strong>{{ counts.total }}</strong><span>Catalog</span></div>
+          <div class="source-stat"><strong>{{ counts.total }}</strong><span>In this view</span></div>
           <div class="source-stat"><strong>{{ counts.working }}</strong><span>Working today</span></div>
           <div class="source-stat"><strong>{{ counts.partial }}</strong><span>Partial</span></div>
           <div class="source-stat"><strong>{{ counts.broken }}</strong><span>Broken</span></div>
         </div>
         <p class="muted" style="margin-top:-8px;margin-bottom:12px;">
-          Source support policy: <strong>official_api</strong> and <strong>site_adapter</strong> are automatic, <strong>generic_detector</strong> is experimental, <strong>manual_only</strong> allows URL/progress tracking only, <strong>blocked</strong> is not supported.
+          <strong>How support works:</strong> automatic adapters and APIs resolve chapters; experimental detection tries generic page patterns; manual keeps URL + progress without scraping; unavailable sites are blocked. Request new domains from Source Requests.
         </p>
         {% if health_updated_at %}
           <p class="muted" style="margin-top:-8px;margin-bottom:24px;">Last health run: <code>{{ health_updated_at }}</code></p>
         {% else %}
-          <p class="muted" style="margin-top:-8px;margin-bottom:24px;">No health file yet — run <code>python scripts/check_sources.py</code> (or wait for the scheduler) to populate <code>sources/_health.json</code>. That file is generated per environment and is not checked into git.</p>
+          <p class="muted" style="margin-top:-8px;margin-bottom:24px;">No health file yet — run <code>python scripts/check_sources.py</code> to populate <code>sources/_health.json</code> (per environment, not in git).</p>
         {% endif %}
 
-        <div class="sources-grid">
-          {% for s in sources %}
-            {% set h = s.health or {} %}
-            {% set eff = (h.get('check_status') or s.status or 'partial')|lower %}
-            <article class="source-card">
-              <h2>{{ s.display_name }}</h2>
-              <div class="muted" style="font-size:0.88rem;margin-bottom:8px;">
-                <span class="status-pill {{ eff }}">{{ eff }}</span>
-                {% if s.policy_support_level %}
-                <span class="status-pill policy {{ s.policy_support_level }}">{{ s.policy_support_level }}</span>
-                {% endif %}
-                {% if s.policy_risk_level %}
-                <span class="status-pill risk {{ s.policy_risk_level }}">risk: {{ s.policy_risk_level }}</span>
-                {% endif %}
-                <span>{{ s.domains | join(', ') }}</span>
-                · {{ s.language }} · {{ s.content_type }}
-                {% if s.nsfw %}· NSFW{% endif %}
-                {% if s.needs_js %}· needs JS{% endif %}
-              </div>
-              {% if s.policy_support_level == 'official_api' or s.policy_support_level == 'site_adapter' %}
-                <p class="source-notes">Supported automatically. We can detect metadata, chapter lists, and latest updates from this source.</p>
-              {% elif s.policy_support_level == 'generic_detector' %}
-                <p class="source-notes">Experimental detection. We try to read public metadata and chapter hints; if it fails, manual tracking still works.</p>
-              {% elif s.policy_support_level == 'manual_only' %}
-                <p class="source-notes">Manual tracking only. Save this URL and track progress, but automatic chapter checks are disabled.</p>
-              {% elif s.policy_support_level == 'blocked' %}
-                <p class="source-notes">This source is not supported because it is unavailable, unsafe, or requires access methods this project does not use.</p>
-              {% endif %}
-              {% if s.extension or s.package %}
-                <div class="muted" style="font-size:0.8rem;margin-bottom:8px;">
-                  {% if s.extension %}<span>{{ s.extension }}</span>{% endif %}
-                  {% if s.package %}{% if s.extension %} · {% endif %}<code>{{ s.package }}</code>{% endif %}
-                  {% if s.version %} · v{{ s.version }}{% endif %}
+        {% if not source_groups %}
+        <p class="muted" style="margin-bottom:24px;">No curated public sources matched the display filter. Check <code>sources/catalog.json</code> and <code>sources/sources.registry.json</code> policy domains.</p>
+        {% endif %}
+
+        {% for group_name, group_sources in source_groups %}
+        <section class="source-group" aria-labelledby="src-grp-{{ loop.index }}">
+          <h2 class="source-group-title" id="src-grp-{{ loop.index }}">{{ group_name }}</h2>
+          {% if group_name == "Automatic" %}
+          <p class="source-group-note">Official APIs and structured catalogs — metadata and chapters resolve automatically when healthy.</p>
+          {% elif group_name == "Supported" %}
+          <p class="source-group-note">First-party adapters for popular readers; best-effort chapter lists and latest updates.</p>
+          {% elif group_name == "Experimental" %}
+          <p class="source-group-note">Generic detectors — may work on new mirrors; falls back to manual tracking if parsing fails.</p>
+          {% elif group_name == "Extension-assisted" %}
+          <p class="source-group-note">Companion catalog entries and requested adapters — use the extension or paste URLs; coverage improves over time.</p>
+          {% elif group_name == "Manual" %}
+          <p class="source-group-note">Save the listing URL and track progress yourself — no automatic chapter polling.</p>
+          {% elif group_name == "Unavailable" %}
+          <p class="source-group-note">Blocked or unsupported — we don’t attempt automated access.</p>
+          {% else %}
+          <p class="source-group-note">Additional catalog entries.</p>
+          {% endif %}
+
+          <div class="sources-grid">
+            {% for s in group_sources %}
+              {% set h = s.health or {} %}
+              {% set eff = (h.get('check_status') or s.status or 'partial')|lower %}
+              <article class="source-card">
+                <h2>{{ s.display_name }}</h2>
+                <div class="muted" style="font-size:0.88rem;margin-bottom:8px;">
+                  <span class="status-pill {{ eff }}">{{ eff }}</span>
+                  <span class="status-pill friendly-tag">{{ s.friendly_support }}</span>
+                  <span>{{ s.domains | join(', ') }}</span>
+                  · {{ s.language }}
+                  {% if s.needs_js %}· needs JS{% endif %}
                 </div>
-              {% endif %}
-              {% if h.get('checked_at') %}
-                <div class="muted" style="font-size:0.85rem;">Checked: {{ h.get('checked_at') }}{% if h.get('chapter_num') is not none %} · latest ch. {{ h.get('chapter_num') }}{% endif %}</div>
-              {% endif %}
-              {% if s.notes %}<p class="source-notes">{{ s.notes }}</p>{% endif %}
-              {% if h.get('error') %}<p class="source-notes">Last probe error: {{ h.get('error') }}</p>{% endif %}
-              <p class="muted" style="margin-top:12px;margin-bottom:0;font-size:0.85rem;">
-                <a href="{{ build_source_bug_report_url(source_id=s.id, domain=(s.domains[0] if s.domains else ''), series_url=s.sample_series_url or '', last_error=h.get('error') or '', parser_version=h.get('parser_version') or '') }}" rel="noopener noreferrer" target="_blank">Report broken source</a>
-              </p>
-            </article>
-          {% endfor %}
-        </div>
+                {% if s.friendly_support == "Automatic" %}
+                  <p class="source-notes">Public API or official feed — chapters and metadata resolve automatically when the service is reachable.</p>
+                {% elif s.friendly_support == "Supported" %}
+                  <p class="source-notes">Site adapter — we parse public listing pages for chapter lists and latest numbers.</p>
+                {% elif s.friendly_support == "Experimental" %}
+                  <p class="source-notes">Heuristic detection — may work on unfamiliar layouts; you can still track manually.</p>
+                {% elif s.friendly_support == "Extension-assisted" %}
+                  <p class="source-notes">Often added from community catalogs or requests — paste the URL in the app; adapters may land later.</p>
+                {% elif s.friendly_support == "Manual" %}
+                  <p class="source-notes">Manual tracking — save the URL and update progress without automatic checks.</p>
+                {% elif s.friendly_support == "Unavailable" %}
+                  <p class="source-notes">Not supported for automated access in this product.</p>
+                {% else %}
+                  <p class="source-notes">Catalog entry — see probe status and notes below.</p>
+                {% endif %}
+                {% if h.get('checked_at') %}
+                  <div class="muted" style="font-size:0.85rem;">Checked: {{ h.get('checked_at') }}{% if h.get('chapter_num') is not none %} · latest ch. {{ h.get('chapter_num') }}{% endif %}</div>
+                {% endif %}
+                {% if s.notes %}<p class="source-notes">{{ s.notes }}</p>{% endif %}
+                {% if h.get('error') %}<p class="source-notes">Last probe error: {{ h.get('error') }}</p>{% endif %}
+                <p class="muted" style="margin-top:12px;margin-bottom:0;font-size:0.85rem;">
+                  <a href="{{ build_source_bug_report_url(source_id=s.id, domain=(s.domains[0] if s.domains else ''), series_url=s.sample_series_url or '', last_error=h.get('error') or '', parser_version=h.get('parser_version') or '') }}" rel="noopener noreferrer" target="_blank">Report broken source</a>
+                </p>
+              </article>
+            {% endfor %}
+          </div>
+        </section>
+        {% endfor %}
 
         <footer class="main-footer">
           <a href="{{ url_for('privacy_page') }}">Privacy</a> ·

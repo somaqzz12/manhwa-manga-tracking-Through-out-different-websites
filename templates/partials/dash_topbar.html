@@ -1,12 +1,14 @@
-{# Sticky dashboard bar: brand, search, sync icons, library tools. Expects: search_q, sort, page, demo_mode, csrf_token #}
+{# Sticky dashboard bar: add URL, search, sync, menu. Expects: search_q, sort, page, demo_mode, csrf_token #}
 {% set _sq = search_q|default('', true) %}
 {% set _sort = sort|default('added', true) %}
 {% set _page = page|default(1, true) %}
 <header class="app-topbar dash-topbar" role="banner">
   <a class="dash-topbar-brand" href="{{ url_for('index') }}" title="Manga Watchlist">
     <span class="dash-topbar-logo" aria-hidden="true">MW</span>
-    <span class="dash-topbar-wordmark">Manga Watchlist</span>
+    <span class="dash-topbar-wordmark">Library</span>
   </a>
+
+  <a class="dash-topbar-add" href="{{ url_for('app_add_url') }}" title="Add a series URL"><span class="long">Add URL</span><span class="short">Add</span></a>
 
   <form class="dash-topbar-search search-bar" method="get" action="{{ url_for('index') }}" role="search">
     <input id="searchInput" type="search" name="q" value="{{ _sq }}" placeholder="Search your library…" autocomplete="off" aria-label="Search library" />

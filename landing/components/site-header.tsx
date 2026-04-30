@@ -15,15 +15,15 @@ function ExtensionCtas() {
       href={extensionZipDownloadUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className={
+          className={
         webStoreUrl.length > 0
-          ? "btn-glass inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-[var(--color-text)] outline-none transition duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
-          : "btn-primary inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white outline-none transition duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+          ? "btn-glass inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-[var(--color-text)] outline-none transition duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--color-accent)_50%,transparent)]"
+          : "btn-primary inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-[#fffaf3] outline-none transition duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--color-accent)_45%,transparent)]"
       }
       aria-label="Download extension as ZIP"
     >
-      {webStoreUrl.length === 0 ? (
-        <ChromeIcon className="h-5 w-5 text-white" />
+        {webStoreUrl.length === 0 ? (
+        <ChromeIcon className="h-5 w-5 text-[#fffaf3]" />
       ) : null}
       {webStoreUrl.length > 0 ? "ZIP" : "Download extension"}
     </a>
@@ -36,10 +36,10 @@ function ExtensionCtas() {
           href={webStoreUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="btn-primary inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white outline-none transition duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+          className="btn-primary inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-[#fffaf3] outline-none transition duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--color-accent)_45%,transparent)]"
           aria-label="Add to Chrome"
         >
-          <ChromeIcon className="h-5 w-5 text-white" />
+          <ChromeIcon className="h-5 w-5 text-[#fffaf3]" />
           Add to Chrome
         </Link>
         {zip}
@@ -72,7 +72,7 @@ export function SiteHeader() {
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 font-semibold text-[var(--color-text)]">
           <span
-            className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-[#9a80ff] text-sm font-bold text-white shadow-accent"
+            className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-[var(--color-accent-2)] to-[var(--color-accent)] text-sm font-bold text-[#fffaf3] shadow-accent"
             aria-hidden
           >
             MW

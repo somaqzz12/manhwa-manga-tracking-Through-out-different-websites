@@ -615,43 +615,43 @@ function showTrackPrompt(data) {
       .overlay {
         position: fixed;
         inset: 0;
-        background: rgba(2, 6, 23, 0.65);
-        backdrop-filter: blur(4px);
+        background: rgba(20, 16, 13, 0.58);
+        backdrop-filter: blur(5px);
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 16px;
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        color: #e5e7eb;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color: #f3eadf;
       }
       .card {
-        width: min(520px, 96vw);
-        background: linear-gradient(180deg, #0b1228 0%, #0a1020 100%);
-        border: 1px solid rgba(148, 163, 184, 0.25);
+        width: min(480px, 96vw);
+        background: linear-gradient(180deg, #1d1713 0%, #14100d 100%);
+        border: 1px solid #3a2f28;
         border-radius: 16px;
-        box-shadow: 0 24px 60px rgba(2, 6, 23, 0.6);
+        box-shadow: 0 24px 50px rgba(0, 0, 0, 0.45);
         padding: 18px;
         box-sizing: border-box;
       }
-      .title { font-size: 22px; font-weight: 700; margin: 0 0 8px; }
-      .subtitle { font-size: 18px; font-weight: 600; color: #93c5fd; margin: 0 0 10px; }
-      .series-url { font-size: 12px; opacity: 0.8; word-break: break-all; margin: 0 0 16px; }
-      .btn-row { display: flex; gap: 10px; justify-content: flex-end; }
+      .title { font-size: 20px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.02em; }
+      .subtitle { font-size: 17px; font-weight: 600; color: #dfb982; margin: 0 0 10px; }
+      .series-url { font-size: 12px; opacity: 0.85; word-break: break-all; margin: 0 0 16px; color: #b9a898; }
+      .btn-row { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
       button {
         font: inherit;
         border-radius: 10px;
         cursor: pointer;
       }
       .cancel {
-        border: 1px solid rgba(148, 163, 184, 0.4);
-        background: #233149;
-        color: #e2e8f0;
+        border: 1px solid #3a2f28;
+        background: #261e19;
+        color: #f3eadf;
         padding: 10px 14px;
       }
       .ok {
         border: none;
-        background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
-        color: #ffffff;
+        background: linear-gradient(180deg, #dfb982 0%, #c49a6c 100%);
+        color: #14100d;
         padding: 10px 16px;
         font-weight: 700;
       }
@@ -1077,35 +1077,37 @@ async function updateReaderOverlay() {
     const style = document.createElement("style");
     style.textContent = `
       .box {
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        color: #e5e7eb;
-        background: linear-gradient(180deg, #0f172a 0%, #0b1020 100%);
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        border-radius: 14px;
-        padding: 10px 12px;
-        max-width: min(320px, 92vw);
-        box-shadow: 0 12px 32px rgba(2, 6, 23, 0.55);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color: #f3eadf;
+        background: linear-gradient(180deg, #1d1713 0%, #14100d 100%);
+        border: 1px solid #3a2f28;
+        border-radius: 12px;
+        padding: 8px 10px;
+        max-width: min(280px, 92vw);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
       }
-      .t { font-weight: 700; margin: 0 0 4px; font-size: 13px; }
-      .s { margin: 0 0 8px; opacity: 0.9; font-size: 12px; line-height: 1.35; }
-      .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      .t { font-weight: 700; margin: 0 0 3px; font-size: 12px; letter-spacing: 0.02em; }
+      .s { margin: 0 0 6px; opacity: 0.92; font-size: 11px; line-height: 1.35; color: #b9a898; }
+      .row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
       .mw-o-btn {
         font: inherit;
         cursor: pointer;
         border-radius: 8px;
-        padding: 6px 10px;
-        border: 1px solid rgba(148, 163, 184, 0.4);
-        background: #1e293b;
-        color: #e2e8f0;
+        padding: 5px 9px;
+        font-size: 11px;
+        border: 1px solid #3a2f28;
+        background: #261e19;
+        color: #f3eadf;
       }
       .mw-o-btn.primary {
         border: none;
-        background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
-        color: #fff;
+        background: linear-gradient(180deg, #dfb982 0%, #c49a6c 100%);
+        color: #14100d;
+        font-weight: 600;
       }
       .mw-o-link {
-        font-size: 12px;
-        color: #93c5fd;
+        font-size: 11px;
+        color: #dfb982;
       }
     `;
     root.appendChild(style);

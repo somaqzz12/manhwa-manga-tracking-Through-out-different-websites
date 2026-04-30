@@ -276,7 +276,7 @@ def inject_template_globals():
     return {
         "bug_report_href": os.getenv("BUG_REPORT_URL", DEFAULT_BUG_REPORT_URL),
         "contact_email": os.getenv("CONTACT_EMAIL", "").strip(),
-        "site_description": "Track manga and manhwa chapter releases, reading progress, and updates in one dashboard.",
+        "site_description": "Search any manga or manhwa. Find the best source. Track updates beautifully.",
         "min_password_length": MIN_PASSWORD_LENGTH,
         "github_url": (os.getenv("GITHUB_URL") or _DEFAULT_GITHUB_URL).strip(),
         "extension_zip_download_url": _extension_zip_download_url(),
@@ -2322,9 +2322,64 @@ def logout():
     return redirect(url_for("auth_page"))
 
 
+_SOURCE_CATALOG_GROUP_ORDER = (
+    "Automatic",
+    "Supported",
+    "Experimental",
+    "Extension-assisted",
+    "Manual",
+    "Unavailable",
+    "Other",
+)
+
+
+def _friendly_public_support_bucket(src: dict) -> str:
+    """User-facing support label for public sources page (not raw policy enums)."""
+    p = (src.get("policy_support_level") or "").strip().lower()
+    if p == "official_api":
+        return "Automatic"
+    if p == "site_adapter":
+        return "Supported"
+    if p == "generic_detector":
+        return "Experimental"
+    if p == "manual_only":
+        return "Manual"
+    if p == "blocked":
+        return "Unavailable"
+    if p == "requested":
+        return "Extension-assisted"
+    if (src.get("registry_origin") or "").strip() == "manifest":
+        return "Extension-assisted"
+    if (src.get("registry_origin") or "").strip() == "curated":
+        return "Supported"
+    return "Other"
+
+
+def _public_sources_catalog_view(raw_sources: list[dict]) -> tuple[list[dict], list[tuple[str, list[dict]]]]:
+    """Drop imported manifest rows that have no policy match; keep curated and legacy rows."""
+    filtered: list[dict] = []
+    for src in raw_sources:
+        origin = (src.get("registry_origin") or "").strip()
+        pol = (src.get("policy_support_level") or "").strip()
+        if origin == "manifest" and not pol:
+            continue
+        row = dict(src)
+        row["friendly_support"] = _friendly_public_support_bucket(row)
+        filtered.append(row)
+    buckets: dict[str, list[dict]] = {k: [] for k in _SOURCE_CATALOG_GROUP_ORDER}
+    for row in filtered:
+        b = row["friendly_support"]
+        if b not in buckets:
+            b = "Other"
+            row["friendly_support"] = "Other"
+        buckets[b].append(row)
+    groups = [(k, buckets[k]) for k in _SOURCE_CATALOG_GROUP_ORDER if buckets[k]]
+    return filtered, groups
+
+
 @app.route("/sources")
 def sources_page():
-    sources = source_registry.sources_with_health()
+    sources = source_registry.public_sources_with_health()
     policy_by_domain: dict[str, dict] = {}
     for row in policy_registry.SOURCE_REGISTRY:
         for dom in row.get("domains") or []:
@@ -2340,11 +2395,13 @@ def sources_page():
                 break
         src["policy_support_level"] = (matched or {}).get("support_level") or ""
         src["policy_risk_level"] = (matched or {}).get("risk_level") or ""
-    counts = source_registry.aggregate_status_counts()
+    catalog_sources, source_groups = _public_sources_catalog_view(sources)
+    counts = source_registry.aggregate_status_counts(catalog_sources)
     health = source_registry.load_health()
     return render_template(
         "sources.html",
-        sources=sources,
+        sources=catalog_sources,
+        source_groups=source_groups,
         counts=counts,
         health_updated_at=health.get("updated_at"),
         current_user=get_current_user(),
@@ -2352,6 +2409,8 @@ def sources_page():
         search_q="",
         sort="added",
         page=1,
+        check_all_status_text="",
+        total_count=0,
     )
 
 
@@ -2720,10 +2779,10 @@ LANDING_TRENDING_DEMO = {
 }
 
 LANDING_SOURCE_PREVIEW = [
-    {"source_name": "Asura", "latest": "Ch. 179", "note": "Fast updates", "label": "Recommended"},
-    {"source_name": "Reaper", "latest": "Ch. 178", "note": "Backup mirror", "label": "Backup"},
-    {"source_name": "MangaDex", "latest": "Ch. 200", "note": "Public catalog", "label": "Official/API"},
-    {"source_name": "Unknown", "latest": "Manual", "note": "User-added", "label": "Manual only"},
+    {"source_name": "Asura", "latest": "Ch. 179", "note": "Fast updates", "label": "Supported"},
+    {"source_name": "Reaper", "latest": "Ch. 178", "note": "Backup mirror", "label": "Supported"},
+    {"source_name": "MangaDex", "latest": "Ch. 200", "note": "Public catalog", "label": "Automatic"},
+    {"source_name": "Unknown", "latest": "Manual", "note": "User-added", "label": "Manual"},
 ]
 
 DEMO_SOURCE_RESULTS = [
@@ -2772,6 +2831,13 @@ def discover_page():
         trending=trend,
         source_policy=supported_source_policy(),
         resolved=resolved,
+        current_user=get_current_user(),
+        demo_mode=False,
+        search_q=q,
+        sort="added",
+        page=1,
+        check_all_status_text="",
+        total_count=0,
     )
 
 
@@ -2903,7 +2969,31 @@ def app_library():
 def app_add_url():
     if not login_required():
         return redirect(url_for("auth_page"))
-    return render_template("app_add.html")
+    user_id = get_actor_user_id()
+    current_user = get_current_user()
+    if current_user is None:
+        session.pop("user_id", None)
+        return redirect(url_for("auth_page"))
+    raw_rows, _ = _fetch_user_story_rows(user_id, "")
+    total_count = len(raw_rows)
+    with CHECK_ALL_STATUS_LOCK:
+        check_all_running = CHECK_ALL_RUNNING
+        check_all_last_finished_at = CHECK_ALL_LAST_FINISHED_AT
+    check_all_status_text = (
+        "Check running..."
+        if check_all_running
+        else f"Last checked: {_format_relative_age(check_all_last_finished_at)}"
+    )
+    return render_template(
+        "app_add.html",
+        current_user=current_user,
+        total_count=total_count,
+        search_q="",
+        sort="added",
+        page=1,
+        demo_mode=False,
+        check_all_status_text=check_all_status_text,
+    )
 
 
 @app.route("/app/search")
@@ -3805,7 +3895,7 @@ def api_alt_sources():
     health = source_registry.load_health()
     by_h = health.get("by_id") if isinstance(health.get("by_id"), dict) else {}
     alternatives: list[dict] = []
-    for src in source_registry.list_sources():
+    for src in source_registry.list_public_sources():
         if curr_id and src.get("id") == curr_id:
             continue
         hid = src.get("id")

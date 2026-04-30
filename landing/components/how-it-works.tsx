@@ -29,7 +29,7 @@ const steps = [
 
 export function HowItWorks() {
   return (
-    <section className="border-t border-[var(--color-border)] bg-gradient-to-b from-transparent to-black/5 px-4 py-20 sm:px-6">
+    <section className="border-t border-[var(--color-border)] bg-gradient-to-b from-transparent to-[color-mix(in_srgb,var(--color-accent)_7%,transparent)] px-4 py-20 sm:px-6">
       <div className="mx-auto max-w-6xl">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="font-serif text-3xl font-bold tracking-tight text-[var(--color-text)] sm:text-4xl">

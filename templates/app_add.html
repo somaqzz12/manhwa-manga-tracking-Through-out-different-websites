@@ -3,22 +3,118 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Add URL - Manga Watchlist</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/public-pages.css') }}">
+  <title>Add URL — Manga Watchlist</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%239b6b43'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
 </head>
-<body class="public-simple">
-  <main class="box box--narrow">
-    <h1 style="margin-top:0;">Add URL</h1>
-    <p>Paste a series URL to resolve it. If automatic detection is unavailable, manual tracking still works.</p>
-    <form id="resolveForm" style="display:flex;gap:8px;flex-wrap:wrap;">
-      <input class="url-input" id="urlInput" type="url" placeholder="https://example.com/series/solo-leveling" required>
-      <button type="submit">Resolve URL</button>
-    </form>
-    <div id="out" style="margin-top:14px;white-space:normal;background:#fff;padding:12px;border-radius:12px;border:1px solid rgba(92,64,45,.2);"></div>
-    <p><a href="/app">Back to dashboard</a></p>
-  </main>
+<body class="page-dashboard page-app-add" data-theme="normal">
+  <div class="app-shell app-shell--dashboard">
+    {% include "partials/dashboard_sidebar.html" %}
+    <main class="app-main">
+      {% include "partials/dash_topbar.html" %}
+      {% include "partials/library_tools_drawer.html" %}
+      <section class="app-content">
+        <header class="hero hero--gallery" style="margin-bottom:18px;">
+          <div>
+            <h1 class="page-title page-title--display">Add URL</h1>
+            <p class="hero-meta muted">Paste any listing URL — we resolve metadata when we can, and always let you save the link.</p>
+          </div>
+        </header>
+
+        <div class="panel add-url-panel">
+          <p class="muted" style="margin:0 0 14px;font-size:0.95rem;line-height:1.55;">
+            <strong>Core rule:</strong> any URL is accepted. Supported sites become <strong>automatic</strong> chapter checks.
+            Unsupported sites become <strong>manual</strong> bookmarks. Request new domains under <a href="{{ url_for('source_requests_page') }}">Source requests</a>.
+          </p>
+          <form id="resolveForm" class="discover-search-title" style="align-items:stretch;">
+            <input class="input-full" id="urlInput" type="url" name="url" placeholder="https://example.com/series/…" required autocomplete="off" style="border-radius:999px;padding:12px 16px;">
+            <button type="submit" class="btn primary">Resolve URL</button>
+          </form>
+        </div>
+
+        <div id="out" class="panel add-url-preview" style="margin-top:16px;min-height:48px;display:none;" aria-live="polite"></div>
+
+        <p class="muted" style="margin-top:20px;font-size:0.9rem;">
+          <a href="{{ url_for('index') }}">← Back to library</a>
+        </p>
+      </section>
+    </main>
+  </div>
   <script>
     let lastPreview = null;
+
+    function isSafeHttpUrl(raw) {
+      if (!raw || typeof raw !== "string") return false;
+      try {
+        const u = new URL(raw);
+        return u.protocol === "http:" || u.protocol === "https:";
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function formatSupportLabel(raw) {
+      const s = String(raw || "").toLowerCase();
+      if (s === "official_api") return "Automatic";
+      if (s === "site_adapter") return "Supported";
+      if (s === "generic_detector") return "Experimental";
+      if (s === "manual_only" || s === "manual") return "Manual";
+      if (s === "blocked") return "Unavailable";
+      if (s === "requested") return "Extension-assisted";
+      return raw || "—";
+    }
+
+    function createPlaceholderCover() {
+      const placeholder = document.createElement("div");
+      placeholder.className = "preview-cover-placeholder";
+      placeholder.style.width = "110px";
+      placeholder.style.height = "154px";
+      placeholder.style.borderRadius = "12px";
+      placeholder.style.border = "1px solid var(--border)";
+      placeholder.style.display = "flex";
+      placeholder.style.alignItems = "center";
+      placeholder.style.justifyContent = "center";
+      placeholder.style.background = "linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--panel-2)), var(--panel-2))";
+      placeholder.style.fontWeight = "700";
+      placeholder.style.color = "var(--accent)";
+      placeholder.textContent = "MW";
+      return placeholder;
+    }
+
+    function appendMetaLine(parent, label, value) {
+      const p = document.createElement("p");
+      p.style.margin = "0 0 4px";
+      const strong = document.createElement("strong");
+      strong.textContent = `${label}:`;
+      p.appendChild(strong);
+      p.appendChild(document.createTextNode(` ${value || "-"}`));
+      parent.appendChild(p);
+    }
+
+    function renderError(message) {
+      const out = document.getElementById("out");
+      out.style.display = "block";
+      const wrapper = document.createElement("div");
+      const lead = document.createElement("p");
+      const bold = document.createElement("strong");
+      bold.textContent = "Could not fully resolve this URL.";
+      lead.appendChild(bold);
+      const detail = document.createElement("p");
+      detail.className = "muted";
+      detail.style.fontSize = "0.92rem";
+      detail.textContent = message || "Unknown error";
+      const hint = document.createElement("p");
+      hint.className = "muted";
+      hint.style.fontSize = "0.88rem";
+      hint.textContent = "You can still add it as a manual bookmark — metadata may be limited.";
+      wrapper.appendChild(lead);
+      wrapper.appendChild(detail);
+      wrapper.appendChild(hint);
+      out.replaceChildren(wrapper);
+    }
 
     async function addFromPreview() {
       if (!lastPreview) return;
@@ -56,53 +152,167 @@
     function renderPreview(data) {
       const chapters = Array.isArray(data.chapters) ? data.chapters.length : (data.chaptersFound || 0);
       const chapterCount = data.chapter_count || chapters || "";
-      const warnings = Array.isArray(data.warnings) && data.warnings.length
-        ? `<ul>${data.warnings.map((w) => `<li>${w}</li>`).join("")}</ul>`
-        : "<p>No warnings.</p>";
       const manual = (data.support_level || "").toLowerCase() === "manual_only";
-      const cover = data.cover_url
-        ? `<img src="${data.cover_url}" alt="" style="width:110px;height:154px;object-fit:cover;border-radius:10px;border:1px solid rgba(92,64,45,.2);">`
-        : `<div style="width:110px;height:154px;border-radius:10px;border:1px solid rgba(92,64,45,.2);display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f1e4d2,#e4d2bc);font-weight:700;color:#7f5438;">MW</div>`;
-      const desc = data.description ? `<p style="margin:8px 0 0;color:#6f5f50;">${data.description}</p>` : "";
-      const manualFields = manual ? `
-        <div style="margin-top:10px;display:grid;gap:8px;">
-          <input id="manualTitle" placeholder="Title (required for manual tracking)" value="${(data.title || "").replace(/"/g, "&quot;")}">
-          <input id="manualLatest" placeholder="Latest chapter (optional)" value="${(data.latest_chapter || "").toString().replace(/"/g, "&quot;")}">
-        </div>
-      ` : "";
-      return `
-        <div style="display:flex;gap:12px;align-items:flex-start;">
-          ${cover}
-          <div style="flex:1;min-width:0;">
-            <h3 style="margin:0 0 8px;">${data.canonical_title || data.title || "Unknown title"}</h3>
-            <p style="margin:0 0 4px;"><strong>Source:</strong> ${data.source_name || "-"}</p>
-            <p style="margin:0 0 4px;"><strong>Support:</strong> ${data.support_level || "-"}</p>
-            <p style="margin:0 0 4px;"><strong>Latest chapter:</strong> ${data.latest_chapter || "Unknown"}</p>
-            <p style="margin:0 0 4px;"><strong>Chapter count:</strong> ${chapterCount || "Unknown"}</p>
-            ${desc}
-          </div>
-        </div>
-        ${warnings}
-        ${manualFields}
-        <div style="margin-top:10px;">
-          <button id="addToLibraryBtn" type="button">Add to Library</button>
-        </div>
-      `;
+      const fragment = document.createDocumentFragment();
+
+      const top = document.createElement("div");
+      top.style.display = "flex";
+      top.style.gap = "14px";
+      top.style.alignItems = "flex-start";
+
+      if (isSafeHttpUrl(data.cover_url || "")) {
+        const img = document.createElement("img");
+        img.alt = "";
+        img.src = data.cover_url;
+        img.style.width = "110px";
+        img.style.height = "154px";
+        img.style.objectFit = "cover";
+        img.style.borderRadius = "12px";
+        img.style.border = "1px solid var(--border)";
+        img.addEventListener("error", () => {
+          img.replaceWith(createPlaceholderCover());
+        });
+        top.appendChild(img);
+      } else {
+        top.appendChild(createPlaceholderCover());
+      }
+
+      const details = document.createElement("div");
+      details.style.flex = "1";
+      details.style.minWidth = "0";
+
+      const title = document.createElement("h2");
+      title.className = "section-title";
+      title.style.margin = "0 0 8px";
+      title.style.fontSize = "1.15rem";
+      title.textContent = data.canonical_title || data.title || "Unknown title";
+      details.appendChild(title);
+
+      appendMetaLine(details, "Source", data.source_name || "—");
+      appendMetaLine(details, "Support", formatSupportLabel(data.support_level));
+      appendMetaLine(details, "Latest chapter", data.latest_chapter || "Unknown");
+      appendMetaLine(details, "Chapter count", chapterCount || "Unknown");
+      const sourceUrlLine = document.createElement("p");
+      sourceUrlLine.style.margin = "0 0 4px";
+      const sourceLabel = document.createElement("strong");
+      sourceLabel.textContent = "Source URL:";
+      sourceUrlLine.appendChild(sourceLabel);
+      if (isSafeHttpUrl(data.source_url || "")) {
+        const sourceLink = document.createElement("a");
+        sourceLink.href = data.source_url;
+        sourceLink.target = "_blank";
+        sourceLink.rel = "noreferrer";
+        sourceLink.textContent = " Open listing";
+        sourceUrlLine.appendChild(sourceLink);
+      } else {
+        sourceUrlLine.appendChild(document.createTextNode(" —"));
+      }
+      details.appendChild(sourceUrlLine);
+
+      if (data.description) {
+        const desc = document.createElement("p");
+        desc.style.margin = "8px 0 0";
+        desc.className = "muted";
+        desc.style.fontSize = "0.9rem";
+        desc.textContent = String(data.description);
+        details.appendChild(desc);
+      }
+
+      top.appendChild(details);
+      fragment.appendChild(top);
+
+      if (manual) {
+        const manualCallout = document.createElement("div");
+        manualCallout.className = "panel";
+        manualCallout.style.marginTop = "14px";
+        manualCallout.style.background = "color-mix(in srgb, var(--accent) 7%, var(--panel))";
+        manualCallout.style.borderStyle = "solid";
+        const mh = document.createElement("p");
+        mh.style.margin = "0";
+        mh.style.fontSize = "0.92rem";
+        const st = document.createElement("strong");
+        st.textContent = "Manual tracking";
+        mh.appendChild(st);
+        mh.appendChild(document.createTextNode(" — we’ll save this URL and your progress. Automatic chapter checks aren’t available for this host yet; that’s expected, not an error."));
+        manualCallout.appendChild(mh);
+        fragment.appendChild(manualCallout);
+      }
+
+      if (Array.isArray(data.warnings) && data.warnings.length) {
+        const warningsList = document.createElement("ul");
+        warningsList.className = "muted";
+        warningsList.style.fontSize = "0.88rem";
+        for (const warning of data.warnings) {
+          const li = document.createElement("li");
+          li.textContent = String(warning || "");
+          warningsList.appendChild(li);
+        }
+        fragment.appendChild(warningsList);
+      }
+
+      if (manual) {
+        const manualFields = document.createElement("div");
+        manualFields.style.marginTop = "12px";
+        manualFields.style.display = "grid";
+        manualFields.style.gap = "8px";
+
+        const titleInput = document.createElement("input");
+        titleInput.id = "manualTitle";
+        titleInput.className = "input-full";
+        titleInput.placeholder = "Title (required for manual tracking)";
+        titleInput.value = String(data.title || "");
+        titleInput.style.borderRadius = "12px";
+
+        const latestInput = document.createElement("input");
+        latestInput.id = "manualLatest";
+        latestInput.className = "input-full";
+        latestInput.placeholder = "Latest chapter (optional)";
+        latestInput.value = String(data.latest_chapter || "");
+        latestInput.style.borderRadius = "12px";
+
+        manualFields.appendChild(titleInput);
+        manualFields.appendChild(latestInput);
+        fragment.appendChild(manualFields);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "add-manga-actions";
+      actions.style.marginTop = "14px";
+      const addBtn = document.createElement("button");
+      addBtn.id = "addToLibraryBtn";
+      addBtn.type = "button";
+      addBtn.className = "btn primary";
+      addBtn.textContent = "Add to library";
+      actions.appendChild(addBtn);
+      if (manual) {
+        const reqBtn = document.createElement("a");
+        reqBtn.className = "btn ghost";
+        reqBtn.href = "{{ url_for('source_requests_page') }}";
+        reqBtn.textContent = "Request source support";
+        actions.appendChild(reqBtn);
+      }
+      fragment.appendChild(actions);
+
+      return fragment;
     }
 
     document.getElementById("resolveForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const url = document.getElementById("urlInput").value.trim();
+      const out = document.getElementById("out");
+      out.style.display = "block";
       const res = await fetch("/api/resolve-url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
       const data = await res.json();
       if (!res.ok || data.error) {
-        document.getElementById("out").innerHTML = `<p><strong>Could not detect this source.</strong></p><p>${data.error || "Unknown error"}</p>`;
+        renderError(data.error || "Unknown error");
         return;
       }
       lastPreview = data;
-      document.getElementById("out").innerHTML = renderPreview(data);
+      document.getElementById("out").replaceChildren(renderPreview(data));
       document.getElementById("addToLibraryBtn")?.addEventListener("click", addFromPreview);
     });
   </script>
+  {% include "partials/menu_drawer_script.html" %}
+  {% include "partials/form_loading_snippet.html" %}
 </body>
 </html>

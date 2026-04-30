@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Manga Watchlist — Track every chapter",
+  title: "Manga Watchlist — Search, compare, track",
   description:
-    "Manga Watchlist is a manga and manhwa tracker. Sign in from anywhere, build your watchlist, and use the Chrome extension to sync the chapter you read. Unread counts and one-click Continue.",
+    "Search any manga or manhwa. Find the best source. Track updates beautifully. Paste any URL, compare sites, and keep one library — with an optional Chrome companion for chapter detection.",
   metadataBase: new URL("https://mangawatchlist.space"),
   openGraph: {
     title: "Manga Watchlist",
@@ -25,7 +25,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="bg-grid-fade bg-background">{children}</body>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="bg-background">{children}</body>
     </html>
   );
 }

@@ -41,6 +41,17 @@ function isSafeHttpUrl(raw) {
   }
 }
 
+function formatSupportLabel(raw) {
+  const s = String(raw || "").toLowerCase();
+  if (s === "official_api") return "Automatic";
+  if (s === "site_adapter") return "Supported";
+  if (s === "generic_detector") return "Experimental";
+  if (s === "manual_only" || s === "manual") return "Manual";
+  if (s === "blocked") return "Unavailable";
+  if (s === "requested") return "Extension-assisted";
+  return raw || "—";
+}
+
 function makePreviewLine(label, value) {
   const row = document.createElement("div");
   row.className = "preview-line";
@@ -127,7 +138,7 @@ function renderResolverPreview(preview, apiBase) {
   title.textContent = preview.canonical_title || preview.title || "Unknown title";
   details.appendChild(title);
   details.appendChild(makePreviewLine("Source", preview.source_name || "Manual"));
-  details.appendChild(makePreviewLine("Support", preview.support_level || "-"));
+  details.appendChild(makePreviewLine("Support", formatSupportLabel(preview.support_level)));
   details.appendChild(makePreviewLine("Latest", preview.latest_chapter || "Unknown"));
   if (preview.description) details.appendChild(makePreviewLine("Description", preview.description));
   top.appendChild(details);
@@ -167,14 +178,18 @@ function renderResolverPreview(preview, apiBase) {
   row.className = "footer-links";
   row.style.marginTop = "10px";
   const addBtn = document.createElement("button");
-  addBtn.textContent = "Add to Library";
+  addBtn.type = "button";
+  addBtn.className = "btn primary";
+  addBtn.textContent = "Add to library";
   const openDash = document.createElement("button");
-  openDash.className = "secondary";
-  openDash.textContent = "Open Dashboard";
+  openDash.type = "button";
+  openDash.className = "btn secondary";
+  openDash.textContent = "Open dashboard";
   row.appendChild(addBtn);
   if (manualOnly) {
     requestSupportBtn = document.createElement("button");
-    requestSupportBtn.className = "secondary";
+    requestSupportBtn.type = "button";
+    requestSupportBtn.className = "btn secondary";
     requestSupportBtn.textContent = "Request source support";
     row.appendChild(requestSupportBtn);
   } else {
@@ -211,7 +226,8 @@ function renderResolverPreview(preview, apiBase) {
         setStatus("Sign in first. Open Manga Watchlist, sign in, then try again.");
         row.replaceChildren();
         const openAppBtn = document.createElement("button");
-        openAppBtn.className = "secondary";
+        openAppBtn.type = "button";
+        openAppBtn.className = "btn secondary";
         openAppBtn.textContent = "Open app";
         row.appendChild(openAppBtn);
         openAppBtn.addEventListener("click", () => chrome.tabs.create({ url: `${apiBase}/` }));
@@ -225,19 +241,23 @@ function renderResolverPreview(preview, apiBase) {
     showToast("Added to library", "success");
     row.replaceChildren();
     const dash = document.createElement("button");
-    dash.className = "secondary";
-    dash.textContent = "Open Dashboard";
+    dash.type = "button";
+    dash.className = "btn secondary";
+    dash.textContent = "Open dashboard";
     const lib = document.createElement("button");
-    lib.className = "secondary";
-    lib.textContent = "View Library";
+    lib.type = "button";
+    lib.className = "btn secondary";
+    lib.textContent = "View library";
     row.appendChild(dash);
     row.appendChild(lib);
     const openLibrary = () => chrome.tabs.create({ url: `${apiBase}/app` });
-    dash.addEventListener("click", () => chrome.tabs.create({ url: `${apiBase}/` }));
+    dash.addEventListener("click", () => chrome.tabs.create({ url: `${apiBase}/app` }));
     lib.addEventListener("click", openLibrary);
   });
 
-  openDash.addEventListener("click", () => chrome.tabs.create({ url: `${apiBase}/` }));
+  if (!manualOnly) {
+    openDash.addEventListener("click", () => chrome.tabs.create({ url: `${apiBase}/app` }));
+  }
   requestSupportBtn?.addEventListener("click", () => chrome.tabs.create({ url: `${apiBase}/source-requests` }));
 }
 
@@ -328,6 +348,7 @@ async function init() {
     bindFooter();
     return;
   }
+  $("resolverShell")?.classList.remove("hidden");
   bindPreview(apiBase);
 
   const trackedKeys = new Set(unreadRes?.data?.tracked_keys || []);
@@ -341,7 +362,8 @@ async function init() {
       $("noChapterUnreadValue").textContent = String(totalUnread);
     }
     const forceBtn = $("forceTrackButton");
-    if (forceBtn) {
+    if (forceBtn && forceBtn.dataset.bound !== "1") {
+      forceBtn.dataset.bound = "1";
       forceBtn.addEventListener("click", async () => {
         forceBtn.disabled = true;
         setStatus("Saving...");
@@ -383,43 +405,49 @@ async function init() {
     setStatus("Track this page first to connect it to your library.");
   }
 
-  trackBtn.addEventListener("click", async () => {
-    trackBtn.disabled = true;
-    setStatus("Saving...");
-    const result = await sendMessage({ type: "TRACK_TAB_NOW" });
-    if (result?.ok) {
-      setStatus("Saved.");
-      showToast("Saved to tracker", "success");
-      $("trackedBadge").classList.remove("hidden");
-      trackBtn.textContent = "Saved";
-      setTimeout(() => {
+  if (trackBtn && trackBtn.dataset.bound !== "1") {
+    trackBtn.dataset.bound = "1";
+    trackBtn.addEventListener("click", async () => {
+      trackBtn.disabled = true;
+      setStatus("Saving...");
+      const result = await sendMessage({ type: "TRACK_TAB_NOW" });
+      if (result?.ok) {
+        setStatus("Saved.");
+        showToast("Saved to tracker", "success");
+        $("trackedBadge").classList.remove("hidden");
+        trackBtn.textContent = "Saved";
+        setTimeout(() => {
+          trackBtn.disabled = false;
+          trackBtn.textContent = "Save again";
+        }, 1200);
+      } else {
+        setStatus(`Failed: ${result?.error || "unknown error"}`);
+        showToast(result?.error || "Failed to save", "error");
         trackBtn.disabled = false;
-        trackBtn.textContent = "Save again";
-      }, 1200);
-    } else {
-      setStatus(`Failed: ${result?.error || "unknown error"}`);
-      showToast(result?.error || "Failed to save", "error");
-      trackBtn.disabled = false;
-    }
-  });
+      }
+    });
+  }
 
-  markReadBtn?.addEventListener("click", async () => {
-    if (!isTracked) {
-      setStatus("Track this page first to connect it to your library.");
-      return;
-    }
-    markReadBtn.disabled = true;
-    setStatus("Saving current chapter...");
-    const result = await sendMessage({ type: "TRACK_TAB_NOW" });
-    if (result?.ok) {
-      setStatus("Current chapter marked as read.");
-      showToast("Chapter progress updated", "success");
-    } else {
-      setStatus(`Failed: ${result?.error || "unknown error"}`);
-      showToast(result?.error || "Failed to save chapter", "error");
-    }
-    markReadBtn.disabled = false;
-  });
+  if (markReadBtn && markReadBtn.dataset.bound !== "1") {
+    markReadBtn.dataset.bound = "1";
+    markReadBtn.addEventListener("click", async () => {
+      if (!isTracked) {
+        setStatus("Track this page first to connect it to your library.");
+        return;
+      }
+      markReadBtn.disabled = true;
+      setStatus("Saving current chapter...");
+      const result = await sendMessage({ type: "TRACK_TAB_NOW" });
+      if (result?.ok) {
+        setStatus("Current chapter marked as read.");
+        showToast("Chapter progress updated", "success");
+      } else {
+        setStatus(`Failed: ${result?.error || "unknown error"}`);
+        showToast(result?.error || "Failed to save chapter", "error");
+      }
+      markReadBtn.disabled = false;
+    });
+  }
 
   bindFooter();
 }
@@ -430,7 +458,7 @@ function bindFooter() {
   $("openDashboard")?.addEventListener("click", async () => {
     const settingsRes = await sendMessage({ type: "GET_SETTINGS" });
     const base = (settingsRes?.data?.apiBase || DEFAULT_API_BASE).replace(/\/$/, "");
-    chrome.tabs.create({ url: `${base}/` });
+    chrome.tabs.create({ url: `${base}/app` });
   });
 }
 

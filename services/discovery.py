@@ -63,8 +63,12 @@ def source_label(source: dict) -> str:
     if source.get("support_level") == "manual":
         return "Manual"
     if source.get("support_level") == "official_api":
-        return "Official"
-    return "Recommended"
+        return "Automatic"
+    if source.get("support_level") == "site_adapter":
+        return "Supported"
+    if source.get("support_level") == "generic_detector":
+        return "Experimental"
+    return "Supported"
 
 
 def _decorate_series(series: dict) -> dict:

@@ -13,13 +13,16 @@
 
     <nav class="drawer-nav mobile-nav-section" aria-label="Site">
       <span class="sidebar-label">Navigate</span>
-      <a class="drawer-nav-link {% if request.endpoint == 'index' %}is-active{% endif %}" href="{{ url_for('index') }}">Dashboard</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'index' %}is-active{% endif %}" href="{{ url_for('index') }}">Reading library</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'app_add_url' %}is-active{% endif %}" href="{{ url_for('app_add_url') }}">Add URL</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'discover_page' %}is-active{% endif %}" href="{{ url_for('discover_page') }}">Discover</a>
       {% if current_user is defined and current_user and not demo_mode|default(false) %}
       <a class="drawer-nav-link {% if request.endpoint == 'next_up' %}is-active{% endif %}" href="{{ url_for('next_up') }}">Next up</a>
       {% endif %}
       <a class="drawer-nav-link {% if request.endpoint == 'sources_page' %}is-active{% endif %}" href="{{ url_for('sources_page') }}">Sources</a>
       <a class="drawer-nav-link {% if request.endpoint == 'source_requests_page' %}is-active{% endif %}" href="{{ url_for('source_requests_page') }}">Source requests</a>
-      <a class="drawer-nav-link drawer-nav-link--external" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Extension ZIP</a>
+      <a class="drawer-nav-link drawer-nav-link--external" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Extension</a>
+      <a class="drawer-nav-link" href="/export" title="Export JSON. Import from Restore backup below when on the dashboard.">Import / Export</a>
       <a class="drawer-nav-link {% if request.endpoint == 'privacy_page' %}is-active{% endif %}" href="{{ url_for('privacy_page') }}">Privacy</a>
       <a class="drawer-nav-link {% if request.endpoint == 'changelog_page' %}is-active{% endif %}" href="{{ url_for('changelog_page') }}">Changelog</a>
       <a class="drawer-nav-link {% if request.endpoint == 'demo_dashboard' %}is-active{% endif %}" href="{{ url_for('demo_dashboard') }}">Demo</a>

@@ -4,94 +4,134 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="{{ site_description }}">
-  <title>Manga Watchlist - Discover and Track</title>
+  <title>Manga Watchlist — Search, compare, track</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <style>
-    :root { --bg:#f6efe4; --panel:#fffaf1; --panel-soft:rgba(255,250,241,.8); --text:#241b16; --muted:#746355; --border:rgba(92,64,45,.2); --accent:#9a6a45; --accent-h:#7f5438; }
+    :root {
+      --bg: #f5efe6;
+      --panel: #fffaf3;
+      --panel-2: #f8f1e8;
+      --border: #e3d7c8;
+      --text: #241c17;
+      --muted: #7c6f63;
+      --accent: #9b6b43;
+      --accent-2: #b08968;
+      --accent-hover: #7d5635;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14100d;
+        --panel: #1d1713;
+        --panel-2: #261e19;
+        --border: #3a2f28;
+        --text: #f3eadf;
+        --muted: #b9a898;
+        --accent: #c49a6c;
+        --accent-2: #dfb982;
+        --accent-hover: #d4a97d;
+      }
+    }
     * { box-sizing: border-box; }
-    body { margin:0; font-family:Inter,system-ui,sans-serif; color:var(--text); background:radial-gradient(circle at 20% 10%, rgba(255,255,255,.8), transparent 35%), radial-gradient(circle at 80% 0%, rgba(220,190,150,.2), transparent 30%), var(--bg); }
-    .wrap { max-width:1100px; margin:0 auto; padding:24px 18px 56px; }
-    .hero,.block{ background:var(--panel-soft); border:1px solid var(--border); border-radius:24px; backdrop-filter:blur(14px); padding:26px; margin-bottom:16px; }
-    h1,h2,h3 { font-family:Fraunces, "Playfair Display", serif; margin:0 0 10px; }
-    h1 { font-size:clamp(2rem,4vw,2.7rem); line-height:1.06; }
-    p { margin:0 0 10px; color:var(--muted); line-height:1.6; }
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .btn { display:inline-block; padding:12px 18px; border-radius:999px; text-decoration:none; border:1px solid var(--border); color:var(--text); font-weight:600; background:#fff; }
-    .btn.primary { background:var(--accent); color:#fffaf1; border-color:transparent; }
-    .btn.primary:hover { background:var(--accent-h); }
-    .search { display:flex; gap:8px; margin-top:10px; }
-    .search input { flex:1; border:1px solid var(--border); border-radius:999px; padding:12px 14px; font:inherit; }
-    .hero-search { margin-top:16px; display:grid; gap:10px; }
-    .hero-search-row { display:flex; gap:8px; flex-wrap:wrap; }
-    .hero-search-row input { flex:1; min-width:260px; border:1px solid var(--border); border-radius:999px; padding:14px 16px; font:inherit; background:#fff; }
-    .hero-sub { max-width:860px; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
-    .card { background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:14px; }
-    .list { margin:0; padding-left:18px; color:var(--muted); }
-    .table { width:100%; border-collapse:collapse; }
-    .table td,.table th { border-bottom:1px solid var(--border); padding:10px 8px; text-align:left; font-size:.92rem; }
-    .label { font-size:.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
-    nav { display:flex; gap:12px; justify-content:flex-end; margin-bottom:12px; }
-    nav a { color:var(--muted); text-decoration:none; font-weight:600; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(ellipse 120% 80% at 50% -20%, var(--panel-2) 0%, var(--bg) 55%),
+        var(--bg);
+      line-height: 1.5;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 64px; }
+    nav {
+      display: flex; gap: 14px; flex-wrap: wrap; justify-content: flex-end;
+      margin-bottom: 16px; font-size: 0.9rem; font-weight: 600;
+    }
+    nav a { color: var(--muted); text-decoration: none; }
+    nav a:hover { color: var(--accent); }
+    .hero {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 32px 28px 30px;
+      margin-bottom: 18px;
+      box-shadow: 0 24px 60px rgba(36, 28, 23, 0.06);
+    }
+    h1, h2, h3 { font-family: "Playfair Display", Fraunces, Georgia, serif; margin: 0 0 12px; letter-spacing: -0.02em; }
+    h1 { font-size: clamp(1.85rem, 4.2vw, 2.65rem); line-height: 1.08; }
+    h2 { font-size: 1.35rem; }
+    p { margin: 0 0 12px; color: var(--muted); }
+    .hero-lead { font-size: 1.05rem; color: var(--muted); max-width: 720px; }
+    .hero-search { margin-top: 22px; display: grid; gap: 14px; }
+    .hero-search-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .hero-search-row input {
+      flex: 1; min-width: min(100%, 280px);
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 16px 18px; font: inherit; background: var(--panel-2); color: var(--text);
+    }
+    .hero-search-row input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 14px 22px; border-radius: 999px; text-decoration: none;
+      border: 1px solid var(--border); color: var(--text); font-weight: 600;
+      background: var(--panel-2); cursor: pointer; font: inherit;
+    }
+    .btn.primary { background: var(--accent); color: #fffaf3; border-color: transparent; }
+    .btn.primary:hover { background: var(--accent-hover); }
+    .block {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 22px 24px;
+      margin-bottom: 16px;
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; }
+    .label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+    .list { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 0.92rem; }
+    .table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    .table td, .table th { border-bottom: 1px solid var(--border); padding: 10px 8px; text-align: left; }
+    .table th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .steps { margin: 0; padding-left: 20px; color: var(--muted); }
+    .steps li { margin-bottom: 8px; }
+    .foot-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <nav>
       <a href="/">Home</a>
-      <a href="/search">Discover</a>
-      <a href="/sources">Supported Sources</a>
-      <a href="/app">Dashboard</a>
+      <a href="/discover">Discover</a>
+      <a href="/sources">Sources</a>
+      <a href="/app">Library</a>
       <a href="/app/add">Add URL</a>
+      <a href="/auth">Sign in</a>
     </nav>
 
     <section class="hero">
       <h1>Search any manga or manhwa. Find the best source. Track updates beautifully.</h1>
-      <p class="hero-sub">Search titles or paste any URL, compare available source websites, preview metadata, and add the best source to your reading tracker.</p>
-      <p>The extension is an optional companion detection tool. Discovery, comparison, and tracking flow stay on the website.</p>
+      <p class="hero-lead">Paste any URL or search titles — supported sites resolve automatically; everything else becomes intentional manual tracking. The extension is an optional companion for chapter detection.</p>
       <form class="hero-search" action="/discover" method="get">
         <div class="hero-search-row">
-          <input type="text" name="q" placeholder="Search title: Solo Leveling">
-          <button class="btn primary" type="submit">Discover</button>
+          <input type="search" name="q" placeholder="Search a title (e.g. Solo Leveling)" aria-label="Search manga or manhwa title">
+          <button class="btn primary" type="submit">Search titles</button>
         </div>
         <div class="hero-search-row">
-          <input type="url" name="url" placeholder="Paste URL: https://mangadex.org/title/...">
-          <button class="btn" type="submit">Preview URL</button>
+          <input type="url" name="url" placeholder="Or paste any series URL — https://…" aria-label="Paste series URL">
+          <button class="btn primary" type="submit">Resolve URL</button>
         </div>
       </form>
-      <div class="row">
-        <a class="btn primary" href="/discover">Discover titles</a>
-        <a class="btn" href="/app">Open tracker</a>
+      <div class="foot-cta" style="margin-top:18px;">
+        <a class="btn primary" href="/app/add">Add URL in app</a>
+        <a class="btn" href="/discover">Open discover</a>
+        <a class="btn" href="/demo">Try demo library</a>
       </div>
     </section>
 
     <section class="block">
-      <h2>Search any manga or manhwa</h2>
-      <form action="/search" method="get" class="search">
-        <input type="text" name="q" placeholder="Solo Leveling" aria-label="Search manga or manhwa">
-        <button class="btn primary" type="submit">Search</button>
-      </form>
-      <div class="card" style="margin-top:12px;">
-        <strong>Solo Leveling</strong>
-        <p>Found on 5 sources · Recommended: Asura · Latest known chapter: 179</p>
-        <a class="btn" href="/series/solo-leveling">View sources</a>
-      </div>
-    </section>
-
-    <section class="block">
-      <h2>Featured examples</h2>
-      <p>Preview data for layout and UX. Real trend analytics can be connected later.</p>
-      <div class="grid">
-        <div class="card"><span class="label">Trending now</span><ul class="list">{% for item in trending.trending_now %}<li>{{ item.title }}</li>{% endfor %}</ul></div>
-        <div class="card"><span class="label">Most watched</span><ul class="list">{% for item in trending.most_watched %}<li>{{ item.title }}</li>{% endfor %}</ul></div>
-        <div class="card"><span class="label">Recently updated</span><ul class="list">{% for item in trending.recently_updated %}<li>{{ item.title }} ({{ item.chapter }})</li>{% endfor %}</ul></div>
-      </div>
-    </section>
-
-    <section class="block">
-      <h2>Source comparison preview</h2>
+      <h2>Example source comparison</h2>
+      <p>Same story can look different across hosts — we surface latest chapter hints so you can pick a reading site you trust.</p>
       <table class="table">
         <thead><tr><th>Source</th><th>Latest</th><th>Note</th><th>Label</th></tr></thead>
         <tbody>
@@ -103,39 +143,53 @@
     </section>
 
     <section class="block">
+      <h2>Featured examples</h2>
+      <p>Static demo titles for layout — not live analytics or popularity rankings.</p>
+      <div class="grid">
+        <div class="card"><span class="label">Spotlight mix A</span><ul class="list">{% for item in trending.trending_now %}<li>{% if item is mapping %}{{ item.title }}{% else %}{{ item }}{% endif %}</li>{% endfor %}</ul></div>
+        <div class="card"><span class="label">Spotlight mix B</span><ul class="list">{% for item in trending.most_watched %}<li>{% if item is mapping %}{{ item.title }}{% else %}{{ item }}{% endif %}</li>{% endfor %}</ul></div>
+        <div class="card"><span class="label">With chapter hints</span><ul class="list">{% for item in trending.recently_updated %}<li>{% if item is mapping %}{{ item.title }} ({{ item.chapter }}){% else %}{{ item }}{% endif %}</li>{% endfor %}</ul></div>
+      </div>
+    </section>
+
+    <section class="block">
       <h2>How it works</h2>
-      <p>1) Search title or paste URL → 2) Compare source websites and recommendation → 3) Add to library and track progress.</p>
-      <p>Supported URLs become automatic, unsupported URLs become manual tracking, and requested domains become future adapters.</p>
+      <ol class="steps">
+        <li><strong style="color:var(--text);">Search or paste</strong> — titles and URLs both land in the same discovery flow.</li>
+        <li><strong style="color:var(--text);">Compare</strong> — see which sources have fresher chapters before you commit.</li>
+        <li><strong style="color:var(--text);">Track</strong> — add to your library; automatic checks run for supported sites, manual for the rest.</li>
+        <li><strong style="color:var(--text);">Request</strong> — unsupported domains go to Source Requests for future adapters.</li>
+      </ol>
     </section>
 
     <section class="block">
       <h2>Supported sources</h2>
       <div class="grid">
-        <div class="card"><span class="label">Official/Public</span><ul class="list"><li>MangaDex</li><li>MANGA Plus</li><li>Nico Seiga</li><li>ComicWalker</li></ul></div>
-        <div class="card"><span class="label">Adapter support</span><ul class="list"><li>Asura</li><li>Reaper</li><li>Flame</li><li>More coming</li></ul></div>
-        <div class="card"><span class="label">Fallback</span><ul class="list"><li>Generic manga page detector</li><li>Extension-assisted detection</li><li>Manual tracking</li></ul></div>
+        <div class="card"><span class="label">Automatic</span><p style="margin:8px 0 0;font-size:0.92rem;">MangaDex, MANGA Plus, ComicWalker, and other official/API-backed catalogs.</p></div>
+        <div class="card"><span class="label">Supported adapters</span><p style="margin:8px 0 0;font-size:0.92rem;">Popular reader sites with dedicated parsers — see the live Sources page for status.</p></div>
+        <div class="card"><span class="label">Experimental & manual</span><p style="margin:8px 0 0;font-size:0.92rem;">Generic detectors plus manual bookmarks — every URL is accepted.</p></div>
       </div>
     </section>
 
     <section class="block">
       <h2>Extension companion</h2>
-      <p>The extension helps detect what you are currently reading. It is optional and does not replace website discovery or tracker flows.</p>
-      <div class="row">
-        <a class="btn" href="/sources">View source support</a>
-        <a class="btn primary" href="/app">Use website tracker</a>
+      <p>Optional Chrome extension: detects chapter pages and syncs progress to your signed-in library. It never replaces the website — discovery, comparison, and library management stay here.</p>
+      <div class="foot-cta">
+        <a class="btn" href="/sources">Source support policy</a>
+        <a class="btn primary" href="/app">Open library</a>
       </div>
     </section>
 
     <section class="block">
-      <h2>Safety & open-source note</h2>
-      <p>This project tracks metadata and source URLs only. It does not host manga pages or chapter images, and does not bypass paywalls or protected access controls.</p>
+      <h2>Safety</h2>
+      <p><strong style="color:var(--text);">We do not host chapters or panel images.</strong> Manga Watchlist stores metadata, URLs, and your reading progress only — never a manga reader or image cache.</p>
     </section>
 
     <section class="block">
-      <h2>Ready to start?</h2>
-      <div class="row">
-        <a class="btn primary" href="/app">Open Dashboard</a>
-        <a class="btn" href="/app/add">Add URL</a>
+      <h2>Ready</h2>
+      <div class="foot-cta">
+        <a class="btn primary" href="/auth">Create account</a>
+        <a class="btn" href="/app/add">Add your first URL</a>
       </div>
     </section>
   </div>
