@@ -117,7 +117,7 @@
         <section class="panel discover-section">
           <h2>URL detection</h2>
           {% if resolved.error %}
-            <div class="flash warning">Manual tracking only. {{ resolved.error|e }}</div>
+            <div class="flash warning">{{ resolved.supportLabel or "Manual" }}. {{ resolved.error|e }}</div>
           {% else %}
             <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
               {% if resolved.cover_url %}
@@ -162,9 +162,13 @@
                   <span class="discover-pill">Latest {{ (r.latest_chapter or '?')|e }}</span>
                   <span class="discover-pill">{{ r.best_source|e }}</span>
                   <span class="discover-pill">{{ r.support_label|e }}</span>
+                  <span class="discover-pill">{{ (r.sources_found or r.source_count or 1)|int }} source{% if (r.sources_found or r.source_count or 1)|int != 1 %}s{% endif %}</span>
                 </div>
                 <div class="discover-actions">
                   <a class="btn ghost" href="{{ url_for('public_series', slug=(r.comparison_slug or r.slug)) }}">View sources</a>
+                  {% if r.source_url %}
+                  <a class="btn ghost" href="{{ r.source_url|e }}" target="_blank" rel="noreferrer">Open original</a>
+                  {% endif %}
                   {% if r.source_url %}
                     {% if current_user %}
                     <a class="btn primary" href="{{ url_for('app_add_url', url=r.source_url) }}">Add</a>

@@ -4,10 +4,12 @@ import json
 from pathlib import Path
 
 from sources.adapters.asura import AsuraAdapter
+from sources.adapters.css_source import load_css_adapters_from_profiles
 from sources.adapters.mangadex import MangaDexAdapter
 from sources.generic_detector import GenericDetector
 
 REGISTRY_JSON_PATH = Path(__file__).resolve().parent / "sources.registry.json"
+CSS_ADAPTER_PROFILES_PATH = Path(__file__).resolve().parent / "css_adapter_profiles.json"
 
 
 def _load_registry_json() -> list[dict]:
@@ -69,8 +71,11 @@ def _legacy_from_sources(row: dict) -> dict:
 SOURCE_REGISTRY = [_legacy_from_sources(row) for row in _load_registry_json()]
 
 
+CSS_SOURCE_ADAPTERS = load_css_adapters_from_profiles(CSS_ADAPTER_PROFILES_PATH)
+
 ADAPTERS = [
     MangaDexAdapter(),
+    *CSS_SOURCE_ADAPTERS,
     AsuraAdapter(),
 ]
 

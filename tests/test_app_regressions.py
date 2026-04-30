@@ -208,6 +208,30 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn("Automatic detection could not read this URL.", body)
         self.assertNotIn("secret stack trace detail", body)
 
+    def test_discover_q_url_uses_url_detection_block(self):
+        preview = SourcePreview(
+            source_name="MangaDex",
+            source_url="https://mangadex.org/title/abc",
+            support_level="official_api",
+            confidence=0.95,
+            title="Chainsaw Man",
+            latest_chapter="200",
+        )
+        with patch.object(app, "source_engine_resolve_url", return_value=preview):
+            res = self.client.get("/discover?q=https%3A%2F%2Fmangadex.org%2Ftitle%2Fabc")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("URL detection", body)
+        self.assertIn("Chainsaw Man", body)
+        self.assertIn("Support: Automatic", body)
+
+    def test_discover_non_public_url_shows_unavailable(self):
+        res = self.client.get("/discover?url=http%3A%2F%2Flocalhost%3A8080%2Fseries%2Fx")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("Unavailable", body)
+        self.assertIn("private, local, or blocked", body)
+
     def test_discover_query_specific_results_or_empty_state(self):
         from unittest.mock import patch
 

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
+from sources.base import SourcePreview
 from sources.registry import ADAPTERS, GENERIC_DETECTOR
+
+_HOST_PREFIXES = ("www.", "www2.", "m.", "mobile.")
 
 
 def normalize_url(url: str) -> str:
@@ -12,31 +15,78 @@ def normalize_url(url: str) -> str:
     return normalized
 
 
+def normalize_host(netloc: str) -> str:
+    """Lowercase host without common leading prefixes (www, m, mobile)."""
+    h = (netloc or "").strip().lower()
+    if not h:
+        return ""
+    if h.startswith("[") and "]" in h:
+        return h
+    if ":" in h and not h.startswith("["):
+        h = h.rsplit(":", 1)[0]
+    changed = True
+    while changed:
+        changed = False
+        for p in _HOST_PREFIXES:
+            if h.startswith(p):
+                h = h[len(p) :]
+                changed = True
+    return h
+
+
 def get_domain(url: str) -> str:
     parsed = urlparse(url)
-    domain = (parsed.netloc or "").lower()
-    if domain.startswith("www."):
-        domain = domain[4:]
-    return domain
+    return normalize_host(parsed.netloc or "")
 
 
-def resolve_url(url: str):
+def adapter_matches_host(adapter, host_norm: str) -> bool:
+    if not host_norm:
+        return False
+    for d in getattr(adapter, "domains", []) or []:
+        dom = str(d).lower().strip()
+        if not dom:
+            continue
+        if host_norm == dom or host_norm.endswith("." + dom):
+            return True
+    return False
+
+
+def resolve_url(url: str) -> SourcePreview:
     normalized = normalize_url(url)
-    domain = get_domain(normalized)
+    host = get_domain(normalized)
     for adapter in ADAPTERS:
-        if domain in adapter.domains or adapter.can_handle_url(normalized):
-            return adapter.resolve_url(normalized)
-    return GENERIC_DETECTOR.resolve_url(normalized)
+        if adapter_matches_host(adapter, host):
+            try:
+                return adapter.resolve_url(normalized)
+            except Exception:
+                continue
+    try:
+        return GENERIC_DETECTOR.resolve_url(normalized)
+    except Exception:
+        return SourcePreview(
+            source_name="Unknown Site",
+            source_url=normalized,
+            support_level="manual_only",
+            confidence=0.0,
+            title="",
+            warnings=["Automatic detection failed. Save this URL manually or use the extension."],
+        )
 
 
-def search_title(query: str) -> list[dict]:
+def search_title(query: str, *, skip_adapter_ids: set[str] | None = None) -> list[dict]:
     q = (query or "").strip()
     if not q:
         return []
+    skip = skip_adapter_ids or set()
     out: list[dict] = []
     for adapter in ADAPTERS:
+        aid = str(getattr(adapter, "id", "") or "")
+        if aid in skip:
+            continue
         try:
-            out.extend(adapter.search(q))
+            rows = adapter.search(q)
+            if rows:
+                out.extend(rows)
         except Exception:
             continue
     return out

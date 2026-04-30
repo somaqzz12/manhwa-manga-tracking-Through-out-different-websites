@@ -40,19 +40,5 @@ class AsuraAdapter(SourceAdapter):
         )
 
     def search(self, query: str) -> list[dict]:
-        q = (query or "").strip()
-        if not q:
-            return []
-        slug = q.lower().replace(" ", "-")
-        return [
-            {
-                "source_id": self.id,
-                "source_name": self.name,
-                "external_id": slug,
-                "title": q.title(),
-                "url": f"https://asuracomic.net/series/{slug}",
-                "description": "Community mirror entry",
-                "status": None,
-                "confidence": 0.72,
-            }
-        ]
+        """Title search not implemented; avoid fake hits on Discover. URL paste still uses resolve_url."""
+        return []

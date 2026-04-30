@@ -3194,6 +3194,17 @@ def public_search():
 def discover_page():
     q = (request.args.get("q") or "").strip()
     url_q = (request.args.get("url") or "").strip()
+    # Discovery hub: if q looks like a URL, route through URL resolver path.
+    if not url_q and q:
+        candidate = q if "://" in q else f"https://{q}"
+        maybe_url = "://" in q or q.lower().startswith("www.") or (("." in q) and (" " not in q))
+        try:
+            parsed_candidate = urlparse(candidate)
+        except Exception:
+            parsed_candidate = None
+        if maybe_url and parsed_candidate and parsed_candidate.netloc:
+            url_q = q
+            q = ""
     live_flag = (request.args.get("live") or "").strip().lower() in ("1", "true", "yes")
     search_payload = metadata_discovery.discover_search(q, live=live_flag) if q else {"results": [], "is_demo": False}
     search_results = search_payload.get("results") or []
@@ -3207,19 +3218,69 @@ def discover_page():
     landing_comparison_slug = _effective_comparison_slug(comp_slug)
     resolved = None
     if url_q:
+        normalized_url_q = url_q
         try:
-            preview = source_engine_resolve_url(url_q)
-            resolved = asdict(preview)
-            resolved["status"] = "supported" if preview.support_level != "manual" else "manual"
-            resolved["supportLabel"] = preview.support_level.replace("_", " ").title()
-            resolved["chaptersFound"] = len(preview.chapters or [])
+            normalized_url_q = source_engine_normalize_url(url_q)
         except Exception:
-            app.logger.exception("discover url resolver failed for input=%r", url_q)
+            pass
+
+        def _host_is_private_or_local(raw: str) -> bool:
+            try:
+                h = (urlparse(raw).hostname or "").lower().strip()
+            except Exception:
+                return False
+            if not h:
+                return True
+            if h in {"localhost", "0.0.0.0"} or h.endswith(".local"):
+                return True
+            if h.startswith("127.") or h.startswith("10.") or h.startswith("192.168."):
+                return True
+            if h.startswith("172."):
+                parts = h.split(".")
+                if len(parts) >= 2:
+                    try:
+                        second = int(parts[1])
+                        if 16 <= second <= 31:
+                            return True
+                    except Exception:
+                        pass
+            return False
+
+        if _host_is_private_or_local(normalized_url_q):
             resolved = {
                 "ok": False,
-                "error": "Automatic detection could not read this URL. You can paste it into Add URL and save it manually.",
+                "status": "unavailable",
+                "supportLabel": "Unavailable",
+                "error": "This URL is private, local, or blocked. Please use a public http(s) series URL.",
                 "input_url": url_q,
             }
+        else:
+            try:
+                preview = source_engine_resolve_url(normalized_url_q)
+                resolved = asdict(preview)
+                support = str(preview.support_level or "manual_only").strip().lower()
+                if support == "official_api":
+                    label = "Automatic"
+                elif support == "site_adapter":
+                    label = "Supported"
+                elif support == "generic_detector":
+                    label = "Experimental"
+                elif support == "manual_only":
+                    label = "Manual"
+                else:
+                    label = support.replace("_", " ").title()
+                resolved["status"] = "supported" if support not in ("manual_only", "blocked", "unavailable") else "manual"
+                resolved["supportLabel"] = label
+                resolved["chaptersFound"] = len(preview.chapters or [])
+            except Exception:
+                app.logger.exception("discover url resolver failed for input=%r", normalized_url_q)
+                resolved = {
+                    "ok": False,
+                    "status": "unavailable",
+                    "supportLabel": "Unavailable",
+                    "error": "Automatic detection could not read this URL. You can paste it into Add URL and save it manually.",
+                    "input_url": url_q,
+                }
     return render_template(
         "discover.html",
         q=q,
