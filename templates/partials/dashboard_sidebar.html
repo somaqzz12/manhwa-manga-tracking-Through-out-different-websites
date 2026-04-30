@@ -1,29 +1,31 @@
 <aside class="dashboard-sidebar desktop-sidebar" aria-label="Library navigation">
   <div class="dashboard-sidebar-top">
-    <a class="dashboard-brand" href="{{ url_for('index') }}">
+    <a class="dashboard-brand sidebar-brand" href="{{ url_for('index') }}">
       <span class="dashboard-mark">MW</span>
-      <span>
-        <strong>Manga Watchlist</strong>
-        <small>Reading Tracker</small>
+      <span class="sidebar-brand-text">
+        <strong class="sidebar-title">Manga Watchlist</strong>
+        <small class="sidebar-subtitle">Reading Tracker</small>
       </span>
     </a>
   </div>
 
-  <div class="dashboard-sidebar-search">
+  <div class="dashboard-sidebar-search sidebar-search">
     <input id="sidebarSearch" type="search" placeholder="Search titles..." autocomplete="off">
   </div>
 
-  <nav class="dashboard-sidebar-nav">
-    <a class="dashboard-nav-item is-active" href="{{ url_for('index') }}">All stories <span class="dashboard-nav-ct">{{ total_count or 0 }}</span></a>
+  <nav class="dashboard-sidebar-nav sidebar-nav">
+    <a class="dashboard-nav-item sidebar-link is-active active" href="{{ url_for('index') }}"><span>All stories</span> <span class="dashboard-nav-ct">{{ total_count or 0 }}</span></a>
     {% if current_user is defined and current_user and not demo_mode|default(false) %}
-    <a class="dashboard-nav-item" href="{{ url_for('next_up') }}">Next up</a>
+    <a class="dashboard-nav-item sidebar-link" href="{{ url_for('next_up') }}"><span>Next up</span></a>
     {% endif %}
-    <span class="dashboard-nav-label">Manage</span>
-    <a class="dashboard-nav-item" href="{{ url_for('sources_page') }}">Sources</a>
-    <a class="dashboard-nav-item" href="{{ url_for('source_requests_page') }}">Source requests</a>
-    <a class="dashboard-nav-item" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Extension ZIP</a>
-    <span class="dashboard-nav-label">Account</span>
-    <a class="dashboard-nav-item" href="{{ url_for('account_settings') }}">Settings</a>
-    <a class="dashboard-nav-item" href="{{ url_for('privacy_page') }}">Privacy</a>
+    <span class="dashboard-nav-label sidebar-section-label">Manage</span>
+    <a class="dashboard-nav-item sidebar-link" href="{{ url_for('sources_page') }}"><span>Sources</span></a>
+    <a class="dashboard-nav-item sidebar-link" href="{{ url_for('source_requests_page') }}"><span>Source requests</span></a>
+    <a class="dashboard-nav-item sidebar-link" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer"><span>Extension ZIP</span></a>
+    <div class="sidebar-bottom">
+      <span class="dashboard-nav-label sidebar-section-label">Account</span>
+      <a class="dashboard-nav-item sidebar-link" href="{{ url_for('account_settings') }}"><span>Settings</span></a>
+      <a class="dashboard-nav-item sidebar-link" href="{{ url_for('privacy_page') }}"><span>Privacy</span></a>
+    </div>
   </nav>
 </aside>

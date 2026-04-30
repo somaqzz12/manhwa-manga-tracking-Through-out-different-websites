@@ -2,13 +2,13 @@
 {% set _sq = search_q|default('', true) %}
 {% set _sort = sort|default('added', true) %}
 {% set _page = page|default(1, true) %}
-<header class="dash-topbar" role="banner">
+<header class="app-topbar dash-topbar" role="banner">
   <a class="dash-topbar-brand" href="{{ url_for('index') }}" title="Manga Watchlist">
     <span class="dash-topbar-logo" aria-hidden="true">MW</span>
     <span class="dash-topbar-wordmark">Manga Watchlist</span>
   </a>
 
-  <form class="dash-topbar-search" method="get" action="{{ url_for('index') }}" role="search">
+  <form class="dash-topbar-search search-bar" method="get" action="{{ url_for('index') }}" role="search">
     <input id="searchInput" type="search" name="q" value="{{ _sq }}" placeholder="Search your library…" autocomplete="off" aria-label="Search library" />
     <input type="hidden" name="sort" value="{{ _sort }}" />
     <input type="hidden" name="page" value="1" />
