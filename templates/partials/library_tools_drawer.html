@@ -21,7 +21,7 @@
       {% endif %}
       <a class="drawer-nav-link {% if request.endpoint == 'sources_page' %}is-active{% endif %}" href="{{ url_for('sources_page') }}">Sources</a>
       <a class="drawer-nav-link {% if request.endpoint == 'source_requests_page' %}is-active{% endif %}" href="{{ url_for('source_requests_page') }}">Source requests</a>
-      <a class="drawer-nav-link drawer-nav-link--external" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Extension</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'extension_page' %}is-active{% endif %}" href="{{ url_for('extension_page') }}">Extension</a>
       <a class="drawer-nav-link" href="/export" title="Export JSON. Import from Restore backup below when on the dashboard.">Import / Export</a>
       <a class="drawer-nav-link {% if request.endpoint == 'privacy_page' %}is-active{% endif %}" href="{{ url_for('privacy_page') }}">Privacy</a>
       <a class="drawer-nav-link {% if request.endpoint == 'changelog_page' %}is-active{% endif %}" href="{{ url_for('changelog_page') }}">Changelog</a>
@@ -137,9 +137,9 @@
 
     <section class="library-drawer-section muted" style="font-size:0.85rem;line-height:1.5;">
       <strong class="sidebar-label">Extension</strong>
-      Install the browser extension from the ZIP to capture series from supported readers.
-      <a href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Download extension (ZIP)</a>
-      — then use <code>chrome://extensions</code> → Developer mode → Load unpacked.
+      <a href="{{ url_for('extension_page') }}">Install guide &amp; privacy</a>
+      ·
+      <a href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Download ZIP</a>
     </section>
   </div>
 </aside>

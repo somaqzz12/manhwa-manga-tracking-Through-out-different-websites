@@ -2,12 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import {
-  dashboardUrl,
-  extensionZipDownloadUrl,
-  githubUrl,
-  webStoreUrl,
-} from "@/lib/site-config";
+import { dashboardUrl, githubUrl, webStoreUrl } from "@/lib/site-config";
 
 export function SiteHeader() {
   const [isDark, setIsDark] = useState(false);
@@ -47,12 +42,10 @@ export function SiteHeader() {
             Sources
           </a>
           <a
-            href={extensionZipDownloadUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={`${base}/extension`}
             className="text-[var(--color-muted)] no-underline transition hover:text-[var(--color-text)]"
           >
-            Extension
+            Get extension
           </a>
           <a
             href={githubUrl}

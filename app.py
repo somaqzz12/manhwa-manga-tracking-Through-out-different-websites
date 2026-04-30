@@ -2924,6 +2924,10 @@ def about_page():
     return render_template("about.html")
 
 
+def extension_page():
+    return render_template("extension_landing.html")
+
+
 register_public_routes(
     app,
     {
@@ -2932,6 +2936,7 @@ register_public_routes(
         "discover_page": discover_page,
         "public_series": public_series,
         "about_page": about_page,
+        "extension_page": extension_page,
     },
 )
 

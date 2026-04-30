@@ -27,7 +27,7 @@
     <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'source_requests_page' %} is-active{% endif %}" href="{{ url_for('source_requests_page') }}"><span>Source requests</span></a>
 
     <span class="dashboard-nav-label sidebar-section-label">Tools</span>
-    <a class="dashboard-nav-item sidebar-link sidebar-link--external" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer"><span>Extension</span></a>
+    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'extension_page' %} is-active{% endif %}" href="{{ url_for('extension_page') }}"><span>Extension</span></a>
     <a class="dashboard-nav-item sidebar-link" href="/export" title="Download JSON backup. Import from the menu (☰) → Restore backup."><span>Import / Export</span></a>
 
     <div class="sidebar-bottom">

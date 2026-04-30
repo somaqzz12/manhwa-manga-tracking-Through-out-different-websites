@@ -8,7 +8,7 @@ import {
   demoRecentRows,
   demoTrendingWeek,
 } from "@/lib/landing-demo";
-import { dashboardUrl, extensionZipDownloadUrl } from "@/lib/site-config";
+import { dashboardUrl } from "@/lib/site-config";
 
 export default function HomePage() {
   const base = dashboardUrl.replace(/\/$/, "");
@@ -154,21 +154,23 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="extension" className="border-t border-[var(--color-border)] px-4 py-14 sm:px-8 md:px-12 bg-[var(--color-surface-2)]">
+        <section id="extension" className="border-t border-[var(--color-border)] px-4 py-12 sm:px-8 md:px-12 bg-[var(--color-surface-2)]">
           <div className="mx-auto max-w-6xl">
-            <h2 className="font-serif text-2xl font-bold text-[var(--color-text)]">Track from any site with the extension</h2>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--color-muted)]">Companion</p>
+            <h2 className="font-serif text-2xl font-bold text-[var(--color-text)]">Read on the web? Use the extension.</h2>
             <p className="mt-3 max-w-2xl text-[var(--color-muted)] leading-relaxed">
-              Detect the page you&apos;re reading, send it to your library, and mark chapters as read — optional companion to
-              the website.
+              Detect the page you&apos;re on, add safe metadata to your library, and mark progress. Install steps, permissions, and
+              privacy rules live on the extension page — not here.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <a
-                href={extensionZipDownloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`${base}/extension`}
                 className="btn-primary inline-flex rounded-full px-6 py-3 text-sm font-semibold no-underline"
               >
-                Download extension
+                Get extension
+              </a>
+              <a href={`${base}/discover`} className="btn-glass inline-flex rounded-full px-6 py-3 text-sm font-semibold text-[var(--color-text)] no-underline">
+                Discover
               </a>
               <a href={`${base}/app`} className="btn-glass inline-flex rounded-full px-6 py-3 text-sm font-semibold text-[var(--color-text)] no-underline">
                 Open app

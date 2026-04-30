@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent } from "react";
-import { dashboardUrl, extensionZipDownloadUrl, webStoreUrl } from "@/lib/site-config";
+import { dashboardUrl } from "@/lib/site-config";
 
 export function Hero() {
   const base = dashboardUrl.replace(/\/$/, "");
@@ -83,24 +82,14 @@ export function Hero() {
       </p>
 
       <p className="mt-8 max-w-lg text-sm leading-relaxed text-[var(--color-muted)]">
-        Optional extension: unzip, open{" "}
-        <code className="rounded-md bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] px-1.5 py-0.5 text-[0.8em]">
-          chrome://extensions
-        </code>
-        , enable Developer mode, then Load unpacked.{" "}
-        <a href={extensionZipDownloadUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--color-accent)]">
-          Download ZIP
-        </a>
-        {webStoreUrl.length > 0 ? (
-          <>
-            {" "}
-            or{" "}
-            <Link href={webStoreUrl} className="font-semibold text-[var(--color-accent)]" target="_blank" rel="noopener noreferrer">
-              Web Store
-            </Link>
-          </>
-        ) : null}
-        .
+        Optional browser companion:{" "}
+        <a
+          href={`${base}/extension`}
+          className="font-semibold text-[var(--color-accent)] no-underline hover:underline"
+        >
+          Get extension
+        </a>{" "}
+        — add pages from sites you already use. Install and privacy details are on that page.
       </p>
     </section>
   );

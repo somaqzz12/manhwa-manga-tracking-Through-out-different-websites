@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 os.environ.setdefault("DISABLE_AUTO_CHECK", "1")
@@ -108,7 +109,7 @@ class AppRegressionTests(unittest.TestCase):
         with (
             patch.object(app, "is_public_http_url", return_value=True),
             patch.object(app.source_registry, "get_profile_for_url", return_value={"id": "current"}),
-            patch.object(app.source_registry, "list_sources", return_value=sources),
+            patch.object(app.source_registry, "list_public_sources", return_value=sources),
             patch.object(app.source_registry, "load_health", return_value=health),
         ):
             res = self.client.get("/api/library/alt-sources?url=https://current.example/manga/demo")
@@ -120,6 +121,63 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn("healthy", ids)
         self.assertNotIn("broken", ids)
         self.assertNotIn("current", ids)
+
+    def test_alt_sources_excludes_nsfw_candidates(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("altsafeuser", "altsafe@example.com", generate_password_hash("secret12"), now),
+            )
+            uid_row = conn.execute("SELECT id FROM users WHERE email = ?", ("altsafe@example.com",)).fetchone()
+            uid = int(uid_row["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+
+        safe_sources = [{"id": "safe", "display_name": "Safe", "domains": ["safe.example"], "nsfw": False}]
+        with (
+            patch.object(app, "is_public_http_url", return_value=True),
+            patch.object(app.source_registry, "get_profile_for_url", return_value={"id": "current"}),
+            patch.object(app.source_registry, "list_public_sources", return_value=safe_sources),
+            patch.object(app.source_registry, "load_health", return_value={"by_id": {}}),
+        ):
+            res = self.client.get("/api/library/alt-sources?url=https://current.example/manga/demo")
+        self.assertEqual(res.status_code, 200)
+        payload = res.get_json() or {}
+        ids = [row.get("id") for row in payload.get("alternatives") or []]
+        self.assertEqual(ids, ["safe"])
+
+    def test_sources_page_excludes_nsfw_rows(self):
+        safe_rows = [
+            {
+                "id": "safe",
+                "display_name": "Safe Source",
+                "domains": ["safe.example"],
+                "status": "working",
+                "nsfw": False,
+                "health": {},
+            }
+        ]
+        with (
+            patch.object(app.source_registry, "public_sources_with_health", return_value=safe_rows),
+            patch.object(app.source_registry, "aggregate_status_counts", return_value={"total": 1, "working": 1, "partial": 0, "broken": 0}),
+            patch.object(app.source_registry, "load_health", return_value={}),
+        ):
+            res = self.client.get("/sources")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("Safe Source", body)
+        self.assertNotIn("nhentai.xxx", body)
+
+    def test_extension_product_page_is_public(self):
+        res = self.client.get("/extension")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("Track manga from the sites you already use", body)
+        self.assertIn("Safety", body)
+        self.assertIn("scripting", body.lower())
 
     def test_api_resolve_url_manual_fallback_on_detection_failure(self):
         with patch.object(app, "is_public_http_url", return_value=True), patch.object(
@@ -297,6 +355,16 @@ class AppRegressionTests(unittest.TestCase):
             json={"url": "https://example.com/series/demo", "support_level": "manual_only", "title": "Demo"},
         )
         self.assertEqual(res.status_code, 401)
+
+    def test_app_add_preview_uses_safe_dom_rendering(self):
+        template_path = Path(app.app.root_path) / "templates" / "app_add.html"
+        content = template_path.read_text(encoding="utf-8")
+        self.assertIn("document.getElementById(\"out\").replaceChildren(renderPreview(data));", content)
+        self.assertIn("li.textContent = String(warning || \"\");", content)
+        self.assertIn("title.textContent = data.canonical_title || data.title || \"Unknown title\";", content)
+        self.assertIn("isSafeHttpUrl(data.cover_url || \"\")", content)
+        self.assertIn("isSafeHttpUrl(data.source_url || \"\")", content)
+        self.assertNotIn("out.innerHTML = renderPreview(data)", content)
 
 
 if __name__ == "__main__":

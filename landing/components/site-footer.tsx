@@ -4,12 +4,13 @@ import {
   authorName,
   bugReportUrl,
   extensionPrivacyHref,
-  extensionZipDownloadUrl,
   githubUrl,
+  dashboardUrl,
 } from "@/lib/site-config";
 
 export function SiteFooter() {
   const year = new Date().getFullYear();
+  const base = dashboardUrl.replace(/\/$/, "");
   return (
     <footer className="border-t border-[var(--color-border)] px-4 py-12 sm:px-6">
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-8 sm:flex-row sm:justify-between">
@@ -22,14 +23,9 @@ export function SiteFooter() {
           >
             Repository
           </Link>
-          <a
-            href={extensionZipDownloadUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="transition hover:text-[var(--color-text)]"
-          >
-            Download extension
-          </a>
+          <Link href={`${base}/extension`} className="transition hover:text-[var(--color-text)]">
+            Extension
+          </Link>
           <Link
             href={bugReportUrl}
             target="_blank"

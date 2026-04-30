@@ -5,6 +5,7 @@ This is the extracted route inventory from `app.py` before modularization.
 ## Public Website Pages
 
 - `GET /` -> landing
+- `GET /extension` -> browser extension product page (install, permissions, privacy)
 - `GET /discover` -> discovery page (title search + URL resolve UX)
 - `GET /search` -> currently redirects to `/discover`
 - `GET /series/<slug>` -> public series/source comparison page
@@ -96,6 +97,7 @@ This is the extracted route inventory from `app.py` before modularization.
 This route surface will be preserved while internal code is split:
 
 - `/` landing
+- `/extension` browser extension product page
 - `/discover` public search + URL discovery
 - `/series/<slug>` public source comparison
 - `/app` dashboard

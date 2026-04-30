@@ -284,7 +284,7 @@
       <nav class="nav-main" aria-label="Primary">
         <a href="/discover">Discover</a>
         <a href="/sources">Sources</a>
-        <a href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Extension</a>
+        <a href="{{ url_for('extension_page') }}">Get extension</a>
         <a href="{{ github_url }}" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a class="nav-cta" href="/app">Open app</a>
         <a class="nav-cta nav-primary" href="/auth">Sign in</a>
@@ -441,10 +441,12 @@
     </section>
 
     <section class="block" id="extension">
-      <h2>Track from any site with the extension</h2>
-      <p class="section-lead" style="font-size:0.95rem;">Detect the page you’re reading, send it to your library, and mark chapters as read — optional companion to the website.</p>
+      <p class="section-note">Companion</p>
+      <h2>Read on the web? Use the extension.</h2>
+      <p class="section-lead" style="font-size:0.95rem;">Detect the page you’re on, add safe metadata to your library, and mark progress. Install steps, permissions, and privacy rules are on the extension page.</p>
       <div class="foot-cta">
-        <a class="btn primary" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Download extension</a>
+        <a class="btn primary" href="{{ url_for('extension_page') }}">Get extension</a>
+        <a class="btn" href="/discover">Discover</a>
         <a class="btn" href="/app">Open app</a>
       </div>
     </section>
