@@ -72,11 +72,13 @@ def _format_mangadex_row(raw: dict[str, Any]) -> dict[str, Any]:
     latest = raw.get("latest_chapter")
     latest_s = str(latest).strip() if latest is not None else ""
     sc = 1
+    # MangaDex frequently blocks direct hotlinking for covers. Prefer in-app placeholder over
+    # rendering their anti-hotlink image ("You can read this at MangaDex").
     return {
         "title": str(raw.get("title") or "").strip(),
         "slug": mid,
         "description": desc,
-        "cover_url": str(raw.get("cover_url") or "").strip(),
+        "cover_url": "",
         "type": "Manga",
         "source_count": sc,
         "sources_found": sc,

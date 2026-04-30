@@ -165,7 +165,7 @@ class MetadataDiscoveryTests(unittest.TestCase):
         self.assertEqual(res["source_url"], "https://mangadex.org/title/x")
         self.assertEqual(res["support_level"], "official_api")
         self.assertEqual(res["best_source"], "MangaDex")
-        self.assertIn("uploads.mangadex.org", res["cover_url"])
+        self.assertEqual(res["cover_url"], "")
 
     def test_discover_search_unknown_no_demo_hits_when_mangadex_empty(self) -> None:
         with patch.object(MangaDexAdapter, "search", return_value=[]):

@@ -3209,6 +3209,12 @@ def discover_page():
     search_payload = metadata_discovery.discover_search(q, live=live_flag) if q else {"results": [], "is_demo": False}
     search_results = search_payload.get("results") or []
     _enrich_comparison_slugs(search_results)
+    non_mangadex_results = [
+        r
+        for r in search_results
+        if str(r.get("source_name") or "").strip().lower() not in {"mangadex"}
+    ]
+    show_track_by_url_cta = bool(q and search_results and not non_mangadex_results)
     search_is_demo = bool(search_payload.get("is_demo"))
     home_data = discovery_home.build_discovery_home_data(supported_source_policy())
     _enrich_comparison_slugs(home_data["starter_picks"])
@@ -3286,6 +3292,7 @@ def discover_page():
         q=q,
         url_q=url_q,
         search_results=search_results,
+        show_track_by_url_cta=show_track_by_url_cta,
         search_is_demo=search_is_demo,
         trending=discovery.trending_snapshot(),
         source_policy=supported_source_policy(),

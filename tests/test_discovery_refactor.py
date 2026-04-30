@@ -154,6 +154,13 @@ class DiscoveryRefactorTests(unittest.TestCase):
         self.assertIn("B", html)
         self.assertIn("a.jpg", html)
         self.assertIn("View sources", html)
+        with app.app.test_request_context("/"):
+            html2 = render_template(
+                "public_search.html",
+                q="x",
+                results=[{"title": "", "slug": "x", "cover_url": "", "source_name": "S"}],
+            )
+        self.assertIn("Untitled", html2)
 
     def test_save_discovered_series_defaults_source_name_manual(self) -> None:
         body = metadata_discovery.save_discovered_series(

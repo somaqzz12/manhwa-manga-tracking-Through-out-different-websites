@@ -253,6 +253,39 @@ class AppRegressionTests(unittest.TestCase):
         self.assertNotIn("Solo Leveling", miss_body.split("Starter picks")[0])
         self.assertIn("Search supported sites live", miss_body)
         self.assertIn("Paste URL", miss_body)
+        self.assertIn("discover-cover-fallback", miss_body)
+
+    def test_discover_results_use_no_referrer_for_cover_images(self):
+        from sources.adapters.mangadex import MangaDexAdapter
+
+        fake = [
+            {
+                "source_id": "mangadex",
+                "source_name": "MangaDex",
+                "external_id": "abc-def-0000-0000-000000000001",
+                "title": "Chainsaw Man",
+                "url": "https://mangadex.org/title/abc-def-0000-0000-000000000001",
+                "description": "On the page.",
+                "cover_url": "https://uploads.mangadex.org/covers/abc/cover.jpg",
+                "latest_chapter": "200",
+                "chapter_count": 200,
+                "support_level": "official_api",
+            }
+        ]
+        with patch.object(MangaDexAdapter, "search", return_value=fake):
+            res = self.client.get("/discover?q=chainsaw")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("discover-cover-fallback", body)
+        # Discovery cards intentionally avoid MangaDex hotlink-blocked covers.
+        self.assertNotIn("uploads.mangadex.org/covers/abc/cover.jpg", body)
+
+    def test_discover_starter_picks_do_not_show_zero_sources_label(self):
+        res = self.client.get("/discover")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertNotIn("0 sources", body)
+        self.assertIn("Paste a source URL", body)
 
     def test_api_discover_search_returns_real_shaped_results(self):
         from unittest.mock import patch
@@ -284,7 +317,7 @@ class AppRegressionTests(unittest.TestCase):
         self.assertEqual(rows[0].get("title"), "Chainsaw Man")
         self.assertEqual(rows[0].get("support_level"), "official_api")
         self.assertIn("mangadex.org", rows[0].get("source_url") or "")
-        self.assertIn("uploads.mangadex.org", rows[0].get("cover_url") or "")
+        self.assertEqual(rows[0].get("cover_url") or "", "")
 
     def test_public_series_mangadex_uuid_uses_build_page(self):
         from unittest.mock import patch

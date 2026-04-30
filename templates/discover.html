@@ -34,7 +34,8 @@
     .discover-cover {
       position: relative;
       width: 100%;
-      height: 262px;
+      aspect-ratio: 2 / 3;
+      max-height: 320px;
       display: block;
       overflow: hidden;
       background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 14%, var(--panel)), color-mix(in srgb, var(--accent-2) 10%, var(--panel-2)));
@@ -43,12 +44,43 @@
     .discover-cover-fallback {
       position: absolute;
       inset: 0;
-      display: grid;
-      place-items: center;
-      font-size: 1.08rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 10px;
+      background:
+        radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 55%),
+        radial-gradient(120% 90% at 100% 100%, color-mix(in srgb, var(--accent-2) 24%, transparent), transparent 60%),
+        linear-gradient(145deg, color-mix(in srgb, var(--panel-2) 88%, var(--accent) 12%), color-mix(in srgb, var(--panel) 82%, var(--accent-2) 18%));
+      color: color-mix(in srgb, var(--text) 82%, var(--accent));
+    }
+    .discover-cover-fallback-badge {
+      align-self: flex-start;
+      font-size: 0.62rem;
       font-weight: 700;
-      color: color-mix(in srgb, var(--accent) 70%, var(--text));
-      letter-spacing: 0.02em;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+      border-radius: 999px;
+      padding: 2px 7px;
+      background: color-mix(in srgb, var(--panel) 86%, transparent);
+    }
+    .discover-cover-fallback-mid {
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      line-height: 1;
+      text-transform: uppercase;
+      text-shadow: 0 1px 0 color-mix(in srgb, var(--panel) 70%, transparent);
+    }
+    .discover-cover-fallback-title {
+      font-size: 0.72rem;
+      line-height: 1.2;
+      color: color-mix(in srgb, var(--text) 72%, var(--muted));
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     .discover-type-badge {
       position: absolute;
@@ -120,9 +152,16 @@
             <div class="flash warning">{{ resolved.supportLabel or "Manual" }}. {{ resolved.error|e }}</div>
           {% else %}
             <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-              {% if resolved.cover_url %}
-              <img src="{{ resolved.cover_url|e }}" alt="" width="140" height="196" style="object-fit:cover;border-radius:14px;border:1px solid var(--border);flex-shrink:0;background:var(--panel-2);" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.style.visibility='hidden';">
-              {% endif %}
+              <div class="discover-cover" style="width:140px;flex-shrink:0;border-radius:14px;border:1px solid var(--border);">
+                {% if resolved.cover_url %}
+                <img src="{{ resolved.cover_url|e }}" alt="" width="140" height="210" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
+                {% endif %}
+                <div class="discover-cover-fallback">
+                  <span class="discover-cover-fallback-badge">{{ (resolved.source_name or 'Source')|e }}</span>
+                  <span class="discover-cover-fallback-mid">{{ ((resolved.title or 'MW')[:2])|upper|e }}</span>
+                  <span class="discover-cover-fallback-title">{{ (resolved.title or "Unknown title")|e }}</span>
+                </div>
+              </div>
               <div style="flex:1;min-width:min(100%,220px);">
                 <p><strong>{{ resolved.title or "Unknown title" }}</strong></p>
                 {% if resolved.description %}
@@ -149,9 +188,13 @@
               <a class="discover-cover" href="{{ url_for('public_series', slug=(r.comparison_slug or r.slug)) }}" aria-label="{{ r.title|e }}">
                 <span class="discover-type-badge">{{ (r.type or 'Series')|e }}</span>
                 {% if r.cover_url %}
-                <img src="{{ r.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.style.display='none';">
+                <img src="{{ r.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
                 {% endif %}
-                <div class="discover-cover-fallback">{{ (r.title[:2] or 'MW')|upper|e }}</div>
+                <div class="discover-cover-fallback">
+                  <span class="discover-cover-fallback-badge">{{ (r.best_source or r.source_name or 'Source')|e }}</span>
+                  <span class="discover-cover-fallback-mid">{{ (r.title[:2] or 'MW')|upper|e }}</span>
+                  <span class="discover-cover-fallback-title">{{ r.title|e }}</span>
+                </div>
               </a>
               <div class="discover-body">
                 <h3 class="discover-title">{{ r.title|e }}</h3>
@@ -187,6 +230,11 @@
             </article>
             {% endfor %}
           </div>
+          {% if show_track_by_url_cta %}
+          <p class="muted" style="margin:10px 0 0;font-size:0.84rem;">
+            Want more source variety? <a href="{{ url_for('app_add_url') }}">Track by URL</a> or paste a source URL in this box.
+          </p>
+          {% endif %}
           {% else %}
           <p class="muted" style="margin:0 0 12px;">No matches yet.</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -206,15 +254,19 @@
               <a class="discover-cover" href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}" aria-label="{{ card.title|e }}">
                 <span class="discover-type-badge">{{ card.type_label|e }}</span>
                 {% if card.cover_url %}
-                <img src="{{ card.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.style.display='none';">
+                <img src="{{ card.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
                 {% endif %}
-                <div class="discover-cover-fallback">{{ (card.title[:2] or 'MW')|upper|e }}</div>
+                <div class="discover-cover-fallback">
+                  <span class="discover-cover-fallback-badge">Starter</span>
+                  <span class="discover-cover-fallback-mid">{{ (card.title[:2] or 'MW')|upper|e }}</span>
+                  <span class="discover-cover-fallback-title">{{ card.title|e }}</span>
+                </div>
               </a>
               <div class="discover-body">
                 <h3 class="discover-title">{{ card.title|e }}</h3>
                 <div class="discover-badges">
                   <span class="discover-pill">Latest {{ card.latest_chapter|e }}</span>
-                  <span class="discover-pill">{{ card.sources_found }} sources</span>
+                  <span class="discover-pill">{{ card.sources_hint|default((card.sources_found ~ ' sources'), true) }}</span>
                 </div>
                 <div class="discover-actions">
                   <a class="btn ghost" href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}">View sources</a>
@@ -234,15 +286,19 @@
               <a class="discover-cover" href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}" aria-label="{{ card.title|e }}">
                 <span class="discover-type-badge">{{ card.type_label|e }}</span>
                 {% if card.cover_url %}
-                <img src="{{ card.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.style.display='none';">
+                <img src="{{ card.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
                 {% endif %}
-                <div class="discover-cover-fallback">{{ (card.title[:2] or 'MW')|upper|e }}</div>
+                <div class="discover-cover-fallback">
+                  <span class="discover-cover-fallback-badge">Popular</span>
+                  <span class="discover-cover-fallback-mid">{{ (card.title[:2] or 'MW')|upper|e }}</span>
+                  <span class="discover-cover-fallback-title">{{ card.title|e }}</span>
+                </div>
               </a>
               <div class="discover-body">
                 <h3 class="discover-title">{{ card.title|e }}</h3>
                 <div class="discover-badges">
                   <span class="discover-pill">Latest {{ card.latest_chapter|e }}</span>
-                  <span class="discover-pill">{{ card.sources_found }} sources</span>
+                  <span class="discover-pill">{{ card.sources_hint|default((card.sources_found ~ ' sources'), true) }}</span>
                 </div>
                 <div class="discover-actions">
                   <a class="btn ghost" href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}">View sources</a>
@@ -262,15 +318,19 @@
               <a class="discover-cover" href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}" aria-label="{{ card.title|e }}">
                 <span class="discover-type-badge">{{ card.type_label|e }}</span>
                 {% if card.cover_url %}
-                <img src="{{ card.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.style.display='none';">
+                <img src="{{ card.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove();">
                 {% endif %}
-                <div class="discover-cover-fallback">{{ (card.title[:2] or 'MW')|upper|e }}</div>
+                <div class="discover-cover-fallback">
+                  <span class="discover-cover-fallback-badge">Popular</span>
+                  <span class="discover-cover-fallback-mid">{{ (card.title[:2] or 'MW')|upper|e }}</span>
+                  <span class="discover-cover-fallback-title">{{ card.title|e }}</span>
+                </div>
               </a>
               <div class="discover-body">
                 <h3 class="discover-title">{{ card.title|e }}</h3>
                 <div class="discover-badges">
                   <span class="discover-pill">Latest {{ card.latest_chapter|e }}</span>
-                  <span class="discover-pill">{{ card.sources_found }} sources</span>
+                  <span class="discover-pill">{{ card.sources_hint|default((card.sources_found ~ ' sources'), true) }}</span>
                 </div>
                 <div class="discover-actions">
                   <a class="btn ghost" href="{{ url_for('public_series', slug=(card.comparison_slug or card.slug)) }}">View sources</a>

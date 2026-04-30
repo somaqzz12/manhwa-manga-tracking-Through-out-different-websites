@@ -52,12 +52,14 @@ def _card_from_row(row: dict[str, Any], *, is_demo: bool) -> dict[str, Any]:
     title = str(row.get("title") or "").strip()
     latest = str(row.get("latest_chapter") or "?").strip()
     sources = row.get("sources") or []
+    sources_found = len(sources)
     return {
         "slug": slug,
         "title": title,
         "type_label": _type_label(str(row.get("type") or "")),
         "latest_chapter": latest or "?",
-        "sources_found": len(sources),
+        "sources_found": sources_found,
+        "sources_hint": (f"{sources_found} sources" if sources_found > 0 else "Paste a source URL"),
         "cover_url": str(row.get("cover_url") or "").strip(),
         "is_demo": bool(is_demo),
     }
