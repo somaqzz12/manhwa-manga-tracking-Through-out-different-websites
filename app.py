@@ -276,7 +276,7 @@ def inject_template_globals():
     return {
         "bug_report_href": os.getenv("BUG_REPORT_URL", DEFAULT_BUG_REPORT_URL),
         "contact_email": os.getenv("CONTACT_EMAIL", "").strip(),
-        "site_description": "Search any manga or manhwa. Find the best source. Track updates beautifully.",
+        "site_description": "Discover manga and manhwa. Search titles or paste URLs, compare sources, and track updates everywhere.",
         "min_password_length": MIN_PASSWORD_LENGTH,
         "github_url": (os.getenv("GITHUB_URL") or _DEFAULT_GITHUB_URL).strip(),
         "extension_zip_download_url": _extension_zip_download_url(),
@@ -2793,12 +2793,78 @@ DEMO_SOURCE_RESULTS = [
 ]
 
 
+LANDING_RECENT_UPDATES_DEMO = [
+    {"title": "Solo Leveling", "source": "MangaDex", "chapter": "Ch. 200", "status": "Featured example"},
+    {"title": "Jujutsu Kaisen", "source": "Manga Plus", "chapter": "Ch. 271", "status": "Featured example"},
+    {"title": "Tower of God", "source": "WEBTOON", "chapter": "Ch. 640", "status": "Featured example"},
+    {"title": "Omniscient Reader", "source": "Manual", "chapter": "Ch. 257", "status": "Featured example"},
+    {"title": "Chainsaw Man", "source": "MangaDex", "chapter": "Ch. 196", "status": "Featured example"},
+]
+
+
+def _landing_series_card(slug: str) -> Optional[dict]:
+    from services import discovery
+
+    by_slug = {row["slug"]: row for row in discovery.LOCAL_DISCOVERY_CATALOG}
+    raw = by_slug.get(slug)
+    if not raw:
+        return None
+    d = discovery._decorate_series(raw)
+    st = (d.get("type") or "manga").strip().lower()
+    type_label = "Manhwa" if st == "manhwa" else "Manga"
+    return {
+        "slug": d["slug"],
+        "title": d["title"],
+        "type_label": type_label,
+        "latest_chapter": d.get("latest_chapter") or "?",
+        "sources_found": int(d.get("sources_found") or 0),
+        "cover_url": (d.get("cover_url") or "").strip(),
+    }
+
+
+def _landing_cards_for_slugs(slugs: list[str]) -> list[dict]:
+    out: list[dict] = []
+    for s in slugs:
+        row = _landing_series_card(s)
+        if row:
+            out.append(row)
+    return out
+
+
 def home():
     if not login_required():
+        trending_slugs = [
+            "solo-leveling",
+            "omniscient-reader",
+            "tower-of-god",
+            "the-beginning-after-the-end",
+            "jujutsu-kaisen",
+            "one-piece",
+        ]
+        manhwa_slugs = [
+            "solo-leveling",
+            "tower-of-god",
+            "omniscient-reader",
+            "the-beginning-after-the-end",
+            "lookism",
+            "eleceed",
+        ]
+        manga_slugs = [
+            "one-piece",
+            "jujutsu-kaisen",
+            "chainsaw-man",
+            "blue-lock",
+            "vinland-saga",
+            "berserk",
+        ]
         return render_template(
             "landing_v2.html",
             trending=LANDING_TRENDING_DEMO,
             source_preview=LANDING_SOURCE_PREVIEW,
+            landing_trending_cards=_landing_cards_for_slugs(trending_slugs),
+            landing_popular_manhwa=_landing_cards_for_slugs(manhwa_slugs),
+            landing_popular_manga=_landing_cards_for_slugs(manga_slugs),
+            landing_recent_updates=LANDING_RECENT_UPDATES_DEMO,
         )
     return redirect(url_for("index"))
 

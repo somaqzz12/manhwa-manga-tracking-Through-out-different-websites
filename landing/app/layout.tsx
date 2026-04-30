@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Manga Watchlist — Search, compare, track",
+  title: "Manga Watchlist — Discover & track manga",
   description:
-    "Search any manga or manhwa. Find the best source. Track updates beautifully. Paste any URL, compare sites, and keep one library — with an optional Chrome companion for chapter detection.",
+    "Discover manga and manhwa. Search titles or paste URLs, compare sources, and track updates everywhere — with an optional browser companion.",
   metadataBase: new URL("https://mangawatchlist.space"),
   openGraph: {
     title: "Manga Watchlist",
