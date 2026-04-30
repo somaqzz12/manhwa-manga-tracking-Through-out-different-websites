@@ -31,6 +31,9 @@ class SourcePreview:
     title: str
     latest_chapter: Optional[str] = None
     cover_url: Optional[str] = None
+    description: Optional[str] = None
+    chapter_count: Optional[int] = None
+    canonical_title: Optional[str] = None
     chapters: list[ChapterResult] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 

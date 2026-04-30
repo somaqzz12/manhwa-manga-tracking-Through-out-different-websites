@@ -18,15 +18,6 @@
   <div class="dash-topbar-actions">
     {% if not demo_mode %}
     <span id="check-all-status-label" class="dash-topbar-status muted" role="status">{{ check_all_status_text }}</span>
-    <form action="/check-all" method="post" data-loading-form="true" id="check-stale-form" class="dash-sync-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="q" value="{{ _sq }}">
-      <input type="hidden" name="sort" value="{{ _sort }}">
-      <input type="hidden" name="page" value="{{ _page }}">
-      <button id="check-stale-btn" class="dash-icon-btn" type="submit" data-loading-text="…" title="Check stale series" aria-label="Check stale">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M12 18v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M3 12h3M18 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/><circle cx="12" cy="12" r="4"/></svg>
-      </button>
-    </form>
     <form action="/check-all" method="post" data-loading-form="true" id="force-check-all-form" class="dash-sync-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="q" value="{{ _sq }}">

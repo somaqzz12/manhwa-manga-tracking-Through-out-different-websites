@@ -28,6 +28,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from routes.api_discovery import register_api_discovery_routes
+from routes.library import register_library_routes
 from routes.public import register_public_routes
 from werkzeug.security import check_password_hash, generate_password_hash
 from services import chapter_parsing as chapter
@@ -669,6 +670,22 @@ def _ensure_bookmarks_created_at_column(conn) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at)")
 
 
+def _ensure_bookmarks_metadata_columns(conn) -> None:
+    if IS_POSTGRES:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS canonical_title TEXT")
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS description TEXT")
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS chapter_count INTEGER")
+        return
+    cols = conn.execute("PRAGMA table_info(bookmarks)").fetchall()
+    names = {c["name"] for c in cols}
+    if "canonical_title" not in names:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN canonical_title TEXT")
+    if "description" not in names:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN description TEXT")
+    if "chapter_count" not in names:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN chapter_count INTEGER")
+
+
 def _ensure_users_integration_columns(conn) -> None:
     """RSS secret, optional webhooks, API token, optional public list slug."""
     if IS_POSTGRES:
@@ -812,7 +829,10 @@ def init_db() -> None:
                     latest_parser_version TEXT,
                     latest_error_flags TEXT,
                     story_id TEXT,
-                    created_at TEXT
+                    created_at TEXT,
+                    canonical_title TEXT,
+                    description TEXT,
+                    chapter_count INTEGER
                 )
                 """
             )
@@ -842,6 +862,7 @@ def init_db() -> None:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_bookmark ON reading_progress(bookmark_id)")
             _ensure_bookmarks_story_id_column(conn)
             _ensure_bookmarks_created_at_column(conn)
+            _ensure_bookmarks_metadata_columns(conn)
             _backfill_bookmark_story_ids(conn)
 
             now = _now_iso_z()
@@ -890,7 +911,10 @@ def init_db() -> None:
                 new_update INTEGER NOT NULL DEFAULT 0,
                 last_checked TEXT,
                 last_error TEXT,
-                created_at TEXT
+                created_at TEXT,
+                canonical_title TEXT,
+                description TEXT,
+                chapter_count INTEGER
             )
             """
         )
@@ -917,6 +941,7 @@ def init_db() -> None:
             conn.execute("ALTER TABLE bookmarks ADD COLUMN story_id TEXT")
         if "created_at" not in col_names:
             conn.execute("ALTER TABLE bookmarks ADD COLUMN created_at TEXT")
+        _ensure_bookmarks_metadata_columns(conn)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_url ON bookmarks(user_id, url)")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_url_unique ON bookmarks(user_id, url)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_story ON bookmarks(user_id, story_id)")
@@ -2779,8 +2804,6 @@ register_public_routes(
 )
 
 
-@app.route("/app")
-@app.route("/dashboard")
 def index():
     if not login_required():
         return redirect(url_for("auth_page"))
@@ -2877,7 +2900,6 @@ def app_library():
     return redirect(url_for("index"))
 
 
-@app.route("/app/add")
 def app_add_url():
     if not login_required():
         return redirect(url_for("auth_page"))
@@ -3453,8 +3475,6 @@ def delete_bookmark(bookmark_id: int):
     return redirect_index_preserve_search()
 
 
-@csrf.exempt
-@app.route("/api/series/ensure", methods=["POST"])
 def ensure_series():
     user_id = api_session_user_id()
     if user_id is None:
@@ -3518,8 +3538,6 @@ def ensure_series():
     return jsonify({"ok": True, "created": created, "series": dict(row)})
 
 
-@csrf.exempt
-@app.route("/api/progress", methods=["POST"])
 def save_progress():
     user_id = api_session_user_id()
     if user_id is None:
@@ -4009,6 +4027,92 @@ def api_tracker_add_series():
             )
             added.append({"source": src.get("source_name"), "url": canonical_url})
     return jsonify({"ok": True, "mode": mode, "added": added})
+
+
+def api_library_add_from_preview():
+    user_id = api_session_user_id()
+    if user_id is None:
+        return jsonify({"ok": False, "error": "authentication required"}), 401
+    data = request.get_json(silent=True) or {}
+    raw_url = (data.get("url") or "").strip()
+    if not raw_url:
+        return jsonify({"ok": False, "error": "url is required"}), 400
+    if len(raw_url) > RESOLVE_URL_MAX_LEN:
+        return jsonify({"ok": False, "error": "url is too long"}), 400
+    if not is_public_http_url(raw_url):
+        return jsonify({"ok": False, "error": "valid public http(s) url required"}), 400
+    support_level = (data.get("support_level") or "manual_only").strip().lower()
+    title = (data.get("title") or "").strip()[:220]
+    canonical_title = (data.get("canonical_title") or "").strip()[:220]
+    description = (data.get("description") or "").strip()[:2000]
+    cover_url = (data.get("cover_url") or "").strip()
+    if cover_url and not is_public_http_url(cover_url):
+        cover_url = ""
+    chapter_count_raw = data.get("chapter_count")
+    try:
+        chapter_count = int(chapter_count_raw) if chapter_count_raw not in (None, "") else None
+    except (TypeError, ValueError):
+        chapter_count = None
+    if chapter_count is not None and chapter_count < 0:
+        chapter_count = None
+    latest_chapter_raw = str(data.get("latest_chapter") or "").strip()
+    if support_level == "manual_only" and not title:
+        return jsonify({"ok": False, "error": "title is required for manual tracking"}), 400
+    canonical_url = resolve_series_listing_url(raw_url)
+    norm = normalize_bookmark_url(canonical_url)
+    with get_conn() as conn:
+        existing_rows = conn.execute(
+            "SELECT id, title, url FROM bookmarks WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+        existing = None
+        for row in existing_rows:
+            if normalize_bookmark_url(row["url"]) == norm:
+                existing = row
+                break
+        if existing is not None:
+            return jsonify({"ok": True, "created": False, "duplicate": True, "series": dict(existing)})
+        add_title = title or canonical_title or extract_series_slug(canonical_url).replace("-", " ").title() or "Untitled series"
+        now = _now_iso_z()
+        sid = story_groups.new_solo_story_id()
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO bookmarks
+            (user_id, title, canonical_title, description, chapter_count, url, cover_url, story_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (user_id, add_title, canonical_title or None, description or None, chapter_count, canonical_url, cover_url or "", sid, now),
+        )
+        row = conn.execute(
+            "SELECT id, title, canonical_title, description, chapter_count, url, cover_url FROM bookmarks WHERE user_id = ? AND url = ?",
+            (user_id, canonical_url),
+        ).fetchone()
+        if row is None:
+            return jsonify({"ok": False, "error": "failed to add series"}), 500
+        if latest_chapter_raw:
+            try:
+                latest_num = float(latest_chapter_raw)
+            except ValueError:
+                latest_num = None
+            if latest_num is not None and math.isfinite(latest_num) and latest_num >= 0:
+                conn.execute(
+                    "UPDATE bookmarks SET latest_seen_num = ?, latest_seen = ?, latest_seen_url = ?, last_checked = ? WHERE id = ?",
+                    (latest_num, f"Ch {latest_chapter_raw}", canonical_url, now, int(row["id"])),
+                )
+    return jsonify({"ok": True, "created": True, "duplicate": False, "series": dict(row)})
+
+
+register_library_routes(
+    app,
+    {
+        "index": index,
+        "app_add_url": app_add_url,
+        "api_library_add_from_preview": api_library_add_from_preview,
+        "ensure_series": ensure_series,
+        "save_progress": save_progress,
+    },
+    csrf=csrf,
+)
 
 
 @csrf.exempt

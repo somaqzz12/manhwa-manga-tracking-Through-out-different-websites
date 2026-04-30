@@ -84,7 +84,10 @@ class MangaDexAdapter(SourceAdapter):
             support_level=self.support_level,
             confidence=0.95,
             title=title,
+            canonical_title=title,
+            description=(attrs.get("description") or {}).get("en"),
             latest_chapter=latest,
+            chapter_count=len(chapters) if chapters else None,
             chapters=chapters,
             warnings=[],
         )

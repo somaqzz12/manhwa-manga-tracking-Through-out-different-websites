@@ -2405,10 +2405,41 @@ body {
 
   .app-topbar {
     padding: 0 16px;
+    min-height: 58px;
+    gap: 10px;
   }
 
   .app-content {
     padding: 18px 16px 36px;
+  }
+
+  .dash-topbar-wordmark {
+    display: none;
+  }
+
+  .dash-topbar-logo {
+    width: 34px;
+    height: 34px;
+    font-size: 0.72rem;
+  }
+
+  .dash-topbar-search input[type="search"] {
+    height: 40px;
+    font-size: 14px;
+  }
+
+  .dash-topbar-search-submit,
+  .dash-icon-btn {
+    width: 38px;
+    height: 38px;
+  }
+
+  .hero--gallery {
+    margin-bottom: 16px;
+  }
+
+  .page-title--display {
+    font-size: clamp(1.75rem, 7vw, 2rem);
   }
 
   .story-grid {
@@ -2478,6 +2509,18 @@ body {
   min-height: 64px;
 }
 
+.dash-topbar-actions {
+  gap: 8px;
+}
+
+.dash-topbar-status {
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
 .search-bar {
   margin-left: auto;
   width: min(520px, 100%);
@@ -2529,6 +2572,15 @@ body {
 .story-card {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.story-card-focus {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
 }
 
 .story-card-visual {
@@ -2540,6 +2592,8 @@ body {
 .story-cover-placeholder {
   height: 100%;
   aspect-ratio: auto;
+  object-fit: cover;
+  object-position: center 25%;
 }
 
 .story-cover-overlay {
@@ -2552,9 +2606,14 @@ body {
 }
 
 .story-title {
-  min-height: 2.4em;
+  min-height: 2.6em;
   font-size: 14.5px;
   font-weight: 700;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 .story-body {
@@ -2563,6 +2622,7 @@ body {
 
 .story-card-toolbar {
   padding: 0 12px 14px;
+  margin-top: auto;
 }
 
 .story-card-menu-trigger {
@@ -2577,7 +2637,7 @@ body {
 
 @media (max-width: 899px) {
   .story-card-visual {
-    height: 260px;
+    height: 248px;
   }
 
   .story-grid {

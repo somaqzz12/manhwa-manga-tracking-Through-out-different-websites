@@ -23,6 +23,10 @@
     .btn.primary:hover { background:var(--accent-h); }
     .search { display:flex; gap:8px; margin-top:10px; }
     .search input { flex:1; border:1px solid var(--border); border-radius:999px; padding:12px 14px; font:inherit; }
+    .hero-search { margin-top:16px; display:grid; gap:10px; }
+    .hero-search-row { display:flex; gap:8px; flex-wrap:wrap; }
+    .hero-search-row input { flex:1; min-width:260px; border:1px solid var(--border); border-radius:999px; padding:14px 16px; font:inherit; background:#fff; }
+    .hero-sub { max-width:860px; }
     .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
     .card { background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:14px; }
     .list { margin:0; padding-left:18px; color:var(--muted); }
@@ -44,9 +48,19 @@
     </nav>
 
     <section class="hero">
-      <h1>Your website-first manga tracker.</h1>
-      <p>Search manga/manhwa titles, paste any source URL, compare known websites, and add the best source to your tracker.</p>
+      <h1>Search any manga or manhwa. Find the best source. Track updates beautifully.</h1>
+      <p class="hero-sub">Search titles or paste any URL, compare available source websites, preview metadata, and add the best source to your reading tracker.</p>
       <p>The extension is an optional companion detection tool. Discovery, comparison, and tracking flow stay on the website.</p>
+      <form class="hero-search" action="/discover" method="get">
+        <div class="hero-search-row">
+          <input type="text" name="q" placeholder="Search title: Solo Leveling">
+          <button class="btn primary" type="submit">Discover</button>
+        </div>
+        <div class="hero-search-row">
+          <input type="url" name="url" placeholder="Paste URL: https://mangadex.org/title/...">
+          <button class="btn" type="submit">Preview URL</button>
+        </div>
+      </form>
       <div class="row">
         <a class="btn primary" href="/discover">Discover titles</a>
         <a class="btn" href="/app">Open tracker</a>
@@ -90,7 +104,8 @@
 
     <section class="block">
       <h2>How it works</h2>
-      <p>Paste any URL. Supported sources become automatic. Unsupported sources become manual. Requested sources become future adapters.</p>
+      <p>1) Search title or paste URL → 2) Compare source websites and recommendation → 3) Add to library and track progress.</p>
+      <p>Supported URLs become automatic, unsupported URLs become manual tracking, and requested domains become future adapters.</p>
     </section>
 
     <section class="block">
@@ -100,6 +115,20 @@
         <div class="card"><span class="label">Adapter support</span><ul class="list"><li>Asura</li><li>Reaper</li><li>Flame</li><li>More coming</li></ul></div>
         <div class="card"><span class="label">Fallback</span><ul class="list"><li>Generic manga page detector</li><li>Extension-assisted detection</li><li>Manual tracking</li></ul></div>
       </div>
+    </section>
+
+    <section class="block">
+      <h2>Extension companion</h2>
+      <p>The extension helps detect what you are currently reading. It is optional and does not replace website discovery or tracker flows.</p>
+      <div class="row">
+        <a class="btn" href="/sources">View source support</a>
+        <a class="btn primary" href="/app">Use website tracker</a>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Safety & open-source note</h2>
+      <p>This project tracks metadata and source URLs only. It does not host manga pages or chapter images, and does not bypass paywalls or protected access controls.</p>
     </section>
 
     <section class="block">

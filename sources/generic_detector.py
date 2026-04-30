@@ -38,6 +38,8 @@ class GenericDetector(SourceAdapter):
 
         soup = BeautifulSoup(res.text, "html.parser")
         title = self.detect_title(soup) or ""
+        description = self.detect_description(soup)
+        cover_url = self.detect_cover(soup)
         chapters = self.detect_chapters(soup, url)
         latest = chapters[0].number if chapters else None
 
@@ -47,7 +49,11 @@ class GenericDetector(SourceAdapter):
             support_level="generic_detector" if chapters else "manual_only",
             confidence=0.55 if chapters else 0.2,
             title=title,
+            canonical_title=title or None,
+            description=description,
+            cover_url=cover_url,
             latest_chapter=latest,
+            chapter_count=len(chapters) if chapters else None,
             chapters=chapters,
             warnings=[] if chapters else ["Could not detect chapter list. Manual tracking available."],
         )
@@ -61,6 +67,21 @@ class GenericDetector(SourceAdapter):
             return og_title["content"].strip()
         if soup.title:
             return soup.title.get_text(strip=True)
+        return None
+
+    def detect_description(self, soup: BeautifulSoup) -> str | None:
+        og_desc = soup.find("meta", property="og:description")
+        if og_desc and og_desc.get("content"):
+            return og_desc["content"].strip()
+        meta_desc = soup.find("meta", attrs={"name": "description"})
+        if meta_desc and meta_desc.get("content"):
+            return meta_desc["content"].strip()
+        return None
+
+    def detect_cover(self, soup: BeautifulSoup) -> str | None:
+        og_img = soup.find("meta", property="og:image")
+        if og_img and og_img.get("content"):
+            return og_img["content"].strip()
         return None
 
     def detect_chapters(self, soup: BeautifulSoup, base_url: str) -> list[ChapterResult]:

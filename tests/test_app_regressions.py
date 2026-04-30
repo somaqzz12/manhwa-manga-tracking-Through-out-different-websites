@@ -189,6 +189,115 @@ class AppRegressionTests(unittest.TestCase):
             payload = res.get_json() or {}
             self.assertFalse(payload.get("ok", False))
 
+    def test_add_from_preview_manual_only_succeeds(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("previewuser", "preview@example.com", generate_password_hash("secret12"), now),
+            )
+            uid_row = conn.execute("SELECT id FROM users WHERE email = ?", ("preview@example.com",)).fetchone()
+            uid = int(uid_row["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        with patch.object(app, "is_public_http_url", return_value=True):
+            res = self.client.post(
+                "/api/library/add-from-preview",
+                json={
+                    "url": "https://unknown.example/series/demo-title",
+                    "support_level": "manual_only",
+                    "title": "Demo Title",
+                    "latest_chapter": "12",
+                },
+            )
+        self.assertEqual(res.status_code, 200)
+        payload = res.get_json() or {}
+        self.assertTrue(payload.get("ok"))
+        self.assertTrue(payload.get("created"))
+
+    def test_add_from_preview_duplicate_url_is_not_duplicated(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("dupeuser", "dupe@example.com", generate_password_hash("secret12"), now),
+            )
+            uid_row = conn.execute("SELECT id FROM users WHERE email = ?", ("dupe@example.com",)).fetchone()
+            uid = int(uid_row["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+
+        with patch.object(app, "is_public_http_url", return_value=True):
+            first = self.client.post(
+                "/api/library/add-from-preview",
+                json={"url": "https://mangadex.org/title/abc", "support_level": "official_api", "title": "Demo"},
+            )
+            second = self.client.post(
+                "/api/library/add-from-preview",
+                json={"url": "https://mangadex.org/title/abc", "support_level": "official_api", "title": "Demo"},
+            )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        second_payload = second.get_json() or {}
+        self.assertTrue(second_payload.get("duplicate"))
+
+    def test_add_from_preview_saves_metadata_fields_when_provided(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("metauser", "meta@example.com", generate_password_hash("secret12"), now),
+            )
+            uid_row = conn.execute("SELECT id FROM users WHERE email = ?", ("meta@example.com",)).fetchone()
+            uid = int(uid_row["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+
+        with patch.object(app, "is_public_http_url", return_value=True):
+            res = self.client.post(
+                "/api/library/add-from-preview",
+                json={
+                    "url": "https://mangadex.org/title/abc",
+                    "support_level": "official_api",
+                    "title": "Display Title",
+                    "canonical_title": "Canonical Title",
+                    "description": "Metadata description",
+                    "chapter_count": 123,
+                    "cover_url": "https://img.example/cover.jpg",
+                },
+            )
+        self.assertEqual(res.status_code, 200)
+        payload = res.get_json() or {}
+        self.assertTrue(payload.get("ok"))
+        series = payload.get("series") or {}
+        added_url = series.get("url")
+        self.assertTrue(added_url)
+        with app.get_conn() as conn:
+            row = conn.execute(
+                "SELECT title, canonical_title, description, chapter_count, cover_url, url FROM bookmarks WHERE url = ? ORDER BY id DESC LIMIT 1",
+                (added_url,),
+            ).fetchone()
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertEqual(row["title"], "Display Title")
+        self.assertEqual(row["canonical_title"], "Canonical Title")
+        self.assertEqual(row["description"], "Metadata description")
+        self.assertEqual(int(row["chapter_count"]), 123)
+        self.assertEqual(row["cover_url"], "https://img.example/cover.jpg")
+
+    def test_add_from_preview_requires_authentication(self):
+        res = self.client.post(
+            "/api/library/add-from-preview",
+            json={"url": "https://example.com/series/demo", "support_level": "manual_only", "title": "Demo"},
+        )
+        self.assertEqual(res.status_code, 401)
+
 
 if __name__ == "__main__":
     unittest.main()

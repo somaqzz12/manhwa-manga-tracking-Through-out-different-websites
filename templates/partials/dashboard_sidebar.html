@@ -14,7 +14,8 @@
   </div>
 
   <nav class="dashboard-sidebar-nav sidebar-nav">
-    <a class="dashboard-nav-item sidebar-link is-active active" href="{{ url_for('index') }}"><span>All stories</span> <span class="dashboard-nav-ct">{{ total_count or 0 }}</span></a>
+    <a class="dashboard-nav-item sidebar-link is-active active" href="{{ url_for('index') }}"><span>Your Library</span> <span class="dashboard-nav-ct">{{ total_count or 0 }}</span></a>
+    <a class="dashboard-nav-item sidebar-link" href="{{ url_for('app_add_url') }}"><span>Add URL</span></a>
     {% if current_user is defined and current_user and not demo_mode|default(false) %}
     <a class="dashboard-nav-item sidebar-link" href="{{ url_for('next_up') }}"><span>Next up</span></a>
     {% endif %}
