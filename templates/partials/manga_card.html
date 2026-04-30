@@ -29,6 +29,9 @@
       {% endif %}
       <div class="story-cover-overlay" aria-hidden="true">
         <div class="story-cover-overlay-chips">
+          {% if b.get('detection_source') == 'extension' and not demo_mode %}
+          <span class="story-cover-chip" title="Tracked via browser extension">Extension</span>
+          {% endif %}
           <span class="story-cover-chip">You {% if last_read_num is not none %}Ch.{{ last_read_num|clean }}{% else %}—{% endif %}</span>
           <span class="story-cover-chip story-cover-chip--latest">Latest {% if latest_num is not none %}Ch.{{ latest_num|clean }}{% else %}?{% endif %}</span>
         </div>
@@ -45,6 +48,9 @@
     </div>
     <div class="story-body">
       <h2 class="story-title">{{ b["title"] }}</h2>
+      {% if b.get('last_synced_at') and not demo_mode %}
+      <p class="muted" style="margin:6px 0 0;font-size:0.76rem;">Last synced {{ b.last_synced_at }}</p>
+      {% endif %}
       {% if b.get('_source_display_name') or b.get('_source_display_domain') or b.get('_chapter_count_display') is not none or b.get('_support_label') or b.get('chapter_count') is not none %}
       <p class="muted" style="margin:4px 0 0;font-size:0.8rem;line-height:1.35;">
         {% if b.get('_source_display_name') %}{{ b._source_display_name|e }}{% endif %}
@@ -70,6 +76,13 @@
     {% endif %}
     <a class="btn btn-compact" href="{{ b['latest_seen_url'] if (b.latest_seen_url or '')|trim else b['url'] }}" target="_blank" rel="noopener noreferrer">Latest</a>
     <a class="btn btn-compact ghost" href="{{ b['url'] }}" target="_blank" rel="noopener noreferrer">Original site</a>
+    {% if not demo_mode and b.get('has_bookmark', true) and latest_num is not none and (b['id']|int) > 0 %}
+    <form action="{{ url_for('read_through', bookmark_id=b['id']) }}" method="post" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="chapter_num" value="{{ latest_num }}">
+      <button type="submit" class="btn btn-compact ghost">Mark caught up</button>
+    </form>
+    {% endif %}
     <details class="story-card-menu">
       <summary class="story-card-menu-trigger" aria-label="More actions">⋯</summary>
       <div class="story-card-menu-panel">

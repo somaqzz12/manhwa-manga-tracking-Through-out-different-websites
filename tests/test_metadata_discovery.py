@@ -155,7 +155,10 @@ class MetadataDiscoveryTests(unittest.TestCase):
             "chapter_count": 10,
             "support_level": "official_api",
         }
-        with patch.object(MangaDexAdapter, "search", return_value=[raw]):
+        with (
+            patch("services.global_catalog.search.discover_rows_from_catalog", return_value=[]),
+            patch.object(MangaDexAdapter, "search", return_value=[raw]),
+        ):
             out = metadata_discovery.discover_search("anything", live=False)
         self.assertTrue(out.get("ok"))
         self.assertFalse(out.get("is_demo"))
@@ -168,7 +171,10 @@ class MetadataDiscoveryTests(unittest.TestCase):
         self.assertIn("/api/image-proxy?url=", res["cover_url"])
 
     def test_discover_search_unknown_no_demo_hits_when_mangadex_empty(self) -> None:
-        with patch.object(MangaDexAdapter, "search", return_value=[]):
+        with (
+            patch("services.global_catalog.search.discover_rows_from_catalog", return_value=[]),
+            patch.object(MangaDexAdapter, "search", return_value=[]),
+        ):
             out = metadata_discovery.discover_search("zzzz-no-catalog-match-xyz", live=False)
         self.assertEqual(out["results"], [])
         self.assertFalse(out["is_demo"])

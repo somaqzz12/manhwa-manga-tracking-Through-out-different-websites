@@ -251,19 +251,45 @@ class AppRegressionTests(unittest.TestCase):
 
         from sources.adapters.mangadex import MangaDexAdapter
 
-        with patch.object(MangaDexAdapter, "search", return_value=[]):
+        fake_catalog_hit = [
+            {
+                "title": "Solo Leveling",
+                "slug": "solo-leveling",
+                "description": "Seeded catalog row for tests.",
+                "cover_url": "",
+                "type": "Manhwa",
+                "source_count": 1,
+                "sources_found": 1,
+                "best_source": "MangaDex",
+                "latest_chapter": None,
+                "chapter_count": None,
+                "source_url": "https://mangadex.org/title/00000000-0000-0000-0000-000000000001",
+                "support_level": "official_api",
+                "support_label": "Automatic",
+                "is_demo": False,
+                "source_name": "MangaDex",
+                "comparison_slug": "solo-leveling",
+            }
+        ]
+        with (
+            patch("services.global_catalog.search.discover_rows_from_catalog", return_value=fake_catalog_hit),
+            patch.object(MangaDexAdapter, "search", return_value=[]),
+        ):
             hit = self.client.get("/discover?q=solo")
         self.assertEqual(hit.status_code, 200)
         hit_body = hit.get_data(as_text=True)
         self.assertIn('Results for "solo".', hit_body)
         self.assertIn("Solo Leveling", hit_body)
-        self.assertIn("Search results · Demo", hit_body)
+        self.assertNotIn("Search results · Demo", hit_body)
 
-        with patch.object(MangaDexAdapter, "search", return_value=[]):
+        with (
+            patch("services.global_catalog.search.discover_rows_from_catalog", return_value=[]),
+            patch.object(MangaDexAdapter, "search", return_value=[]),
+        ):
             miss = self.client.get("/discover?q=zzzz-nothing-found-xyz")
         self.assertEqual(miss.status_code, 200)
         miss_body = miss.get_data(as_text=True)
-        self.assertIn("No matches yet", miss_body)
+        self.assertIn("No matches found", miss_body)
         self.assertNotIn("Solo Leveling", miss_body.split("Starter picks")[0])
         self.assertIn("Search supported sites live", miss_body)
         self.assertIn("Paste URL", miss_body)
@@ -320,7 +346,10 @@ class AppRegressionTests(unittest.TestCase):
                 "support_level": "official_api",
             }
         ]
-        with patch.object(MangaDexAdapter, "search", return_value=fake):
+        with (
+            patch("services.global_catalog.search.discover_rows_from_catalog", return_value=[]),
+            patch.object(MangaDexAdapter, "search", return_value=fake),
+        ):
             res = self.client.get("/api/discover/search?q=chainsaw")
         self.assertEqual(res.status_code, 200)
         data = res.get_json() or {}
@@ -806,18 +835,23 @@ class AppRegressionTests(unittest.TestCase):
         self.assertEqual(discover_res.status_code, 200)
         discover_body = discover_res.get_data(as_text=True)
         self.assertIn("/series/", discover_body)
-        self.assertIn("/app/add?title=", discover_body)
+        self.assertIn("/app/add", discover_body)
         self.assertIn('action="/discover"', discover_body)
 
         home_res = self.client.get("/")
         self.assertEqual(home_res.status_code, 200)
         home_body = home_res.get_data(as_text=True)
         self.assertIn("/series/", home_body)
-        self.assertIn("/app/add?title=", home_body)
+        self.assertIn("/app/add", home_body)
         self.assertIn("/discover?q=", home_body)
 
     def test_demo_sections_are_labeled(self):
-        discover_res = self.client.get("/discover")
+        with (
+            patch("services.discovery_home.SHOW_DEMO_CONTENT", True),
+            patch("services.discovery.SHOW_DEMO_CONTENT", True),
+            patch("services.metadata_discovery.SHOW_DEMO_CONTENT", True),
+        ):
+            discover_res = self.client.get("/discover")
         self.assertEqual(discover_res.status_code, 200)
         body = discover_res.get_data(as_text=True)
         self.assertIn("Starter picks · Demo", body)
@@ -825,7 +859,20 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn("Source comparison example · Demo", body)
 
     def test_public_series_page_lists_sources(self):
-        res = self.client.get("/series/solo-leveling")
+        from services import discovery as disc_mod
+
+        solo = next(x for x in disc_mod.LOCAL_DISCOVERY_CATALOG if str(x.get("slug") or "") == "solo-leveling")
+
+        def _slug_demo_only(s: str):
+            if (s or "").strip().lower() == "solo-leveling":
+                return disc_mod._decorate_series(solo)
+            return None
+
+        with (
+            patch("services.library_model.load_series_for_public_page", return_value=None),
+            patch.object(app.discovery, "get_series_by_slug", side_effect=_slug_demo_only),
+        ):
+            res = self.client.get("/series/solo-leveling")
         self.assertEqual(res.status_code, 200)
         body = res.get_data(as_text=True)
         self.assertIn("Solo Leveling", body)
@@ -1043,8 +1090,11 @@ class AppRegressionTests(unittest.TestCase):
         legacy_track = self.client.post("/api/track", json={"title": "Solo"})
         self.assertEqual(legacy_track.status_code, 410)
         demo_search = self.client.get("/api/demo/search?q=solo")
-        self.assertEqual(demo_search.status_code, 200)
-        self.assertTrue((demo_search.get_json() or {}).get("ok"))
+        self.assertEqual(demo_search.status_code, 410)
+        self.assertFalse((demo_search.get_json() or {}).get("ok"))
+        demo_track = self.client.post("/api/demo/track", json={"title": "Solo"})
+        self.assertEqual(demo_track.status_code, 410)
+        self.assertFalse((demo_track.get_json() or {}).get("ok"))
 
     def test_save_progress_normalizes_series_url_before_lookup(self):
         from werkzeug.security import generate_password_hash

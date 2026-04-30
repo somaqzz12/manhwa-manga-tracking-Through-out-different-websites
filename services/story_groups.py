@@ -129,6 +129,14 @@ def aggregate_story_items(items: list[dict]) -> dict[str, Any]:
         "genre": primary.get("genre") or "",
         "series_key": primary.get("series_key"),
     }
+    if any(str(it.get("detection_source") or "").lower() == "extension" for it in items):
+        out["detection_source"] = "extension"
+    sync_vals = [str(it.get("last_synced_at") or "").strip() for it in items if (it.get("last_synced_at") or "").strip()]
+    if sync_vals:
+        out["last_synced_at"] = max(sync_vals)
+    sdom = (primary.get("source_domain") or "").strip()
+    if sdom:
+        out["source_domain"] = sdom
     for k in (
         "_support_label",
         "_chapter_count_display",

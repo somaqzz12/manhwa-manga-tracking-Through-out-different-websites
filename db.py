@@ -355,6 +355,7 @@ def _ensure_normalized_library_tables(conn) -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_user_library_item_user ON user_library_item(user_id)")
+        _ensure_series_catalog_extensions(conn)
         return
     conn.execute(
         """
@@ -413,6 +414,155 @@ def _ensure_normalized_library_tables(conn) -> None:
         """
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_user_library_item_user ON user_library_item(user_id)")
+    _ensure_series_catalog_extensions(conn)
+
+
+def _ensure_series_catalog_extensions(conn) -> None:
+    """Global series catalog: extra columns on series + alias, external id, source link tables."""
+    if IS_POSTGRES:
+        conn.execute("ALTER TABLE series ADD COLUMN IF NOT EXISTS norm_compact TEXT")
+        conn.execute("ALTER TABLE series ADD COLUMN IF NOT EXISTS year INTEGER")
+        conn.execute("ALTER TABLE series ADD COLUMN IF NOT EXISTS genres_json TEXT")
+        conn.execute("ALTER TABLE series ADD COLUMN IF NOT EXISTS popularity_score DOUBLE PRECISION NOT NULL DEFAULT 0")
+        conn.execute(
+            """
+            UPDATE series SET norm_compact = lower(regexp_replace(norm_title_key, '\\s+', '', 'g'))
+            WHERE norm_compact IS NULL OR norm_compact = ''
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS series_alias (
+                id BIGSERIAL PRIMARY KEY,
+                series_id BIGINT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+                alias_normalized TEXT NOT NULL,
+                alias_display TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(series_id, alias_normalized)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_series_alias_norm ON series_alias(alias_normalized)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS series_external_id (
+                id BIGSERIAL PRIMARY KEY,
+                series_id BIGINT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+                provider TEXT NOT NULL,
+                external_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(provider, external_id)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_series_external_series ON series_external_id(series_id)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS series_source_link (
+                id BIGSERIAL PRIMARY KEY,
+                series_id BIGINT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+                source_name TEXT,
+                source_domain TEXT,
+                source_url TEXT NOT NULL,
+                normalized_source_url TEXT NOT NULL UNIQUE,
+                source_type TEXT NOT NULL,
+                link_status TEXT NOT NULL,
+                confidence_score DOUBLE PRECISION,
+                added_by_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+                last_seen_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_series_source_link_series ON series_source_link(series_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_series_source_link_status ON series_source_link(link_status)")
+        return
+
+    cols = {c["name"] for c in conn.execute("PRAGMA table_info(series)").fetchall()}
+    for name, decl in (
+        ("norm_compact", "TEXT"),
+        ("year", "INTEGER"),
+        ("genres_json", "TEXT"),
+        ("popularity_score", "REAL NOT NULL DEFAULT 0"),
+    ):
+        if name not in cols:
+            conn.execute(f"ALTER TABLE series ADD COLUMN {name} {decl}")
+    conn.execute(
+        """
+        UPDATE series
+        SET norm_compact = lower(replace(norm_title_key, ' ', ''))
+        WHERE norm_compact IS NULL OR trim(norm_compact) = ''
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS series_alias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            series_id INTEGER NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+            alias_normalized TEXT NOT NULL,
+            alias_display TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(series_id, alias_normalized)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_series_alias_norm ON series_alias(alias_normalized)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS series_external_id (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            series_id INTEGER NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+            provider TEXT NOT NULL,
+            external_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(provider, external_id)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_series_external_series ON series_external_id(series_id)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS series_source_link (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            series_id INTEGER NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+            source_name TEXT,
+            source_domain TEXT,
+            source_url TEXT NOT NULL,
+            normalized_source_url TEXT NOT NULL UNIQUE,
+            source_type TEXT NOT NULL,
+            link_status TEXT NOT NULL,
+            confidence_score REAL,
+            added_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            last_seen_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_series_source_link_series ON series_source_link(series_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_series_source_link_status ON series_source_link(link_status)")
+
+
+def _ensure_bookmarks_last_synced_at(conn) -> None:
+    if IS_POSTGRES:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS last_synced_at TEXT")
+        return
+    cols = {c["name"] for c in conn.execute("PRAGMA table_info(bookmarks)").fetchall()}
+    if "last_synced_at" not in cols:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN last_synced_at TEXT")
+
+
+def _ensure_user_library_item_progress_columns(conn) -> None:
+    if IS_POSTGRES:
+        conn.execute("ALTER TABLE user_library_item ADD COLUMN IF NOT EXISTS last_read_chapter TEXT")
+        conn.execute("ALTER TABLE user_library_item ADD COLUMN IF NOT EXISTS last_synced_at TEXT")
+        return
+    cols = {c["name"] for c in conn.execute("PRAGMA table_info(user_library_item)").fetchall()}
+    if "last_read_chapter" not in cols:
+        conn.execute("ALTER TABLE user_library_item ADD COLUMN last_read_chapter TEXT")
+    if "last_synced_at" not in cols:
+        conn.execute("ALTER TABLE user_library_item ADD COLUMN last_synced_at TEXT")
 
 
 def _backfill_bookmark_story_ids(conn) -> None:
@@ -537,6 +687,8 @@ def init_db() -> None:
             _ensure_users_integration_columns(conn)
             _ensure_source_requests_table(conn)
             _ensure_normalized_library_tables(conn)
+            _ensure_bookmarks_last_synced_at(conn)
+            _ensure_user_library_item_progress_columns(conn)
         return
 
     with get_conn() as conn:
@@ -646,6 +798,8 @@ def init_db() -> None:
         _ensure_users_integration_columns(conn)
         _ensure_source_requests_table(conn)
         _ensure_normalized_library_tables(conn)
+        _ensure_bookmarks_last_synced_at(conn)
+        _ensure_user_library_item_progress_columns(conn)
 
 
 def ensure_db_ready() -> None:

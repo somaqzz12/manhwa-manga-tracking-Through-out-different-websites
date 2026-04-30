@@ -182,14 +182,16 @@ def get_or_create_series(
         taken = conn.execute("SELECT id FROM series WHERE lower(slug) = lower(?)", (use_slug,)).fetchone()
         if taken:
             continue
+        norm_compact = re.sub(r"[^a-z0-9]+", "", norm_key)
         conn.execute(
             """
-            INSERT INTO series (slug, norm_title_key, title, canonical_title, description, cover_url, type, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO series (slug, norm_title_key, norm_compact, title, canonical_title, description, cover_url, type, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 use_slug,
                 norm_key,
+                norm_compact,
                 title[:500],
                 (canonical_title or None)[:500] if canonical_title else None,
                 description,
@@ -402,6 +404,8 @@ def add_preview_to_library(
 
 def load_series_for_public_page(conn: Any, slug: str) -> Optional[dict[str, Any]]:
     """Template kwargs for /series/<slug> when a normalized series exists."""
+    from services.global_catalog import repository as gc_repo
+
     s = (slug or "").strip()[:120]
     if not s:
         return None
@@ -409,29 +413,42 @@ def load_series_for_public_page(conn: Any, slug: str) -> Optional[dict[str, Any]
     if not series:
         return None
     sid = int(series["id"])
-    sources = conn.execute(
-        "SELECT * FROM series_source WHERE series_id = ? ORDER BY id ASC",
-        (sid,),
-    ).fetchall()
-    preview: list[dict[str, Any]] = []
-    for r in sources:
-        preview.append(
-            {
-                "source_name": r["source_name"] or "",
-                "source_domain": (r["source_domain"] or "").strip(),
-                "url": r["source_url"] or "",
-                "latest_chapter": r["latest_chapter"],
-                "latest": r["latest_chapter"],
-                "chapter_count": r["chapter_count"],
-                "support_level": r["support_level"] or "",
-                "health_status": r["health_status"] or "unknown",
-            }
-        )
+    preview = gc_repo.load_public_source_links(conn, sid)
+    if not preview:
+        sources = conn.execute(
+            "SELECT * FROM series_source WHERE series_id = ? ORDER BY id ASC",
+            (sid,),
+        ).fetchall()
+        for r in sources:
+            preview.append(
+                {
+                    "source_name": r["source_name"] or "",
+                    "source_domain": (r["source_domain"] or "").strip(),
+                    "url": r["source_url"] or "",
+                    "latest_chapter": r["latest_chapter"],
+                    "latest": r["latest_chapter"],
+                    "chapter_count": r["chapter_count"],
+                    "support_level": r["support_level"] or "",
+                    "health_status": r["health_status"] or "unknown",
+                }
+            )
+    genres: list[str] = []
+    raw_g = series["genres_json"] if "genres_json" in series else None
+    if raw_g:
+        try:
+            import json
+
+            parsed = json.loads(raw_g)
+            if isinstance(parsed, list):
+                genres = [str(x) for x in parsed if x]
+        except Exception:
+            genres = []
     return {
         "slug": str(series["slug"]),
         "title": str(series["title"] or ""),
         "description": str(series["description"] or ""),
         "cover_url": str(series["cover_url"] or ""),
+        "series_tags": genres,
         "source_preview": preview,
         "recommended_source": "",
         "sources_count": len([p for p in preview if (p.get("url") or "").strip()]),
@@ -440,3 +457,121 @@ def load_series_for_public_page(conn: Any, slug: str) -> Optional[dict[str, Any]
         "from_mangadex": False,
         "from_normalized": True,
     }
+
+
+def _support_level_for_extension_profile(profile: Optional[dict]) -> str:
+    if not profile:
+        return "extension_assisted"
+    strat = str(profile.get("parsing_strategy") or "").strip().lower()
+    if strat == "mangadex_api":
+        return "official_api"
+    st = str(profile.get("status") or "").strip().lower()
+    if st == "working":
+        return "site_adapter"
+    return "extension_assisted"
+
+
+def sync_extension_series_source_for_user(
+    conn: Any,
+    *,
+    user_id: int,
+    series_id: int,
+    title: str,
+    source_url: str,
+    source_name: str,
+    source_domain: str,
+    profile: Optional[dict],
+    now: str,
+    url_validator: Callable[[str], bool],
+) -> Optional[tuple[int, int]]:
+    """Create or update ``series_source`` + ``user_library_item`` for an extension listing URL."""
+    source_url = (source_url or "").strip()
+    if not source_url or not url_validator(source_url):
+        raise LibraryModelError("valid source_url is required")
+    normalized_url = normalize_source_url(source_url)
+    support_level = _support_level_for_extension_profile(profile)
+    source_policy = _default_source_policy(support_level)
+    row = conn.execute(
+        "SELECT id, series_id FROM series_source WHERE normalized_source_url = ?",
+        (normalized_url,),
+    ).fetchone()
+    if row:
+        sid_existing = int(row["series_id"])
+        source_id = int(row["id"])
+        if sid_existing != int(series_id):
+            return None
+        conn.execute(
+            """
+            UPDATE series_source SET
+                source_name = COALESCE(?, source_name),
+                source_domain = COALESCE(?, source_domain),
+                detection_source = 'extension',
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                (source_name or None)[:200] if source_name else None,
+                (source_domain or None)[:200] if source_domain else None,
+                now,
+                source_id,
+            ),
+        )
+    else:
+        source_id = insert_series_source_row(
+            conn,
+            series_id=series_id,
+            source_url=source_url,
+            normalized_url=normalized_url,
+            source_name=source_name,
+            source_domain=source_domain,
+            support_level=support_level,
+            source_policy=source_policy,
+            detection_source="extension",
+            latest_chapter=None,
+            latest_chapter_url=None,
+            chapter_count=None,
+            now=now,
+            url_validator=url_validator,
+        )
+    uli_id, _ = get_or_create_user_library_item(
+        conn, user_id=user_id, series_id=series_id, preferred_source_id=source_id, now=now
+    )
+    return source_id, uli_id
+
+
+def touch_user_library_progress_for_bookmark_url(
+    conn: Any,
+    *,
+    user_id: int,
+    bookmark_url: str,
+    chapter_label: str,
+    chapter_num: Optional[float],
+    synced_at: str,
+) -> None:
+    from services.bookmarks import normalize_bookmark_url as _norm_bm
+
+    raw = (bookmark_url or "").strip()
+    if not raw:
+        return
+    nu = normalize_source_url(_norm_bm(raw))
+    row = conn.execute(
+        """
+        SELECT uli.id FROM user_library_item uli
+        INNER JOIN series_source ss ON ss.id = uli.preferred_source_id
+        WHERE uli.user_id = ? AND ss.normalized_source_url = ?
+        """,
+        (user_id, nu),
+    ).fetchone()
+    if not row:
+        return
+    label = (chapter_label or "").strip()
+    if not label and chapter_num is not None:
+        label = str(chapter_num)
+    conn.execute(
+        """
+        UPDATE user_library_item
+        SET last_read_chapter = ?, last_synced_at = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        ((label[:500] if label else None), synced_at, synced_at, int(row["id"])),
+    )

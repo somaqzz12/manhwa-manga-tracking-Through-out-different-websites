@@ -109,6 +109,13 @@
               {% if description %}
               <p class="series-desc">{{ description|e }}</p>
               {% endif %}
+              {% if series_tags %}
+              <p class="series-tags" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;">
+                {% for tag in series_tags %}
+                <span class="discover-pill" style="font-size:0.78rem;">{{ tag|e }}</span>
+                {% endfor %}
+              </p>
+              {% endif %}
               {% if missing_catalog_entry %}
               <p class="series-empty" style="margin-top:10px;">This slug is not in the local catalog yet. Paste a series URL to track it, or search Discover.</p>
               {% endif %}
@@ -121,6 +128,7 @@
             <a class="btn primary" href="{{ url_for('app_add_url', title=title) }}">Add to library</a>
             {% endif %}
             <a class="btn ghost" href="{{ url_for('app_add_url', title=title) }}">Track manually</a>
+            <a class="btn ghost" href="{{ url_for('extension_page') }}">Track with extension</a>
             <a class="btn ghost" href="{{ url_for('discover_page', q=title) }}">Search title</a>
             <a class="btn ghost" href="{{ url_for('app_add_url') }}">Paste URL</a>
           </div>

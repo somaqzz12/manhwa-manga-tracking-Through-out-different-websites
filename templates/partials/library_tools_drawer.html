@@ -40,7 +40,9 @@
       <a class="drawer-nav-link {% if request.endpoint == 'terms_page' %}is-active{% endif %}" href="{{ url_for('terms_page') }}">Terms</a>
       <a class="drawer-nav-link {% if request.endpoint == 'dmca_page' %}is-active{% endif %}" href="{{ url_for('dmca_page') }}">DMCA</a>
       <a class="drawer-nav-link {% if request.endpoint == 'changelog_page' %}is-active{% endif %}" href="{{ url_for('changelog_page') }}">Changelog</a>
+      {% if show_demo_content|default(false) %}
       <a class="drawer-nav-link {% if request.endpoint == 'demo_dashboard' %}is-active{% endif %}" href="{{ url_for('demo_dashboard') }}">Demo</a>
+      {% endif %}
     </nav>
 
     <section class="library-drawer-section drawer-settings-section">

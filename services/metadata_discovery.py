@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import asdict
 from typing import Any
@@ -11,6 +12,8 @@ from urllib.parse import urlparse
 from services import discovery as local_discovery
 from sources.adapters.mangadex import MangaDexAdapter
 from sources import resolver as source_resolver
+
+SHOW_DEMO_CONTENT = os.getenv("SHOW_DEMO_CONTENT", "").strip().lower() in ("1", "true", "yes")
 
 MANGADEX_UUID_SLUG = re.compile(
     r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
@@ -200,29 +203,48 @@ def search_title(query: str, *, live: bool = False) -> list[dict[str, Any]]:
 
 def discover_search(query: str, *, live: bool = False) -> dict[str, Any]:
     """
-    MangaDex-first aggregated search. When not ``live``, falls back to local demo catalog only if no hits.
-    ``live`` skips demo fallback (API / multi-adapter results only).
+    Search the local seeded catalog first, then live APIs. Hardcoded demo catalog only if SHOW_DEMO_CONTENT=1.
     """
     q = (query or "").strip()
     if not q:
         return {"ok": True, "results": [], "is_demo": False}
 
-    merged = search_title(q, live=live)
     notes: list[str] = []
     title_sources = source_resolver.list_title_search_sources()
     if not title_sources:
         notes.append("No server-side title search adapters are enabled yet. Paste a URL or use manual tracking.")
     elif len(title_sources) == 1 and str(title_sources[0].get("id") or "") == "mangadex":
         notes.append("Title search is currently strongest on MangaDex. For other sites, paste a series URL.")
+
+    try:
+        import db as db_core
+        from services.global_catalog import search as catalog_search
+
+        db_core.ensure_db_ready()
+        with db_core.get_conn() as conn:
+            cat_rows = catalog_search.discover_rows_from_catalog(conn, q, limit=32)
+    except Exception:
+        cat_rows = []
+
+    if cat_rows:
+        notes.append("Results include your local series catalog (seed with: python manage.py seed_catalog).")
+        return {"ok": True, "results": cat_rows, "is_demo": False, "notes": notes}
+
+    merged = search_title(q, live=live)
     if live:
         return {"ok": True, "results": merged, "is_demo": False, "notes": notes}
     if merged:
         return {"ok": True, "results": merged, "is_demo": False, "notes": notes}
 
-    local = local_discovery.search_local_series(q)[:8]
-    local_fmt = [_format_local_demo_row(r) for r in local]
-    is_demo = bool(local_fmt)
-    return {"ok": True, "results": local_fmt, "is_demo": is_demo, "notes": notes}
+    if SHOW_DEMO_CONTENT:
+        local = local_discovery.search_local_series(q)[:8]
+        local_fmt = [_format_local_demo_row(r) for r in local]
+        is_demo = bool(local_fmt)
+        return {"ok": True, "results": local_fmt, "is_demo": is_demo, "notes": notes}
+
+    notes.append("No matches found. Try MangaDex search, paste a source URL, or use the extension.")
+    notes.append("Seed the catalog: python manage.py seed_catalog --source mangadex --limit 500")
+    return {"ok": True, "results": [], "is_demo": False, "notes": notes}
 
 
 def resolve_url_to_metadata(url: str) -> dict[str, Any] | None:
@@ -320,6 +342,7 @@ def build_series_page_from_mangadex_uuid(manga_id: str) -> dict[str, Any] | None
         "title": title,
         "description": desc,
         "cover_url": cover,
+        "series_tags": [],
         "source_preview": [src_row],
         "recommended_source": "MangaDex",
         "sources_count": 1,

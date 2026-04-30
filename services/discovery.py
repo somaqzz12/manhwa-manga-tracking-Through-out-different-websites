@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
 import re
 from copy import deepcopy
+from typing import Any
+
+SHOW_DEMO_CONTENT = os.getenv("SHOW_DEMO_CONTENT", "").strip().lower() in ("1", "true", "yes")
 
 
 LOCAL_DISCOVERY_CATALOG = [
@@ -160,20 +164,142 @@ def merge_live_results(results: list[dict]) -> list[dict]:
 
 
 def trending_snapshot() -> dict:
-    ranked = sorted(LOCAL_DISCOVERY_CATALOG, key=lambda x: x.get("watch_count", 0), reverse=True)
-    return {
-        "trending_now": [r["title"] for r in ranked[:6]],
-        "most_watched": [r["title"] for r in ranked[:6]],
-        "recently_updated": [f'{r["title"]} (Ch. {r.get("latest_chapter") or "?"})' for r in ranked[:6]],
-        "popular_manhwa": [r["title"] for r in ranked if r.get("type") == "manhwa"][:6],
-        "popular_manga": [r["title"] for r in ranked if r.get("type") == "manga"][:6],
+    if SHOW_DEMO_CONTENT:
+        ranked = sorted(LOCAL_DISCOVERY_CATALOG, key=lambda x: x.get("watch_count", 0), reverse=True)
+        return {
+            "trending_now": [r["title"] for r in ranked[:6]],
+            "most_watched": [r["title"] for r in ranked[:6]],
+            "recently_updated": [f'{r["title"]} (Ch. {r.get("latest_chapter") or "?"})' for r in ranked[:6]],
+            "popular_manhwa": [r["title"] for r in ranked if r.get("type") == "manhwa"][:6],
+            "popular_manga": [r["title"] for r in ranked if r.get("type") == "manga"][:6],
+        }
+    try:
+        import db as db_core
+
+        db_core.ensure_db_ready()
+        with db_core.get_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT title, type FROM series
+                ORDER BY popularity_score DESC, id ASC
+                LIMIT 12
+                """
+            ).fetchall()
+        titles = [str(r["title"] or "") for r in rows if r["title"]]
+        manhwa = [str(r["title"] or "") for r in rows if str(r["type"] or "").lower() == "manhwa"]
+        manga = [str(r["title"] or "") for r in rows if str(r["type"] or "").lower() in ("manga", "novel", "manhua")]
+        return {
+            "trending_now": titles[:6],
+            "most_watched": titles[:6],
+            "recently_updated": titles[:6],
+            "popular_manhwa": (manhwa or titles)[:6],
+            "popular_manga": (manga or titles)[:6],
+        }
+    except Exception:
+        return {
+            "trending_now": [],
+            "most_watched": [],
+            "recently_updated": [],
+            "popular_manhwa": [],
+            "popular_manga": [],
+        }
+
+
+def _series_api_dict_from_db(conn: Any, row: Any) -> dict:
+    """Build discover-style series dict from a `series` table row (sqlite Row / dict)."""
+    import json
+
+    from services.global_catalog import repository as gc_repo
+
+    sid = int(row["id"])
+    preview = gc_repo.load_public_source_links(conn, sid)
+    sources: list[dict] = []
+    for i, p in enumerate(preview):
+        sources.append(
+            {
+                "source_id": re.sub(r"[^a-z0-9]+", "-", str(p.get("source_name") or f"src{i}").lower()).strip("-")[:64]
+                or f"src{i}",
+                "source_name": p.get("source_name"),
+                "url": p.get("url"),
+                "latest_chapter": p.get("latest_chapter"),
+                "chapter_count": p.get("chapter_count"),
+                "support_level": p.get("support_level"),
+                "health_status": p.get("health_status") or "working",
+            }
+        )
+    if not sources:
+        legacy = conn.execute(
+            """
+            SELECT source_name, source_domain, source_url, support_level, health_status,
+                   latest_chapter, chapter_count
+            FROM series_source WHERE series_id = ? ORDER BY id ASC
+            """,
+            (sid,),
+        ).fetchall()
+        for i, r in enumerate(legacy):
+            sources.append(
+                {
+                    "source_id": f"legacy-{i}",
+                    "source_name": r["source_name"] or "",
+                    "url": r["source_url"] or "",
+                    "latest_chapter": r["latest_chapter"],
+                    "chapter_count": r["chapter_count"],
+                    "support_level": r["support_level"] or "manual_only",
+                    "health_status": r["health_status"] or "unknown",
+                }
+            )
+    genres: list[str] = []
+    try:
+        raw_g = row["genres_json"]
+    except (KeyError, IndexError, TypeError):
+        raw_g = None
+    try:
+        if raw_g:
+            parsed = json.loads(raw_g)
+            if isinstance(parsed, list):
+                genres = [str(x) for x in parsed if x]
+    except Exception:
+        genres = []
+
+    base = {
+        "id": sid,
+        "slug": str(row["slug"] or ""),
+        "title": str(row["title"] or ""),
+        "description": str(row["description"] or ""),
+        "cover_url": str(row["cover_url"] or ""),
+        "type": str(row["type"] or "manga"),
+        "status": str(row["status"] or "unknown"),
+        "latest_chapter": None,
+        "sources": sources,
+        "watch_count": int(row["popularity_score"] or 0) if row["popularity_score"] is not None else 0,
+        "open_count": 0,
+        "search_count": 0,
+        "series_tags": genres,
     }
+    return _decorate_series(base)
 
 
 def get_series_by_id(series_id: int) -> dict | None:
-    for row in LOCAL_DISCOVERY_CATALOG:
-        if int(row.get("id") or 0) == int(series_id):
-            return _decorate_series(row)
+    try:
+        import db as db_core
+
+        db_core.ensure_db_ready()
+        with db_core.get_conn() as conn:
+            row = conn.execute(
+                """
+                SELECT id, slug, title, description, cover_url, type, status, popularity_score, genres_json
+                FROM series WHERE id = ?
+                """,
+                (int(series_id),),
+            ).fetchone()
+            if row:
+                return _series_api_dict_from_db(conn, row)
+    except Exception:
+        pass
+    if SHOW_DEMO_CONTENT:
+        for row in LOCAL_DISCOVERY_CATALOG:
+            if int(row.get("id") or 0) == int(series_id):
+                return _decorate_series(row)
     return None
 
 
@@ -181,7 +307,24 @@ def get_series_by_slug(slug: str) -> dict | None:
     s = (slug or "").strip().lower()
     if not s:
         return None
-    for row in LOCAL_DISCOVERY_CATALOG:
-        if str(row.get("slug") or "").strip().lower() == s:
-            return _decorate_series(row)
+    try:
+        import db as db_core
+
+        db_core.ensure_db_ready()
+        with db_core.get_conn() as conn:
+            row = conn.execute(
+                """
+                SELECT id, slug, title, description, cover_url, type, status, popularity_score, genres_json
+                FROM series WHERE lower(slug) = lower(?)
+                """,
+                (s,),
+            ).fetchone()
+            if row:
+                return _series_api_dict_from_db(conn, row)
+    except Exception:
+        pass
+    if SHOW_DEMO_CONTENT:
+        for row in LOCAL_DISCOVERY_CATALOG:
+            if str(row.get("slug") or "").strip().lower() == s:
+                return _decorate_series(row)
     return None

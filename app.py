@@ -81,6 +81,10 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger(__name__)
 
 
+def _show_demo_content() -> bool:
+    return os.getenv("SHOW_DEMO_CONTENT", "").strip().lower() in ("1", "true", "yes")
+
+
 def _now_iso_z() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -104,6 +108,11 @@ app.config["SESSION_COOKIE_SECURE"] = os.getenv(
 app.config["WTF_CSRF_TIME_LIMIT"] = None
 app.config["WTF_CSRF_SSL_STRICT"] = os.getenv("FLASK_DEBUG", "1") != "1"
 csrf = CSRFProtect(app)
+
+
+@app.context_processor
+def _inject_product_flags():
+    return {"show_demo_content": _show_demo_content()}
 
 
 @app.template_filter("clean")
@@ -2522,6 +2531,8 @@ def changelog_page():
 
 @app.route("/demo")
 def demo_dashboard():
+    if not _show_demo_content():
+        abort(404)
     demo_user = {"username": "demo", "email": "demo@local", "id": 0, "created_at": ""}
     raw_demo = [dict(b) for b in DEMO_BOOKMARKS]
     raw_by_id = {int(r["id"]): r for r in raw_demo}
@@ -2874,29 +2885,6 @@ LANDING_TRENDING_DEMO = {
     ],
 }
 
-LANDING_SOURCE_PREVIEW = [
-    {"source_name": "Asura", "latest": "Ch. 179", "note": "Fast updates", "label": "Supported"},
-    {"source_name": "Reaper", "latest": "Ch. 178", "note": "Backup mirror", "label": "Supported"},
-    {"source_name": "MangaDex", "latest": "Ch. 200", "note": "Public catalog", "label": "Automatic"},
-    {"source_name": "Unknown", "latest": "Manual", "note": "User-added", "label": "Manual"},
-]
-
-DEMO_SOURCE_RESULTS = [
-    {"sourceName": "Asura", "supportLabel": "Supported", "latestChapter": "179", "confidence": 0.94},
-    {"sourceName": "Reaper", "supportLabel": "Supported", "latestChapter": "178", "confidence": 0.88},
-    {"sourceName": "MangaDex", "supportLabel": "Official API", "latestChapter": "200", "confidence": 0.96},
-    {"sourceName": "Manual", "supportLabel": "Manual", "latestChapter": None, "confidence": 0.42},
-]
-
-
-LANDING_RECENT_UPDATES_DEMO = [
-    {"title": "Solo Leveling", "source": "MangaDex", "chapter": "Ch. 200", "status": "Featured example"},
-    {"title": "Jujutsu Kaisen", "source": "Manga Plus", "chapter": "Ch. 271", "status": "Featured example"},
-    {"title": "Tower of God", "source": "WEBTOON", "chapter": "Ch. 640", "status": "Featured example"},
-    {"title": "Omniscient Reader", "source": "Manual", "chapter": "Ch. 257", "status": "Featured example"},
-    {"title": "Chainsaw Man", "source": "MangaDex", "chapter": "Ch. 196", "status": "Featured example"},
-]
-
 
 def home():
     home_data = discovery_home.build_discovery_home_data(supported_source_policy())
@@ -3122,6 +3110,7 @@ def public_series(slug: str):
                 title=md_ctx["title"],
                 description=md_ctx.get("description") or "",
                 cover_url=md_ctx.get("cover_url") or "",
+                series_tags=md_ctx.get("series_tags") or [],
                 source_preview=enriched,
                 recommended_source=rec_name,
                 sources_count=sc,
@@ -3161,6 +3150,7 @@ def public_series(slug: str):
             title=title,
             description=(row.get("description") if row else "") or "",
             cover_url=cov,
+            series_tags=(row.get("series_tags") if row else None) or [],
             source_preview=enriched,
             recommended_source=rec_name,
             sources_count=sc,
@@ -3178,6 +3168,7 @@ def public_series(slug: str):
             title=safe_slug.replace("-", " ").title() if safe_slug else "Series",
             description="This series page is temporarily unavailable. You can still paste a source URL and track it manually.",
             cover_url="",
+            series_tags=[],
             source_preview=[],
             recommended_source="",
             sources_count=0,
@@ -3351,10 +3342,24 @@ def app_search():
 def app_series_detail(series_id: int):
     if not login_required():
         return _login_redirect_preserve_destination()
+    row = discovery.get_series_by_id(series_id)
+    preview = []
+    if row:
+        for s in row.get("sources") or []:
+            if not isinstance(s, dict):
+                continue
+            preview.append(
+                {
+                    "source_name": s.get("source_name") or "—",
+                    "latest": s.get("latest_chapter") or "—",
+                    "note": (str(s.get("url") or "").strip() or "—")[:120],
+                    "label": s.get("label") or s.get("support_level") or "—",
+                }
+            )
     return render_template(
         "app_series.html",
         series_id=series_id,
-        source_preview=LANDING_SOURCE_PREVIEW,
+        source_preview=preview,
     )
 
 
@@ -3915,13 +3920,21 @@ def ensure_series():
         return jsonify({"ok": False, "error": "authentication required"}), 401
     payload = request.get_json(silent=True) or {}
     title = (payload.get("title") or "").strip()
-    url = (payload.get("url") or "").strip()
+    raw_url = (payload.get("url") or "").strip()
+    canonical_series_url = (payload.get("canonical_series_url") or "").strip()
+    list_url = (canonical_series_url or raw_url).strip()
     series_key = (payload.get("series_key") or "").strip().lower()
-    if not title or not url:
+    source_domain_in = (payload.get("source_domain") or "").strip()
+    client_ts = (payload.get("synced_at") or payload.get("timestamp") or "").strip()
+    bookmark_sync_ts = client_ts or _now_iso_z()
+    db_now = _now_iso_z()
+    if not title or not raw_url:
         return jsonify({"ok": False, "error": "title and url required"}), 400
-    if not is_public_http_url(url):
+    if not is_public_http_url(raw_url):
         return jsonify({"ok": False, "error": "blocked URL"}), 400
-    canonical_url = resolve_series_listing_url(url)
+    if canonical_series_url and not is_public_http_url(canonical_series_url):
+        return jsonify({"ok": False, "error": "blocked canonical URL"}), 400
+    canonical_url = resolve_series_listing_url(list_url or raw_url)
     try:
         profile = source_registry.get_profile_for_url(canonical_url)
     except Exception:
@@ -3932,6 +3945,9 @@ def ensure_series():
     cover_url = scrape_series_cover(canonical_url, title)
     sk_norm = series_key.strip().lower() if series_key else ""
     story_ident = story_groups.story_id_from_series_key(sk_norm) if sk_norm else story_groups.new_solo_story_id()
+    dom = urlparse(canonical_url).netloc.lower().replace("www.", "").split(":")[0].strip(".")
+    if source_domain_in:
+        dom = source_domain_in.lower().replace("www.", "").split(":")[0].strip(".")
     with get_conn() as conn:
         existing = None
         if series_key:
@@ -3952,6 +3968,16 @@ def ensure_series():
                 conn.execute("UPDATE bookmarks SET cover_url = COALESCE(cover_url, ?) WHERE id = ?", (cover_url, row["id"]))
             if sk_norm:
                 conn.execute("UPDATE bookmarks SET series_key = ?, story_id = ? WHERE id = ?", (sk_norm, story_ident, row["id"]))
+            conn.execute(
+                """
+                UPDATE bookmarks
+                SET last_synced_at = ?,
+                    source_domain = COALESCE(?, source_domain),
+                    detection_source = COALESCE(detection_source, 'extension')
+                WHERE id = ?
+                """,
+                (bookmark_sync_ts, dom or None, row["id"]),
+            )
             row = conn.execute(
                 "SELECT id, title, url, series_key, cover_url, story_id FROM bookmarks WHERE id = ?",
                 (row["id"],),
@@ -3959,8 +3985,14 @@ def ensure_series():
         else:
             now = _now_iso_z()
             cursor = conn.execute(
-                "INSERT OR IGNORE INTO bookmarks (user_id, title, url, series_key, cover_url, story_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (user_id, title, canonical_url, series_key or None, cover_url, story_ident, now),
+                """
+                INSERT OR IGNORE INTO bookmarks (
+                    user_id, title, url, series_key, cover_url, story_id, created_at,
+                    last_synced_at, source_domain, detection_source
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'extension')
+                """,
+                (user_id, title, canonical_url, series_key or None, cover_url, story_ident, now, bookmark_sync_ts, dom or None),
             )
             created = cursor.rowcount == 1
             row = conn.execute(
@@ -3969,6 +4001,38 @@ def ensure_series():
             ).fetchone()
             if row is None:
                 return jsonify({"ok": False, "error": "series URL already exists under another local account"}), 409
+        try:
+            from services.global_catalog import repository as gc_repo
+
+            prof_name = ""
+            if profile:
+                prof_name = str(profile.get("display_name") or profile.get("id") or "").strip()
+            src_name = (prof_name or "Extension")[:200]
+            series_id = gc_repo.attach_extension_or_user_link(
+                conn,
+                user_id=user_id,
+                title=title,
+                source_url=canonical_url,
+                source_name=src_name,
+                source_domain=dom,
+            )
+            try:
+                library_model.sync_extension_series_source_for_user(
+                    conn,
+                    user_id=user_id,
+                    series_id=int(series_id),
+                    title=title,
+                    source_url=canonical_url,
+                    source_name=src_name,
+                    source_domain=dom,
+                    profile=profile,
+                    now=db_now,
+                    url_validator=is_public_http_url,
+                )
+            except library_model.LibraryModelError:
+                log.exception("extension normalized library sync rejected input")
+        except Exception:
+            log.exception("catalog extension source link failed")
     return jsonify({"ok": True, "created": created, "series": dict(row)})
 
 
@@ -3982,6 +4046,7 @@ def save_progress():
     chapter_url = (payload.get("chapter_url") or "").strip()
     chapter_label = (payload.get("chapter_label") or "").strip()
     chapter_num = payload.get("chapter_num")
+    sync_ts = (payload.get("synced_at") or payload.get("timestamp") or "").strip() or _now_iso_z()
 
     if not series_url and not series_key:
         return jsonify({"ok": False, "error": "series_url or series_key required"}), 400
@@ -4033,6 +4098,25 @@ def save_progress():
                     _now_iso_z(),
                     bookmark_id,
                 ),
+            )
+        conn.execute(
+            """
+            UPDATE bookmarks
+            SET last_synced_at = ?,
+                detection_source = COALESCE(detection_source, 'extension')
+            WHERE id = ?
+            """,
+            (sync_ts, bookmark_id),
+        )
+        brow = conn.execute("SELECT url FROM bookmarks WHERE id = ?", (bookmark_id,)).fetchone()
+        if brow:
+            library_model.touch_user_library_progress_for_bookmark_url(
+                conn,
+                user_id=user_id,
+                bookmark_url=str(brow["url"] or ""),
+                chapter_label=chapter_label,
+                chapter_num=parsed_num,
+                synced_at=sync_ts,
             )
     return jsonify({"ok": True, "bookmark_id": bookmark_id, "chapter_num": parsed_num})
 
@@ -4360,9 +4444,9 @@ def _coerce_preview_payload(raw: dict, *, detection_source: str, fallback_url: s
     except (TypeError, ValueError):
         confidence = 0.0
     confidence = max(0.0, min(1.0, confidence))
-    capabilities = ["url_resolve"]
+    capabilities = ["url_resolve", "extension_detect"]
     if support_level == "official_api":
-        capabilities.extend(["title_search", "chapter_check", "cover_image"])
+        capabilities.extend(["website_search", "chapter_check", "cover_image"])
     elif support_level in {"site_adapter", "generic_detector"}:
         capabilities.extend(["chapter_check", "cover_image"])
     elif support_level == "protected":
@@ -4473,8 +4557,9 @@ def api_image_proxy():
     host = (parsed.hostname or "").lower()
     if not any(host == h or host.endswith("." + h) for h in _IMAGE_PROXY_ALLOWED_HOSTS):
         return jsonify({"ok": False, "error": "domain not allowed"}), 403
-    if not is_public_http_url(raw):
-        return jsonify({"ok": False, "error": "public url required"}), 400
+    # Allowlisted CDN hosts only: validate URL shape. Skip DNS resolution (flaky in CI; host is fixed).
+    if not is_valid_http_url(raw):
+        return jsonify({"ok": False, "error": "invalid url"}), 400
     try:
         res = SESSION.get(raw, timeout=8, stream=True, allow_redirects=False)
     except Exception:
@@ -4506,39 +4591,41 @@ def api_image_proxy():
 @csrf.exempt
 @app.route("/api/demo/track", methods=["POST"])
 def api_track_series():
-    data = request.get_json(silent=True) or {}
-    return jsonify({"ok": True, "status": "queued", "series": data.get("series") or data.get("title") or "series"})
+    return jsonify(
+        {
+            "ok": False,
+            "error": "removed; use POST /api/series/ensure then POST /api/progress (browser extension sync)",
+        }
+    ), 410
 
 
 @app.route("/api/demo/search", methods=["GET"])
 def api_public_search():
-    q = (request.args.get("q") or "").strip()
-    if not q:
-        return jsonify({"ok": True, "items": []})
-    return jsonify(
-        {
-            "ok": True,
-            "items": [
-                {"title": q.title(), "slug": re.sub(r"[^a-z0-9]+", "-", q.lower()).strip("-"), "foundOn": 5, "recommended": "Asura"}
-            ],
-        }
-    )
+    return jsonify({"ok": False, "error": "removed; use GET /api/discover/search"}), 410
 
 
 @csrf.exempt
 @app.route("/api/track", methods=["POST"])
 def api_track_series_legacy_disabled():
-    return jsonify({"ok": False, "error": "deprecated endpoint; use /api/demo/track"}), 410
+    return jsonify(
+        {
+            "ok": False,
+            "error": "deprecated; use POST /api/series/ensure and POST /api/progress",
+        }
+    ), 410
 
 
 @app.route("/api/search", methods=["GET"])
 def api_public_search_legacy_disabled():
-    return jsonify({"ok": False, "error": "deprecated endpoint; use /api/demo/search"}), 410
+    return jsonify({"ok": False, "error": "deprecated; use GET /api/discover/search"}), 410
 
 
 @app.route("/api/series/<int:series_id>/sources", methods=["GET"])
 def api_series_sources(series_id: int):
-    return jsonify({"ok": True, "seriesId": series_id, "sources": LANDING_SOURCE_PREVIEW})
+    row = discovery.get_series_by_id(series_id)
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    return jsonify({"ok": True, "seriesId": series_id, "sources": row.get("sources") or []})
 
 
 @csrf.exempt
@@ -4548,16 +4635,57 @@ def api_source_request():
     domain = (data.get("domain") or "").strip()[:255]
     if not domain:
         return jsonify({"ok": False, "error": "domain is required"}), 400
-    return jsonify({"ok": True, "status": "requested", "domain": domain})
+    title_hint = (data.get("title_hint") or data.get("title") or domain).strip()[:500]
+    url_example = (data.get("url_example") or data.get("url") or "").strip()[:2000]
+    now = _now_iso_z()
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO source_requests (domain, title_hint, url_example, created_at) VALUES (?, ?, ?, ?)",
+            (domain, title_hint, url_example or "", now),
+        )
+    return jsonify({"ok": True, "status": "stored", "domain": domain})
 
 
 def api_trending():
-    return jsonify({"ok": True, "is_demo": True, **LANDING_TRENDING_DEMO})
+    if metadata_discovery.SHOW_DEMO_CONTENT:
+        return jsonify({"ok": True, "is_demo": True, **LANDING_TRENDING_DEMO})
+    snap = discovery.trending_snapshot()
+
+    def _pack(entries: list) -> list:
+        out = []
+        for t in (entries or [])[:3]:
+            title = str(t).strip()
+            if not title:
+                continue
+            slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:120] or "series"
+            out.append({"title": title, "slug": slug, "watchers": 0})
+        return out
+
+    ru = snap.get("recently_updated") or []
+    recent = []
+    for line in ru[:3]:
+        s = str(line).strip()
+        if not s:
+            continue
+        recent.append({"title": s, "chapter": ""})
+    return jsonify(
+        {
+            "ok": True,
+            "is_demo": False,
+            "trending_now": _pack(snap.get("trending_now")),
+            "most_watched": _pack(snap.get("most_watched")),
+            "recently_updated": recent,
+        }
+    )
 
 
 @app.route("/api/recent-updates", methods=["GET"])
 def api_recent_updates():
-    return jsonify({"ok": True, "items": LANDING_TRENDING_DEMO["recently_updated"]})
+    if metadata_discovery.SHOW_DEMO_CONTENT:
+        return jsonify({"ok": True, "items": LANDING_TRENDING_DEMO["recently_updated"]})
+    snap = discovery.trending_snapshot()
+    items = [{"title": str(t).strip(), "chapter": ""} for t in (snap.get("recently_updated") or [])[:8] if str(t).strip()]
+    return jsonify({"ok": True, "items": items})
 
 
 @app.route("/api/discover/supported-sources", methods=["GET"])
@@ -4833,6 +4961,18 @@ def api_library_add_from_preview():
             ).fetchone()
             if full is None:
                 return jsonify({"ok": False, "error": "bookmark not found"}), 500
+            try:
+                from services.global_catalog import repository as gc_repo
+
+                gc_repo.attach_manual_private_link(
+                    conn,
+                    user_id=user_id,
+                    title=add_title,
+                    source_url=canonical_url,
+                    source_domain=source_domain or "",
+                )
+            except Exception:
+                log.exception("catalog manual source link failed")
             return jsonify(
                 {"ok": True, "created": False, "duplicate": True, "series": dict(full), "library": norm_result}
             )
@@ -4901,6 +5041,18 @@ def api_library_add_from_preview():
             """,
             (int(row["id"]),),
         ).fetchone()
+        try:
+            from services.global_catalog import repository as gc_repo
+
+            gc_repo.attach_manual_private_link(
+                conn,
+                user_id=user_id,
+                title=add_title,
+                source_url=canonical_url,
+                source_domain=source_domain or "",
+            )
+        except Exception:
+            log.exception("catalog manual source link failed")
     return jsonify({"ok": True, "created": True, "duplicate": False, "series": dict(row), "library": norm_result})
 
 

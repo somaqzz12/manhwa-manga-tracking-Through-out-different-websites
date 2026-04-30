@@ -34,7 +34,8 @@ class PublicSeriesPolishTests(unittest.TestCase):
             pass
 
     def test_solo_leveling_catalog_shows_recommended_and_mangadex_primary(self):
-        res = self.client.get("/series/solo-leveling")
+        with patch("services.discovery.SHOW_DEMO_CONTENT", True):
+            res = self.client.get("/series/solo-leveling")
         self.assertEqual(res.status_code, 200)
         body = res.get_data(as_text=True)
         self.assertIn("Open original site", body)
@@ -141,7 +142,8 @@ class PublicSeriesPolishTests(unittest.TestCase):
         self.assertNotIn("bad.example", text)
 
     def test_manual_catalog_source_shows_track_manually(self):
-        res = self.client.get("/series/solo-leveling")
+        with patch("services.discovery.SHOW_DEMO_CONTENT", True):
+            res = self.client.get("/series/solo-leveling")
         self.assertEqual(res.status_code, 200)
         body = res.get_data(as_text=True)
         self.assertIn("Manual/Other", body)

@@ -272,8 +272,10 @@
     </div>
     <p class="foot-links">
       <a href="{{ url_for('sources_page') }}">Supported sources</a>
+      {% if show_demo_content|default(false) %}
       <span class="dot">·</span>
       <a href="{{ url_for('demo_dashboard') }}">Demo</a>
+      {% endif %}
       <span class="dot">·</span>
       <a href="{{ url_for('privacy_page') }}">Privacy</a>
       <span class="dot">·</span>

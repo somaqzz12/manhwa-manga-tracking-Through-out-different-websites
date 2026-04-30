@@ -134,7 +134,7 @@
       <div class="page-single-inner" style="max-width:1180px;">
         <section class="panel discover-hero">
           <h1 class="page-title page-title--display">Discover manga and manhwa</h1>
-          <p class="muted">Search a title or paste a URL. We’ll find sources, metadata, and the best way to track it.</p>
+          <p class="muted">Search a title or paste a URL. We’ll find sources, metadata, and the best way to track it. You can also <a href="{{ url_for('app_add_url') }}">Paste a source URL</a> to add manually.</p>
           <form id="discover-unified-form" class="discover-unified-form" method="get" action="{{ url_for('discover_page') }}" role="search">
             <label for="discover-unified-input">Search title or paste a source URL</label>
             <input type="search" name="q" id="discover-unified-input" value="{{ q or url_q or '' }}" placeholder="Search manga, manhwa, or paste a URL..." autocomplete="off" aria-label="Search or paste URL">
@@ -237,7 +237,7 @@
           </p>
           {% endif %}
           {% else %}
-          <p class="muted" style="margin:0 0 12px;">No matches yet.</p>
+          <p class="muted" style="margin:0 0 12px;">No matches found. Try MangaDex search, paste a source URL, or use the extension.</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <a class="btn ghost" href="{{ url_for('app_add_url') }}">Paste URL</a>
             <button id="emptyLiveBtn" type="button" class="btn ghost">Search supported sites live</button>
