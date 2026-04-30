@@ -29,12 +29,16 @@ from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from auth import helpers as auth_helpers
 import db as db_core
+from routes.account_routes import register_account_routes
 from routes.api_discovery import register_api_discovery_routes
 from routes.admin import register_admin_routes
 from routes.auth import register_auth_routes
+from routes.dashboard_routes import register_dashboard_routes
 from routes.extension_api import register_extension_api_routes
 from routes.library import register_library_routes
 from routes.public import register_public_routes
+from routes.system_routes import register_system_routes
+from routes.web_api import register_web_api_routes
 from werkzeug.security import check_password_hash, generate_password_hash
 from services import chapter_parsing as chapter
 from services import bookmarks as bookmark_services
@@ -2458,7 +2462,6 @@ def _sources_effective_status(src: dict, *, health_available: bool) -> str:
     return "unchecked"
 
 
-@app.route("/sources")
 def sources_page():
     sources = source_registry.public_sources_with_health()
     policy_by_domain: dict[str, dict] = {}
@@ -2500,12 +2503,10 @@ def sources_page():
     )
 
 
-@app.route("/privacy")
 def privacy_page():
     return render_template("privacy.html")
 
 
-@app.route("/check", methods=["GET"])
 def check_info_page():
     if login_required():
         flash("Run checks from your dashboard.", "info")
@@ -2514,22 +2515,18 @@ def check_info_page():
     return redirect(url_for("auth_page", mode="login", next=url_for("index")))
 
 
-@app.route("/terms")
 def terms_page():
     return render_template("terms.html")
 
 
-@app.route("/dmca")
 def dmca_page():
     return render_template("dmca.html")
 
 
-@app.route("/changelog")
 def changelog_page():
     return render_template("changelog.html")
 
 
-@app.route("/demo")
 def demo_dashboard():
     if not _show_demo_content():
         abort(404)
@@ -2570,14 +2567,12 @@ def demo_dashboard():
     )
 
 
-@app.route("/onboarding/dismiss", methods=["POST"])
 def onboarding_dismiss():
     if login_required():
         session.pop("onboarding_pending", None)
     return redirect(request.referrer or url_for("index"))
 
 
-@app.route("/account/delete", methods=["GET", "POST"])
 def delete_account():
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -2629,7 +2624,6 @@ def delete_account():
     return redirect(url_for("home"))
 
 
-@app.route("/account/settings", methods=["GET", "POST"])
 def account_settings():
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -2725,7 +2719,6 @@ def account_settings():
     )
 
 
-@app.route("/list/<slug>")
 def public_library(slug: str):
     slug_clean = (slug or "").strip().lower()
     if not _public_slug_ok(slug_clean):
@@ -2743,8 +2736,6 @@ def public_library(slug: str):
     return render_template("public_list.html", slug=slug_clean, bookmarks=story_cards)
 
 
-@app.route("/source-requests", methods=["GET", "POST"])
-@limiter.limit("12/hour", methods=["POST"], key_func=get_remote_address)
 def source_requests_page():
     if request.method == "POST":
         domain = (request.form.get("domain") or "").strip().lower()
@@ -2788,8 +2779,6 @@ def source_requests_page():
     )
 
 
-@app.route("/source-requests/<int:req_id>/vote", methods=["POST"])
-@limiter.limit("40/hour", methods=["POST"], key_func=get_remote_address)
 def source_requests_vote(req_id: int):
     with get_conn() as conn:
         conn.execute("UPDATE source_requests SET votes = votes + 1 WHERE id = ?", (req_id,))
@@ -2826,13 +2815,10 @@ def _record_source_candidate(domain: str, title_hint: str, url_example: str) -> 
         )
 
 
-@csrf.exempt
-@app.route("/api/import/mal", methods=["POST"])
 def api_import_mal_stub():
     return jsonify({"ok": False, "error": "MyAnimeList import is not implemented yet"}), 501
 
 
-@app.route("/healthz")
 def healthz():
     """Liveness probe only: no database, scraping, or scheduler work."""
     resp = jsonify({"ok": True, "status": "healthy"})
@@ -2840,7 +2826,6 @@ def healthz():
     return resp
 
 
-@app.route("/feeds/rss/<token>")
 def user_rss_feed(token: str):
     tok = (token or "").strip()
     if not tok:
@@ -2859,12 +2844,38 @@ def user_rss_feed(token: str):
     return resp
 
 
-@app.route("/api/registry/public", methods=["GET"])
+register_account_routes(
+    app,
+    {
+        "onboarding_dismiss": onboarding_dismiss,
+        "delete_account": delete_account,
+        "account_settings": account_settings,
+        "public_library": public_library,
+        "source_requests_page": source_requests_page,
+        "source_requests_vote": source_requests_vote,
+        "user_rss_feed": user_rss_feed,
+    },
+    limiter=limiter,
+    get_remote_address=get_remote_address,
+)
+
+
 def api_registry_public():
     snap = source_registry.public_api_snapshot()
     resp = jsonify({"ok": True, **snap})
     resp.headers["Cache-Control"] = "public, max-age=300"
     return resp
+
+
+register_system_routes(
+    app,
+    {
+        "api_import_mal_stub": api_import_mal_stub,
+        "healthz": healthz,
+        "api_registry_public": api_registry_public,
+    },
+    csrf=csrf,
+)
 
 
 LANDING_TRENDING_DEMO = {
@@ -3204,6 +3215,11 @@ register_public_routes(
         "dmca_page": dmca_page,
         "extension_page": extension_page,
         "roadmap_page": roadmap_page,
+        "sources_page": sources_page,
+        "privacy_page": privacy_page,
+        "check_info_page": check_info_page,
+        "changelog_page": changelog_page,
+        "demo_dashboard": demo_dashboard,
     },
 )
 
@@ -3299,7 +3315,6 @@ def index():
     )
 
 
-@app.route("/app/library")
 def app_library():
     return redirect(url_for("index"))
 
@@ -3336,14 +3351,12 @@ def app_add_url():
     )
 
 
-@app.route("/app/search")
 def app_search():
     if not login_required():
         return _login_redirect_preserve_destination()
     return redirect(url_for("public_search", q=(request.args.get("q") or "")))
 
 
-@app.route("/app/series/<int:series_id>")
 def app_series_detail(series_id: int):
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -3368,21 +3381,18 @@ def app_series_detail(series_id: int):
     )
 
 
-@app.route("/app/requests")
 def app_requests():
     if not login_required():
         return _login_redirect_preserve_destination()
     return redirect(url_for("source_requests_page"))
 
 
-@app.route("/app/settings")
 def app_settings():
     if not login_required():
         return _login_redirect_preserve_destination()
     return redirect(url_for("account_settings"))
 
 
-@app.route("/next")
 def next_up():
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -3421,7 +3431,6 @@ def next_up():
     )
 
 
-@app.route("/export", methods=["GET"])
 def export_data():
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -3443,7 +3452,6 @@ def export_data():
     )
 
 
-@app.route("/import", methods=["POST"])
 def import_data():
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -3606,7 +3614,6 @@ def import_data():
     return redirect_index_preserve_search()
 
 
-@app.route("/add", methods=["POST"])
 def add_bookmark():
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -3645,7 +3652,6 @@ def add_bookmark():
     return redirect_index_preserve_search()
 
 
-@app.route("/check/<int:bookmark_id>", methods=["POST"])
 def check_bookmark(bookmark_id: int):
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -3653,7 +3659,6 @@ def check_bookmark(bookmark_id: int):
     return redirect_index_preserve_search()
 
 
-@app.route("/check-story", methods=["POST"])
 def check_story_group():
     """Re-scrape every physical bookmark URL that belongs to the same logical story."""
     if not login_required():
@@ -3668,11 +3673,13 @@ def check_story_group():
             (user_id, story_id),
         ).fetchall()
     for r in rows:
-        check_single(int(r["id"]), user_id, force=True)
+        try:
+            check_single(int(r["id"]), user_id, force=True)
+        except Exception:
+            log.exception("check_single failed in check_story_group for bookmark %s", int(r["id"]))
     return redirect_index_preserve_search()
 
 
-@app.route("/check-all", methods=["POST"])
 def check_all_route():
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -3704,7 +3711,6 @@ def check_all_route():
     return redirect_index_preserve_search()
 
 
-@app.route("/api/check-all/status", methods=["GET"])
 def check_all_status_api():
     user_id = api_session_user_id()
     if user_id is None:
@@ -3715,7 +3721,6 @@ def check_all_status_api():
     return jsonify({"ok": True, "running": running, "finished_at": finished_at})
 
 
-@app.route("/mark-seen/<int:bookmark_id>", methods=["POST"])
 def mark_seen(bookmark_id: int):
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -3725,7 +3730,6 @@ def mark_seen(bookmark_id: int):
     return redirect_index_preserve_search()
 
 
-@app.route("/mark-all-seen", methods=["POST"])
 def mark_all_seen():
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -3736,7 +3740,6 @@ def mark_all_seen():
     return redirect_index_preserve_search()
 
 
-@app.route("/bookmark/<int:bookmark_id>/read-through", methods=["POST"])
 def read_through(bookmark_id: int):
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -3759,7 +3762,6 @@ def read_through(bookmark_id: int):
     return redirect_index_preserve_search()
 
 
-@app.route("/bookmark/<int:bookmark_id>/edit", methods=["GET", "POST"])
 def edit_bookmark(bookmark_id: int):
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -3909,7 +3911,6 @@ def edit_bookmark(bookmark_id: int):
     )
 
 
-@app.route("/delete/<int:bookmark_id>", methods=["POST"])
 def delete_bookmark(bookmark_id: int):
     if not login_required():
         return _login_redirect_preserve_destination()
@@ -3917,6 +3918,31 @@ def delete_bookmark(bookmark_id: int):
     with get_conn() as conn:
         conn.execute("DELETE FROM bookmarks WHERE id = ? AND user_id = ?", (bookmark_id, user_id))
     return redirect_index_preserve_search()
+
+
+register_dashboard_routes(
+    app,
+    {
+        "app_library": app_library,
+        "app_search": app_search,
+        "app_series_detail": app_series_detail,
+        "app_requests": app_requests,
+        "app_settings": app_settings,
+        "next_up": next_up,
+        "export_data": export_data,
+        "import_data": import_data,
+        "add_bookmark": add_bookmark,
+        "check_bookmark": check_bookmark,
+        "check_story_group": check_story_group,
+        "check_all_route": check_all_route,
+        "check_all_status_api": check_all_status_api,
+        "mark_seen": mark_seen,
+        "mark_all_seen": mark_all_seen,
+        "read_through": read_through,
+        "edit_bookmark": edit_bookmark,
+        "delete_bookmark": delete_bookmark,
+    },
+)
 
 
 def ensure_series():
@@ -4227,7 +4253,6 @@ def api_unread_count():
     )
 
 
-@app.route("/api/library/duplicate-hints", methods=["GET"])
 def api_duplicate_hints():
     user_id = api_session_user_id()
     if user_id is None:
@@ -4236,8 +4261,6 @@ def api_duplicate_hints():
     return jsonify({"ok": True, "hints": hints})
 
 
-@csrf.exempt
-@app.route("/api/library/merge-bookmarks", methods=["POST"])
 def api_merge_bookmarks():
     user_id = api_session_user_id()
     if user_id is None:
@@ -4286,7 +4309,6 @@ def api_merge_bookmarks():
     return jsonify({"ok": True, "story_id": target_sid})
 
 
-@app.route("/api/library/chapter-map", methods=["GET"])
 def api_chapter_map():
     user_id = api_session_user_id()
     if user_id is None:
@@ -4313,7 +4335,6 @@ def api_chapter_map():
     return jsonify({"ok": True, "stories": stories_out})
 
 
-@app.route("/api/library/alt-sources", methods=["GET"])
 def api_alt_sources():
     user_id = api_session_user_id()
     if user_id is None:
@@ -4551,7 +4572,6 @@ _IMAGE_PROXY_ALLOWED_HOSTS = {"uploads.mangadex.org", "cmdxd98sbkhr3.cloudfront.
 _IMAGE_PROXY_MAX_BYTES = 4 * 1024 * 1024
 
 
-@app.route("/api/image-proxy", methods=["GET"])
 def api_image_proxy():
     raw = (request.args.get("url") or "").strip()
     if not raw:
@@ -4593,8 +4613,6 @@ def api_image_proxy():
     )
 
 
-@csrf.exempt
-@app.route("/api/demo/track", methods=["POST"])
 def api_track_series():
     return jsonify(
         {
@@ -4604,13 +4622,10 @@ def api_track_series():
     ), 410
 
 
-@app.route("/api/demo/search", methods=["GET"])
 def api_public_search():
     return jsonify({"ok": False, "error": "removed; use GET /api/discover/search"}), 410
 
 
-@csrf.exempt
-@app.route("/api/track", methods=["POST"])
 def api_track_series_legacy_disabled():
     return jsonify(
         {
@@ -4620,12 +4635,10 @@ def api_track_series_legacy_disabled():
     ), 410
 
 
-@app.route("/api/search", methods=["GET"])
 def api_public_search_legacy_disabled():
     return jsonify({"ok": False, "error": "deprecated; use GET /api/discover/search"}), 410
 
 
-@app.route("/api/series/<int:series_id>/sources", methods=["GET"])
 def api_series_sources(series_id: int):
     row = discovery.get_series_by_id(series_id)
     if not row:
@@ -4633,8 +4646,6 @@ def api_series_sources(series_id: int):
     return jsonify({"ok": True, "seriesId": series_id, "sources": row.get("sources") or []})
 
 
-@csrf.exempt
-@app.route("/api/source-request", methods=["POST"])
 def api_source_request():
     data = request.get_json(silent=True) or {}
     domain = (data.get("domain") or "").strip()[:255]
@@ -4684,7 +4695,6 @@ def api_trending():
     )
 
 
-@app.route("/api/recent-updates", methods=["GET"])
 def api_recent_updates():
     if metadata_discovery.SHOW_DEMO_CONTENT:
         return jsonify({"ok": True, "items": LANDING_TRENDING_DEMO["recently_updated"]})
@@ -4693,12 +4703,10 @@ def api_recent_updates():
     return jsonify({"ok": True, "items": items})
 
 
-@app.route("/api/discover/supported-sources", methods=["GET"])
 def api_discover_supported_sources():
     return jsonify({"ok": True, "tiers": supported_source_policy()})
 
 
-@app.route("/api/discover/search", methods=["GET"])
 def api_discover_search():
     q = (request.args.get("q") or "").strip()[:DISCOVER_QUERY_MAX_LEN]
     if not q:
@@ -4710,7 +4718,6 @@ def api_discover_search():
     return jsonify({"ok": True, **payload, "items": results})
 
 
-@app.route("/api/discover/series/<int:series_id>", methods=["GET"])
 def api_discover_series(series_id: int):
     row = discovery.get_series_by_id(series_id)
     if not row:
@@ -4718,7 +4725,6 @@ def api_discover_series(series_id: int):
     return jsonify({"ok": True, "series": row})
 
 
-@app.route("/api/discover/series/<int:series_id>/sources", methods=["GET"])
 def api_discover_series_sources(series_id: int):
     row = discovery.get_series_by_id(series_id)
     if not row:
@@ -4763,8 +4769,6 @@ register_api_discovery_routes(
 )
 
 
-@csrf.exempt
-@app.route("/api/tracker/add-series", methods=["POST"])
 def api_tracker_add_series():
     user_id = api_session_user_id()
     if user_id is None:
@@ -5074,9 +5078,6 @@ register_library_routes(
 )
 
 
-@csrf.exempt
-@app.route("/api/v1/bookmarks", methods=["GET"])
-@limiter.limit("60/minute", methods=["GET"], key_func=_api_v1_rate_limit_key)
 def api_v1_bookmarks():
     auth = (request.headers.get("Authorization") or "").strip()
     token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
@@ -5105,8 +5106,6 @@ def api_v1_bookmarks():
     return jsonify({"ok": True, "bookmarks": out})
 
 
-@csrf.exempt
-@app.route("/api/account/api-token", methods=["POST"])
 def api_account_issue_token():
     user_id = api_session_user_id()
     if user_id is None:
@@ -5238,8 +5237,6 @@ register_extension_api_routes(
 )
 
 
-@csrf.exempt
-@app.route("/api/debug/scrape", methods=["POST"])
 def debug_scrape():
     if not admin_api_authorized():
         # Return 404 in production so the route is not discoverable as an open proxy.
@@ -5292,8 +5289,6 @@ def debug_scrape():
     )
 
 
-@csrf.exempt
-@app.route("/api/maintenance/merge-duplicates", methods=["POST"])
 def merge_duplicates():
     if not admin_api_authorized():
         return jsonify({"ok": False, "error": "not found"}), 404
@@ -5374,6 +5369,37 @@ def merge_duplicates():
             "deleted_bookmarks": deleted_bookmarks,
         }
     )
+
+
+register_web_api_routes(
+    app,
+    {
+        "api_duplicate_hints": api_duplicate_hints,
+        "api_merge_bookmarks": api_merge_bookmarks,
+        "api_chapter_map": api_chapter_map,
+        "api_alt_sources": api_alt_sources,
+        "api_image_proxy": api_image_proxy,
+        "api_track_series": api_track_series,
+        "api_public_search": api_public_search,
+        "api_track_series_legacy_disabled": api_track_series_legacy_disabled,
+        "api_public_search_legacy_disabled": api_public_search_legacy_disabled,
+        "api_series_sources": api_series_sources,
+        "api_source_request": api_source_request,
+        "api_recent_updates": api_recent_updates,
+        "api_discover_supported_sources": api_discover_supported_sources,
+        "api_discover_search": api_discover_search,
+        "api_discover_series": api_discover_series,
+        "api_discover_series_sources": api_discover_series_sources,
+        "api_tracker_add_series": api_tracker_add_series,
+        "api_v1_bookmarks": api_v1_bookmarks,
+        "api_account_issue_token": api_account_issue_token,
+        "debug_scrape": debug_scrape,
+        "merge_duplicates": merge_duplicates,
+    },
+    csrf=csrf,
+    limiter=limiter,
+    api_v1_rate_limit_key=_api_v1_rate_limit_key,
+)
 
 
 def admin_users():
