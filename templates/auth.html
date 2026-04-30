@@ -176,13 +176,19 @@
         <h1>Manga Watchlist</h1>
       </div>
       <div class="segmented" role="tablist">
-        <a class="{% if mode == 'login' %}active{% endif %}" href="/auth?mode=login" role="tab" aria-selected="{{ 'true' if mode == 'login' else 'false' }}">Login</a>
-        <a class="{% if mode == 'register' %}active{% endif %}" href="/auth?mode=register" role="tab" aria-selected="{{ 'true' if mode == 'register' else 'false' }}">Register</a>
+        {% if auth_next %}
+        <a class="{% if mode == 'login' %}active{% endif %}" href="{{ url_for('auth_page', mode='login', next=auth_next) }}" role="tab" aria-selected="{{ 'true' if mode == 'login' else 'false' }}">Login</a>
+        <a class="{% if mode == 'register' %}active{% endif %}" href="{{ url_for('auth_page', mode='register', next=auth_next) }}" role="tab" aria-selected="{{ 'true' if mode == 'register' else 'false' }}">Register</a>
+        {% else %}
+        <a class="{% if mode == 'login' %}active{% endif %}" href="{{ url_for('auth_page', mode='login') }}" role="tab" aria-selected="{{ 'true' if mode == 'login' else 'false' }}">Login</a>
+        <a class="{% if mode == 'register' %}active{% endif %}" href="{{ url_for('auth_page', mode='register') }}" role="tab" aria-selected="{{ 'true' if mode == 'register' else 'false' }}">Register</a>
+        {% endif %}
       </div>
       {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
       <form method="post" id="authForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="action" value="{{ 'register' if mode == 'register' else 'login' }}">
+        {% if auth_next %}<input type="hidden" name="next" value="{{ auth_next|e }}">{% endif %}
         <input type="text" name="username" placeholder="Username" aria-label="Username" autocomplete="username" maxlength="64" required>
         <input
           type="password"

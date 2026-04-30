@@ -20,8 +20,8 @@ export default function HomePage() {
         <Hero />
         <MangaShowcaseSection
           kicker="Featured examples"
-          title="Trending this week"
-          subtitle="Illustrative picks for the homepage — not live charts or rankings."
+          title="Starter picks"
+          subtitle="Popular titles people often track — try discovery with familiar manga and manhwa (not live rankings)."
           cards={demoTrendingWeek}
           columns="dense"
         />
@@ -167,7 +167,7 @@ export default function HomePage() {
                 href={`${base}/extension`}
                 className="btn-primary inline-flex rounded-full px-6 py-3 text-sm font-semibold no-underline"
               >
-                Get extension
+                Extension
               </a>
               <a href={`${base}/discover`} className="btn-glass inline-flex rounded-full px-6 py-3 text-sm font-semibold text-[var(--color-text)] no-underline">
                 Discover

@@ -21,7 +21,9 @@ This is the extracted route inventory from `app.py` before modularization.
 
 ## Auth / Account
 
-- `GET|POST /auth` -> sign in/register
+- `GET|POST /auth` -> sign in/register (optional `next` = safe internal path to continue after auth)
+- `GET /login` -> redirect to `/auth?mode=login` (optional `next`)
+- `GET /register` -> redirect to `/auth?mode=register` (optional `next`)
 - `POST /logout` -> logout
 - `GET|POST /account/settings` -> account settings
 - `GET|POST /account/delete` -> delete account

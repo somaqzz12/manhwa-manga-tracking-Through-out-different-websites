@@ -45,7 +45,7 @@ export function SiteHeader() {
             href={`${base}/extension`}
             className="text-[var(--color-muted)] no-underline transition hover:text-[var(--color-text)]"
           >
-            Get extension
+            Extension
           </a>
           <a
             href={githubUrl}
@@ -54,6 +54,12 @@ export function SiteHeader() {
             className="text-[var(--color-muted)] no-underline transition hover:text-[var(--color-text)]"
           >
             GitHub
+          </a>
+          <a href={`${base}/auth?mode=login`} className="text-[var(--color-muted)] no-underline transition hover:text-[var(--color-text)]">
+            Sign in
+          </a>
+          <a href={`${base}/auth?mode=register`} className="text-[var(--color-muted)] no-underline transition hover:text-[var(--color-text)]">
+            Create account
           </a>
           <a
             href={`${base}/app`}

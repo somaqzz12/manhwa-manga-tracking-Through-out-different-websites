@@ -135,7 +135,15 @@ def _auth_username_key() -> str:
 def _ratelimited(_err):
     if request.path.startswith("/api/"):
         return jsonify({"ok": False, "error": "rate limit exceeded"}), 429
-    return render_template("auth.html", mode=(request.args.get("mode") or "login"), error="Too many attempts. Please wait a minute and try again."), 429
+    return (
+        render_template(
+            "auth.html",
+            mode=(request.args.get("mode") or "login"),
+            error="Too many attempts. Please wait a minute and try again.",
+            auth_next=_safe_internal_redirect_path((request.args.get("next") or "").strip()) or "",
+        ),
+        429,
+    )
 
 HTTP_TIMEOUT_SECONDS = int(os.getenv("HTTP_TIMEOUT_SECONDS", "15"))
 MAX_CHECK_WORKERS = max(1, int(os.getenv("MAX_CHECK_WORKERS", "6")))
@@ -1415,6 +1423,20 @@ def login_required():
     return session.get("user_id") is not None
 
 
+def _safe_internal_redirect_path(candidate: str | None) -> str | None:
+    """Return path+query if safe for post-auth redirects (same-origin relative only)."""
+    if not candidate:
+        return None
+    s = candidate.strip()
+    if not s.startswith("/") or s.startswith("//") or "\n" in s or "\r" in s or "\\" in s:
+        return None
+    return s
+
+
+def _login_redirect_preserve_destination() -> Response:
+    return redirect(url_for("auth_page", mode="login", next=request.full_path))
+
+
 def api_session_user_id() -> Optional[int]:
     """Return the logged-in user id for extension JSON API routes.
 
@@ -2258,13 +2280,25 @@ def check_all_users() -> None:
     key_func=_auth_username_key,
 )
 def auth_page():
+    if login_required() and get_current_user() is not None:
+        dest = _safe_internal_redirect_path((request.args.get("next") or "").strip())
+        return redirect(dest or url_for("index"))
+
     mode = (request.args.get("mode") or "login").strip().lower()
+    if mode not in ("login", "register"):
+        mode = "login"
     error = None
+    auth_next = _safe_internal_redirect_path((request.args.get("next") or "").strip()) or ""
+
     if request.method == "POST":
+        posted_next = _safe_internal_redirect_path((request.form.get("next") or "").strip())
+        if posted_next:
+            auth_next = posted_next
         try:
             action = request.form.get("action", "login")
             username = (request.form.get("username") or "").strip().lower()
             password = request.form.get("password") or ""
+            form_next = _safe_internal_redirect_path((request.form.get("next") or "").strip())
             if not username or not password:
                 error = "Username and password are required."
             elif action == "register" and len(password) < MIN_PASSWORD_LENGTH:
@@ -2281,7 +2315,6 @@ def auth_page():
                             "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
                             (username, synthetic_email, generate_password_hash(password), now),
                         )
-                        # PostgreSQL drivers do not set lastrowid; fetch the row we just inserted.
                         if IS_POSTGRES:
                             inserted = conn.execute(
                                 "SELECT id FROM users WHERE username = ? AND email = ?",
@@ -2292,12 +2325,10 @@ def auth_page():
                             new_user_id = int(inserted["id"])
                         else:
                             new_user_id = int(insert_cur.lastrowid)
-                        # Drop any pre-auth session state so the post-auth cookie cannot
-                        # carry attacker-controlled values from a fixated session.
                         session.clear()
                         session["user_id"] = new_user_id
                         session["onboarding_pending"] = True
-                        return redirect(url_for("index"))
+                        return redirect(form_next or url_for("index"))
             else:
                 with get_conn() as conn:
                     user = conn.execute(
@@ -2309,11 +2340,23 @@ def auth_page():
                 else:
                     session.clear()
                     session["user_id"] = int(user["id"])
-                    return redirect(url_for("index"))
+                    return redirect(form_next or url_for("index"))
         except Exception:
             error = "Temporary database issue. Please try again in a few seconds."
 
-    return render_template("auth.html", mode=mode, error=error)
+    return render_template("auth.html", mode=mode, error=error, auth_next=auth_next)
+
+
+@app.route("/login")
+def login_alias():
+    nxt = (request.args.get("next") or "").strip()
+    return redirect(url_for("auth_page", mode="login", **({"next": nxt} if nxt else {})))
+
+
+@app.route("/register")
+def register_alias():
+    nxt = (request.args.get("next") or "").strip()
+    return redirect(url_for("auth_page", mode="register", **({"next": nxt} if nxt else {})))
 
 
 @app.route("/logout", methods=["POST"])
@@ -2473,12 +2516,12 @@ def onboarding_dismiss():
 @app.route("/account/delete", methods=["GET", "POST"])
 def delete_account():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     current_user = get_current_user()
     if current_user is None:
         session.pop("user_id", None)
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     if str(current_user["email"] or "").strip().lower() == DEFAULT_USER_EMAIL.strip().lower():
         flash("The built-in local demo user cannot be deleted from this screen.", "error")
         return redirect(url_for("index"))
@@ -2525,12 +2568,12 @@ def delete_account():
 @app.route("/account/settings", methods=["GET", "POST"])
 def account_settings():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     current_user = get_current_user()
     if current_user is None:
         session.pop("user_id", None)
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
 
     if request.method == "POST":
         action = (request.form.get("action") or "").strip().lower()
@@ -2832,41 +2875,40 @@ def _landing_cards_for_slugs(slugs: list[str]) -> list[dict]:
 
 
 def home():
-    if not login_required():
-        trending_slugs = [
-            "solo-leveling",
-            "omniscient-reader",
-            "tower-of-god",
-            "the-beginning-after-the-end",
-            "jujutsu-kaisen",
-            "one-piece",
-        ]
-        manhwa_slugs = [
-            "solo-leveling",
-            "tower-of-god",
-            "omniscient-reader",
-            "the-beginning-after-the-end",
-            "lookism",
-            "eleceed",
-        ]
-        manga_slugs = [
-            "one-piece",
-            "jujutsu-kaisen",
-            "chainsaw-man",
-            "blue-lock",
-            "vinland-saga",
-            "berserk",
-        ]
-        return render_template(
-            "landing_v2.html",
-            trending=LANDING_TRENDING_DEMO,
-            source_preview=LANDING_SOURCE_PREVIEW,
-            landing_trending_cards=_landing_cards_for_slugs(trending_slugs),
-            landing_popular_manhwa=_landing_cards_for_slugs(manhwa_slugs),
-            landing_popular_manga=_landing_cards_for_slugs(manga_slugs),
-            landing_recent_updates=LANDING_RECENT_UPDATES_DEMO,
-        )
-    return redirect(url_for("index"))
+    trending_slugs = [
+        "solo-leveling",
+        "omniscient-reader",
+        "tower-of-god",
+        "the-beginning-after-the-end",
+        "jujutsu-kaisen",
+        "one-piece",
+    ]
+    manhwa_slugs = [
+        "solo-leveling",
+        "tower-of-god",
+        "omniscient-reader",
+        "the-beginning-after-the-end",
+        "lookism",
+        "eleceed",
+    ]
+    manga_slugs = [
+        "one-piece",
+        "jujutsu-kaisen",
+        "chainsaw-man",
+        "blue-lock",
+        "vinland-saga",
+        "berserk",
+    ]
+    return render_template(
+        "landing_v2.html",
+        trending=LANDING_TRENDING_DEMO,
+        source_preview=LANDING_SOURCE_PREVIEW,
+        landing_trending_cards=_landing_cards_for_slugs(trending_slugs),
+        landing_popular_manhwa=_landing_cards_for_slugs(manhwa_slugs),
+        landing_popular_manga=_landing_cards_for_slugs(manga_slugs),
+        landing_recent_updates=LANDING_RECENT_UPDATES_DEMO,
+        current_user=get_current_user(),
+    )
 
 
 def public_search():
@@ -2925,7 +2967,7 @@ def about_page():
 
 
 def extension_page():
-    return render_template("extension_landing.html")
+    return render_template("extension_landing.html", current_user=get_current_user())
 
 
 register_public_routes(
@@ -2943,13 +2985,13 @@ register_public_routes(
 
 def index():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     current_user = get_current_user()
     if current_user is None:
         # Session can become stale after deploys or DB resets.
         session.pop("user_id", None)
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
 
     page_size = BOOKMARKS_PAGE_SIZE
     try:
@@ -3039,12 +3081,12 @@ def app_library():
 
 def app_add_url():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     current_user = get_current_user()
     if current_user is None:
         session.pop("user_id", None)
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     raw_rows, _ = _fetch_user_story_rows(user_id, "")
     total_count = len(raw_rows)
     with CHECK_ALL_STATUS_LOCK:
@@ -3055,6 +3097,8 @@ def app_add_url():
         if check_all_running
         else f"Last checked: {_format_relative_age(check_all_last_finished_at)}"
     )
+    prefill_url = (request.args.get("url") or "").strip()
+    prefill_title = (request.args.get("title") or "").strip()
     return render_template(
         "app_add.html",
         current_user=current_user,
@@ -3064,20 +3108,22 @@ def app_add_url():
         page=1,
         demo_mode=False,
         check_all_status_text=check_all_status_text,
+        prefill_url=prefill_url,
+        prefill_title=prefill_title,
     )
 
 
 @app.route("/app/search")
 def app_search():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     return redirect(url_for("public_search", q=(request.args.get("q") or "")))
 
 
 @app.route("/app/series/<int:series_id>")
 def app_series_detail(series_id: int):
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     return render_template(
         "app_series.html",
         series_id=series_id,
@@ -3088,26 +3134,26 @@ def app_series_detail(series_id: int):
 @app.route("/app/requests")
 def app_requests():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     return redirect(url_for("source_requests_page"))
 
 
 @app.route("/app/settings")
 def app_settings():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     return redirect(url_for("account_settings"))
 
 
 @app.route("/next")
 def next_up():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     current_user = get_current_user()
     if current_user is None:
         session.pop("user_id", None)
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
 
     raw_rows, raw_by_id = _fetch_user_story_rows(user_id, "")
     if not raw_rows:
@@ -3141,7 +3187,7 @@ def next_up():
 @app.route("/export", methods=["GET"])
 def export_data():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     with get_conn() as conn:
         bookmarks = conn.execute("SELECT * FROM bookmarks WHERE user_id = ? ORDER BY id ASC", (user_id,)).fetchall()
@@ -3163,7 +3209,7 @@ def export_data():
 @app.route("/import", methods=["POST"])
 def import_data():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     file = request.files.get("backup_file")
     if file is None or not (file.filename or "").strip():
         flash("No backup file selected. Choose a Manga Watchlist backup JSON to import.", "warning")
@@ -3326,7 +3372,7 @@ def import_data():
 @app.route("/add", methods=["POST"])
 def add_bookmark():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     title = request.form.get("title", "").strip()
     url = request.form.get("url", "").strip()
@@ -3365,7 +3411,7 @@ def add_bookmark():
 @app.route("/check/<int:bookmark_id>", methods=["POST"])
 def check_bookmark(bookmark_id: int):
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     check_single(bookmark_id, get_actor_user_id(), force=True)
     return redirect_index_preserve_search()
 
@@ -3374,7 +3420,7 @@ def check_bookmark(bookmark_id: int):
 def check_story_group():
     """Re-scrape every physical bookmark URL that belongs to the same logical story."""
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     story_id = (request.form.get("story_id") or "").strip()
     if not story_id:
@@ -3392,7 +3438,7 @@ def check_story_group():
 @app.route("/check-all", methods=["POST"])
 def check_all_route():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     if CHECK_ALL_LOCK.locked():
         return redirect_index_preserve_search()
     force = (request.form.get("force") or "").strip() == "1"
@@ -3435,7 +3481,7 @@ def check_all_status_api():
 @app.route("/mark-seen/<int:bookmark_id>", methods=["POST"])
 def mark_seen(bookmark_id: int):
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     with get_conn() as conn:
         conn.execute("UPDATE bookmarks SET new_update = 0 WHERE id = ? AND user_id = ?", (bookmark_id, user_id))
@@ -3445,7 +3491,7 @@ def mark_seen(bookmark_id: int):
 @app.route("/mark-all-seen", methods=["POST"])
 def mark_all_seen():
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     with get_conn() as conn:
         conn.execute("UPDATE bookmarks SET new_update = 0 WHERE user_id = ?", (user_id,))
@@ -3456,7 +3502,7 @@ def mark_all_seen():
 @app.route("/bookmark/<int:bookmark_id>/read-through", methods=["POST"])
 def read_through(bookmark_id: int):
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     raw = (request.form.get("chapter_num") or "").strip()
     try:
@@ -3479,7 +3525,7 @@ def read_through(bookmark_id: int):
 @app.route("/bookmark/<int:bookmark_id>/edit", methods=["GET", "POST"])
 def edit_bookmark(bookmark_id: int):
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     if request.method == "POST":
         return_q = (request.form.get("q") or "").strip()[:200]
@@ -3629,7 +3675,7 @@ def edit_bookmark(bookmark_id: int):
 @app.route("/delete/<int:bookmark_id>", methods=["POST"])
 def delete_bookmark(bookmark_id: int):
     if not login_required():
-        return redirect(url_for("auth_page"))
+        return _login_redirect_preserve_destination()
     user_id = get_actor_user_id()
     with get_conn() as conn:
         conn.execute("DELETE FROM bookmarks WHERE id = ? AND user_id = ?", (bookmark_id, user_id))
@@ -4574,7 +4620,7 @@ def merge_duplicates():
 def admin_users():
     if not admin_view_authorized():
         if not login_required():
-            return redirect(url_for("auth_page", mode="login"))
+            return _login_redirect_preserve_destination()
         return abort(403)
     with get_conn() as conn:
         totals = conn.execute(
@@ -4629,7 +4675,7 @@ def admin_users():
 def admin_user_detail(user_id: int):
     if not admin_view_authorized():
         if not login_required():
-            return redirect(url_for("auth_page", mode="login"))
+            return _login_redirect_preserve_destination()
         return abort(403)
     with get_conn() as conn:
         user = conn.execute(
@@ -4678,7 +4724,7 @@ def admin_user_detail(user_id: int):
 def admin_source_registry_status():
     if not admin_view_authorized():
         if not login_required():
-            return redirect(url_for("auth_page", mode="login"))
+            return _login_redirect_preserve_destination()
         return abort(403)
     rows = source_registry.sources_with_health()
     rows = sorted(rows, key=lambda r: ((r.get("registry_origin") or "zzz"), r.get("display_name") or r.get("id") or ""))

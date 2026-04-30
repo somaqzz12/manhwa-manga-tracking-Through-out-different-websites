@@ -203,16 +203,38 @@
       object-fit: cover;
       display: block;
     }
-    .series-card-ph {
+    .series-card-cover--art {
+      position: relative;
+      display: block;
+      overflow: hidden;
+    }
+    .series-card-cover--art .cover-abstract {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      transition: transform 0.35s ease;
+    }
+    .series-card-cover--art .cover-img {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
-      display: grid;
-      place-items: center;
-      font-family: "Playfair Display", Georgia, serif;
-      font-size: 2rem;
-      font-weight: 700;
-      color: var(--accent);
+      object-fit: cover;
+      z-index: 1;
     }
+    .series-card-cover--art:hover .cover-abstract { transform: scale(1.04); }
+    .ph-solo-leveling .cover-abstract { background: linear-gradient(155deg, #12151c 0%, #283652 42%, #5f7dae 100%); }
+    .ph-omniscient-reader .cover-abstract { background: linear-gradient(145deg, #1a2528 0%, #2d4a4f 50%, #7dafb5 100%); }
+    .ph-tower-of-god .cover-abstract { background: linear-gradient(160deg, #241a10 0%, #5c3d20 45%, #c9a227 100%); }
+    .ph-the-beginning-after-the-end .cover-abstract { background: linear-gradient(150deg, #1c1530 0%, #3d2d5c 50%, #6b8cc4 100%); }
+    .ph-jujutsu-kaisen .cover-abstract { background: linear-gradient(145deg, #1a0a0c 0%, #4a1518 42%, #c94c54 100%); }
+    .ph-one-piece .cover-abstract { background: linear-gradient(155deg, #0c1e2d 0%, #1a4a6e 45%, #3d9bc4 100%); }
+    .ph-lookism .cover-abstract { background: linear-gradient(145deg, #222018 0%, #454038 50%, #8a8070 100%); }
+    .ph-eleceed .cover-abstract { background: linear-gradient(150deg, #151828 0%, #2a3560 48%, #6b8cff 100%); }
+    .ph-chainsaw-man .cover-abstract { background: linear-gradient(145deg, #1f0c0c 0%, #5c1810 45%, #e85d3a 100%); }
+    .ph-blue-lock .cover-abstract { background: linear-gradient(155deg, #0f2418 0%, #1e5c3a 50%, #7cdf9a 100%); }
+    .ph-vinland-saga .cover-abstract { background: linear-gradient(160deg, #1a2228 0%, #3d4f5c 50%, #8fa9b8 100%); }
+    .ph-berserk .cover-abstract { background: linear-gradient(145deg, #120808 0%, #301010 40%, #6b3030 100%); }
     .series-card-body {
       padding: 12px 12px 14px;
       display: flex;
@@ -277,62 +299,68 @@
 <body>
   <div class="wrap">
     <header class="site-header">
-      <a class="brand" href="/">
+      <a class="brand" href="{{ url_for('home') }}">
         <span class="brand-mark" aria-hidden="true">MW</span>
         <span class="brand-text">Manga Watchlist</span>
       </a>
       <nav class="nav-main" aria-label="Primary">
-        <a href="/discover">Discover</a>
-        <a href="/sources">Sources</a>
-        <a href="{{ url_for('extension_page') }}">Get extension</a>
+        <a href="{{ url_for('discover_page') }}">Discover</a>
+        <a href="{{ url_for('sources_page') }}">Sources</a>
+        <a href="{{ url_for('extension_page') }}">Extension</a>
         <a href="{{ github_url }}" target="_blank" rel="noopener noreferrer">GitHub</a>
-        <a class="nav-cta" href="/app">Open app</a>
-        <a class="nav-cta nav-primary" href="/auth">Sign in</a>
+        {% if current_user %}
+        <a href="{{ url_for('index') }}">Dashboard</a>
+        <a href="{{ url_for('app_add_url') }}">Add URL</a>
+        <a class="nav-cta" href="{{ url_for('account_settings') }}">Account</a>
+        {% else %}
+        <a href="{{ url_for('auth_page', mode='login') }}">Sign in</a>
+        <a href="{{ url_for('auth_page', mode='register') }}">Create account</a>
+        <a class="nav-cta" href="{{ url_for('index') }}">Open app</a>
+        {% endif %}
       </nav>
     </header>
 
     <section class="hero">
       <h1>Discover manga and manhwa. Track updates everywhere.</h1>
       <p class="section-lead">Search a title or paste a URL. Manga Watchlist finds covers, descriptions, chapters, available websites, and the best source to track.</p>
-      <form class="hero-form" action="/discover" method="get" id="hero-discover-form" autocomplete="off">
+      <form class="hero-form" action="{{ url_for('discover_page') }}" method="get" id="hero-discover-form" autocomplete="off">
         <div class="hero-input-row">
           <input type="search" name="q" id="hero-q" placeholder="Search manga, manhwa, or paste a URL…" aria-label="Search or paste URL">
           <button type="submit" class="btn primary">Search</button>
         </div>
         <div class="hero-actions">
-          <a class="btn primary" href="/app/add">Add URL</a>
-          <a class="btn" href="/discover">Browse discover</a>
+          <a class="btn primary" href="{{ url_for('app_add_url') }}">Add URL</a>
+          <a class="btn" href="{{ url_for('discover_page') }}">Browse discover</a>
         </div>
       </form>
       <p class="try-links">
         Try:
-        <a href="/discover?q=Solo+Leveling">Solo Leveling</a> ·
-        <a href="/discover?q=One+Piece">One Piece</a> ·
-        <a href="/discover?q=Tower+of+God">Tower of God</a> ·
-        <a href="/discover?q=Omniscient+Reader">Omniscient Reader</a>
+        <a href="{{ url_for('discover_page', q='Solo Leveling') }}">Solo Leveling</a> ·
+        <a href="{{ url_for('discover_page', q='One Piece') }}">One Piece</a> ·
+        <a href="{{ url_for('discover_page', q='Tower of God') }}">Tower of God</a> ·
+        <a href="{{ url_for('discover_page', q='Omniscient Reader') }}">Omniscient Reader</a>
       </p>
     </section>
 
     <section class="block">
       <p class="section-note">Featured examples</p>
-      <h2>Trending this week</h2>
-      <p class="section-lead" style="font-size:0.95rem;">Illustrative picks for the homepage — not live charts or rankings.</p>
+      <h2>Starter picks</h2>
+      <p class="section-lead" style="font-size:0.95rem;">Popular titles people often track — try the discovery flow with familiar manga and manhwa (not live rankings).</p>
       <div class="card-grid card-grid--six" style="margin-top:18px;">
         {% for card in landing_trending_cards %}
         <article class="series-card">
-          <a class="series-card-cover" href="/series/{{ card.slug }}" aria-hidden="true" tabindex="-1">
+          <a class="series-card-cover series-card-cover--art ph-{{ card.slug }}" href="{{ url_for('discover_page', q=card.title) }}" aria-hidden="true" tabindex="-1">
+            <div class="cover-abstract" aria-hidden="true"></div>
             {% if card.cover_url %}
-            <img src="{{ card.cover_url|e }}" alt="" width="300" height="450" loading="lazy" decoding="async" referrerpolicy="origin">
-            {% else %}
-            <div class="series-card-ph">{{ (card.title[0] if card.title else '?')|e }}</div>
+            <img class="cover-img" src="{{ card.cover_url|e }}" alt="" width="300" height="450" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.remove();">
             {% endif %}
           </a>
           <div class="series-card-body">
             <h3>{{ card.title|e }}</h3>
             <p class="series-meta">{{ card.type_label }} · Latest ch. {{ card.latest_chapter|e }} · {{ card.sources_found }} sources</p>
             <div class="series-actions">
-              <a href="/series/{{ card.slug }}">View sources</a>
-              <a class="primary" href="{{ url_for('discover_page', q=card.title) }}">Add</a>
+              <a href="{{ url_for('discover_page', q=card.title) }}">View sources</a>
+              <a class="primary" href="{{ url_for('app_add_url', title=card.title) }}">Add</a>
             </div>
           </div>
         </article>
@@ -346,19 +374,18 @@
       <div class="card-grid" style="margin-top:18px;">
         {% for card in landing_popular_manhwa %}
         <article class="series-card">
-          <a class="series-card-cover" href="/series/{{ card.slug }}" aria-hidden="true" tabindex="-1">
+          <a class="series-card-cover series-card-cover--art ph-{{ card.slug }}" href="{{ url_for('discover_page', q=card.title) }}" aria-hidden="true" tabindex="-1">
+            <div class="cover-abstract" aria-hidden="true"></div>
             {% if card.cover_url %}
-            <img src="{{ card.cover_url|e }}" alt="" width="300" height="450" loading="lazy" decoding="async" referrerpolicy="origin">
-            {% else %}
-            <div class="series-card-ph">{{ (card.title[0] if card.title else '?')|e }}</div>
+            <img class="cover-img" src="{{ card.cover_url|e }}" alt="" width="300" height="450" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.remove();">
             {% endif %}
           </a>
           <div class="series-card-body">
             <h3>{{ card.title|e }}</h3>
             <p class="series-meta">{{ card.type_label }} · Latest ch. {{ card.latest_chapter|e }} · {{ card.sources_found }} sources</p>
             <div class="series-actions">
-              <a href="/series/{{ card.slug }}">View sources</a>
-              <a class="primary" href="{{ url_for('discover_page', q=card.title) }}">Add</a>
+              <a href="{{ url_for('discover_page', q=card.title) }}">View sources</a>
+              <a class="primary" href="{{ url_for('app_add_url', title=card.title) }}">Add</a>
             </div>
           </div>
         </article>
@@ -372,19 +399,18 @@
       <div class="card-grid" style="margin-top:18px;">
         {% for card in landing_popular_manga %}
         <article class="series-card">
-          <a class="series-card-cover" href="/series/{{ card.slug }}" aria-hidden="true" tabindex="-1">
+          <a class="series-card-cover series-card-cover--art ph-{{ card.slug }}" href="{{ url_for('discover_page', q=card.title) }}" aria-hidden="true" tabindex="-1">
+            <div class="cover-abstract" aria-hidden="true"></div>
             {% if card.cover_url %}
-            <img src="{{ card.cover_url|e }}" alt="" width="300" height="450" loading="lazy" decoding="async" referrerpolicy="origin">
-            {% else %}
-            <div class="series-card-ph">{{ (card.title[0] if card.title else '?')|e }}</div>
+            <img class="cover-img" src="{{ card.cover_url|e }}" alt="" width="300" height="450" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.remove();">
             {% endif %}
           </a>
           <div class="series-card-body">
             <h3>{{ card.title|e }}</h3>
             <p class="series-meta">{{ card.type_label }} · Latest ch. {{ card.latest_chapter|e }} · {{ card.sources_found }} sources</p>
             <div class="series-actions">
-              <a href="/series/{{ card.slug }}">View sources</a>
-              <a class="primary" href="{{ url_for('discover_page', q=card.title) }}">Add</a>
+              <a href="{{ url_for('discover_page', q=card.title) }}">View sources</a>
+              <a class="primary" href="{{ url_for('app_add_url', title=card.title) }}">Add</a>
             </div>
           </div>
         </article>
@@ -445,9 +471,9 @@
       <h2>Read on the web? Use the extension.</h2>
       <p class="section-lead" style="font-size:0.95rem;">Detect the page you’re on, add safe metadata to your library, and mark progress. Install steps, permissions, and privacy rules are on the extension page.</p>
       <div class="foot-cta">
-        <a class="btn primary" href="{{ url_for('extension_page') }}">Get extension</a>
-        <a class="btn" href="/discover">Discover</a>
-        <a class="btn" href="/app">Open app</a>
+        <a class="btn primary" href="{{ url_for('extension_page') }}">Extension</a>
+        <a class="btn" href="{{ url_for('discover_page') }}">Discover</a>
+        <a class="btn" href="{{ url_for('index') }}">Open app</a>
       </div>
     </section>
 
@@ -459,8 +485,8 @@
     <section class="block">
       <h2>Get started</h2>
       <div class="foot-cta">
-        <a class="btn primary" href="/auth">Create account</a>
-        <a class="btn" href="/discover">Discover titles</a>
+        <a class="btn primary" href="{{ url_for('auth_page', mode='register') }}">Create account</a>
+        <a class="btn" href="{{ url_for('discover_page') }}">Discover titles</a>
       </div>
     </section>
   </div>
@@ -468,12 +494,13 @@
     (function () {
       var form = document.getElementById("hero-discover-form");
       var input = document.getElementById("hero-q");
+      var addBase = {{ url_for('app_add_url')|tojson }};
       if (!form || !input) return;
       form.addEventListener("submit", function (e) {
         var v = (input.value || "").trim();
         if (/^https?:\/\//i.test(v)) {
           e.preventDefault();
-          window.location.href = "/discover?url=" + encodeURIComponent(v);
+          window.location.href = addBase + "?url=" + encodeURIComponent(v);
         }
       });
     })();

@@ -6,6 +6,8 @@ export type DemoSeriesCard = {
   typeLabel: "Manga" | "Manhwa";
   latestChapter: string;
   sourcesFound: number;
+  /** Optional remote cover; on error or omit, abstract slug gradient is shown. */
+  coverUrl?: string;
 };
 
 export const demoTrendingWeek: DemoSeriesCard[] = [

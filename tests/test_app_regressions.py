@@ -179,6 +179,48 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn("Safety", body)
         self.assertIn("scripting", body.lower())
 
+    def test_login_register_path_aliases(self):
+        r1 = self.client.get("/login", follow_redirects=False)
+        self.assertEqual(r1.status_code, 302)
+        self.assertIn("/auth", r1.headers.get("Location", ""))
+        r2 = self.client.get("/register", follow_redirects=False)
+        self.assertEqual(r2.status_code, 302)
+        self.assertIn("/auth", r2.headers.get("Location", ""))
+
+    def test_auth_page_does_not_echo_open_redirect_in_next(self):
+        res = self.client.get("/auth?next=https://evil.example/phish")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertNotIn("https://evil.example", body)
+
+    def test_login_redirect_honors_safe_next_parameter(self):
+        from urllib.parse import quote
+
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("nextpathuser", "nextpathuser@example.com", generate_password_hash("secret1234"), now),
+            )
+        dest = "/app/add?title=Chainsaw+Man"
+        res = self.client.post(
+            f"/auth?next={quote(dest, safe='')}",
+            data={"action": "login", "username": "nextpathuser", "password": "secret1234", "next": dest},
+            follow_redirects=False,
+        )
+        self.assertEqual(res.status_code, 302)
+        loc = res.headers.get("Location", "")
+        self.assertIn("/app/add", loc)
+
+    def test_app_add_redirects_unauthenticated_with_next(self):
+        res = self.client.get("/app/add?url=https%3A%2F%2Fexample.com%2Fm", follow_redirects=False)
+        self.assertEqual(res.status_code, 302)
+        loc = res.headers.get("Location", "")
+        self.assertIn("/auth", loc)
+        self.assertIn("next=", loc)
+
     def test_api_resolve_url_manual_fallback_on_detection_failure(self):
         with patch.object(app, "is_public_http_url", return_value=True), patch.object(
             app, "source_engine_resolve_url", side_effect=RuntimeError("boom")

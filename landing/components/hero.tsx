@@ -12,7 +12,7 @@ export function Hero() {
     const raw = String(fd.get("q") || "").trim();
     if (/^https?:\/\//i.test(raw)) {
       e.preventDefault();
-      window.location.href = `${discover}?url=${encodeURIComponent(raw)}`;
+      window.location.href = `${base}/app/add?url=${encodeURIComponent(raw)}`;
     }
   }
 
@@ -61,20 +61,29 @@ export function Hero() {
 
       <p className="text-sm text-[var(--color-muted)]">
         Try:{" "}
-        <a href={`${discover}?q=Solo+Leveling`} className="font-semibold text-[var(--color-accent)] no-underline hover:underline">
+        <a
+          href={`${discover}?q=${encodeURIComponent("Solo Leveling")}`}
+          className="font-semibold text-[var(--color-accent)] no-underline hover:underline"
+        >
           Solo Leveling
         </a>
         {" · "}
-        <a href={`${discover}?q=One+Piece`} className="font-semibold text-[var(--color-accent)] no-underline hover:underline">
+        <a
+          href={`${discover}?q=${encodeURIComponent("One Piece")}`}
+          className="font-semibold text-[var(--color-accent)] no-underline hover:underline"
+        >
           One Piece
         </a>
         {" · "}
-        <a href={`${discover}?q=Tower+of+God`} className="font-semibold text-[var(--color-accent)] no-underline hover:underline">
+        <a
+          href={`${discover}?q=${encodeURIComponent("Tower of God")}`}
+          className="font-semibold text-[var(--color-accent)] no-underline hover:underline"
+        >
           Tower of God
         </a>
         {" · "}
         <a
-          href={`${discover}?q=Omniscient+Reader`}
+          href={`${discover}?q=${encodeURIComponent("Omniscient Reader")}`}
           className="font-semibold text-[var(--color-accent)] no-underline hover:underline"
         >
           Omniscient Reader
@@ -87,7 +96,7 @@ export function Hero() {
           href={`${base}/extension`}
           className="font-semibold text-[var(--color-accent)] no-underline hover:underline"
         >
-          Get extension
+          Extension
         </a>{" "}
         — add pages from sites you already use. Install and privacy details are on that page.
       </p>
