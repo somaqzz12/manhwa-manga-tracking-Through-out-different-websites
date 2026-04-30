@@ -333,6 +333,17 @@ function cleanSeriesTitle(rawTitle) {
   return t || rawTitle || "Untitled series";
 }
 
+function readMetaContent(selector) {
+  const node = document.querySelector(selector);
+  return node?.getAttribute("content")?.trim() || "";
+}
+
+function preferredPageTitle() {
+  const ogTitle = readMetaContent('meta[property="og:title"]');
+  const h1Title = document.querySelector("h1")?.textContent?.trim() || "";
+  return ogTitle || h1Title || document.title || "";
+}
+
 function deriveSeriesSlug(seriesUrl, fallbackTitle) {
   try {
     const u = new URL(seriesUrl);
@@ -451,7 +462,7 @@ function looksLikeMangaSite(url, title) {
 
 async function detectPageData() {
   const url = window.location.href;
-  const title = document.title || "Untitled series";
+  const title = preferredPageTitle() || "Untitled series";
   const u = new URL(url);
   const host = u.hostname.replace(/^www\./, "").toLowerCase();
   const path = u.pathname.toLowerCase();
@@ -484,6 +495,8 @@ async function detectPageData() {
     overrideChapter != null
       ? Number(overrideChapter)
       : parseChapterFromText(title) ?? parseChapterFromUrl(url);
+  const hasStrongSignal = chapterNum != null && (parseChapterFromUrl(url) != null || parseChapterFromText(title) != null);
+  const confidence = hasStrongSignal ? "high" : hostHasHint ? "medium" : "low";
   return {
     title: cleanedTitle,
     seriesUrl,
@@ -491,6 +504,10 @@ async function detectPageData() {
     chapterUrl: url,
     chapterLabel: title,
     chapterNum,
+    sourceDomain: host,
+    description: readMetaContent('meta[property="og:description"]') || readMetaContent('meta[name="description"]'),
+    coverUrl: readMetaContent('meta[property="og:image"]'),
+    detectionConfidence: confidence,
   };
 }
 
@@ -1010,6 +1027,8 @@ async function updateReaderOverlay() {
   let overlayText = catalogOk ? "This site is in the catalog" : "Site not in catalog";
   let sub = "";
   const actions = [];
+  actions.push({ type: "button", action: "trackpage", text: "Track this page", primary: !track });
+  actions.push({ type: "link", href: "dashboard", text: "Open Dashboard" });
 
   if (track) {
     const ov = await sendMessage({
@@ -1121,9 +1140,14 @@ async function updateReaderOverlay() {
     } else if (item.type === "link") {
       const a = document.createElement("a");
       a.className = "mw-o-link";
-      a.href = item.href;
-      a.target = "_blank";
-      a.rel = "noreferrer";
+      if (item.href === "dashboard") {
+        a.href = "#";
+        a.dataset.action = "dashboard";
+      } else {
+        a.href = item.href;
+        a.target = "_blank";
+        a.rel = "noreferrer";
+      }
       a.textContent = item.text;
       rowNode.appendChild(a);
     }
@@ -1141,6 +1165,17 @@ async function updateReaderOverlay() {
     const data = await getTrackDataFromPage();
     await addSeriesQuiet(data);
     scheduleReaderOverlayRefresh();
+  });
+  box.querySelector("[data-action='trackpage']")?.addEventListener("click", async () => {
+    const data = await getTrackDataFromPage();
+    await addSeriesQuiet(data);
+    scheduleReaderOverlayRefresh();
+  });
+  box.querySelector("[data-action='dashboard']")?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const settings = await sendMessage({ type: "GET_SETTINGS" });
+    const base = String(settings?.data?.apiBase || "https://app.mangawatchlist.space").replace(/\/$/, "");
+    window.open(`${base}/app`, "_blank", "noopener,noreferrer");
   });
 }
 

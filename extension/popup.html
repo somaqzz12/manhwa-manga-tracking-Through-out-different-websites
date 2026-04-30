@@ -187,6 +187,74 @@
       color: #bfdbfe;
       border: 1px solid rgba(96, 165, 250, 0.3);
     }
+    .preview-card {
+      margin-top: 10px;
+      border-top: 1px solid rgba(71, 85, 105, 0.45);
+      padding-top: 10px;
+    }
+    .preview-title {
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #f8fafc;
+    }
+    .preview-line {
+      color: #9fb0ca;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .preview-cover {
+      width: 78px;
+      height: 108px;
+      border-radius: 8px;
+      object-fit: cover;
+      border: 1px solid rgba(71, 85, 105, 0.45);
+    }
+    .preview-cover-placeholder {
+      width: 78px;
+      height: 108px;
+      border-radius: 8px;
+      border: 1px solid rgba(71, 85, 105, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #dbeafe;
+      background: linear-gradient(160deg, rgba(59,130,246,0.25), rgba(37,99,235,0.14));
+    }
+    .preview-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-top: 8px;
+    }
+    .input-mini {
+      width: 100%;
+      margin-top: 8px;
+      padding: 8px 10px;
+      border: 1px solid #2f3c55;
+      border-radius: 10px;
+      background: rgba(9, 18, 36, 0.85);
+      color: #f8fafc;
+      font: inherit;
+    }
+    .warn-list {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      color: #dbeafe;
+      font-size: 11.5px;
+    }
+    .manual-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #c7d2fe;
+      line-height: 1.45;
+      border: 1px solid rgba(99, 102, 241, 0.28);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: rgba(30, 27, 75, 0.25);
+    }
   </style>
 </head>
 <body>
@@ -241,6 +309,9 @@
       <div class="row">
         <button id="trackButton">Track now</button>
       </div>
+      <div class="row">
+        <button class="secondary" id="markReadButton">Mark current chapter read</button>
+      </div>
     </div>
 
     <div class="footer-links">
@@ -249,6 +320,14 @@
     </div>
 
     <div id="status" class="status"></div>
+
+    <div class="panel">
+      <div class="label">Resolver preview</div>
+      <div class="row">
+        <button id="previewButton">Preview source</button>
+      </div>
+      <div id="previewHost" class="preview-card hidden"></div>
+    </div>
   </div>
 
   <div id="toast" class="toast"></div>

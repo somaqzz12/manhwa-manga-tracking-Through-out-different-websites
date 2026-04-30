@@ -36,3 +36,12 @@ Users who set **Options → API base URL** to `http://127.0.0.1:5000` or their o
 ## Reporting issues
 
 If you believe you found a security vulnerability, open a private channel if your project offers one, or file an issue with details (no live exploit code needed). For this repo, use GitHub Issues unless the maintainer publishes a security policy elsewhere.
+
+## Resolver companion safety
+
+The extension companion may call:
+
+- `POST /api/resolve-url`
+- `POST /api/library/add-from-preview`
+
+to preview and add the current browsing page as a tracked source. It sends only URL-level/public metadata (for example current page URL, detected source/title/chapter hints). It does **not** send full page HTML, does **not** fetch/cache/proxy manga panel images, and does **not** bypass paywalls, login walls, Cloudflare, DRM, or private APIs.

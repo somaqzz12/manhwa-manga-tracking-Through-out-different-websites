@@ -54,6 +54,15 @@ There are **no** database connection strings, admin tokens, or user passwords in
 - **`<all_urls>` content script**: Reader sites live on many domains; the script only runs detection logic and talks to **your configured API**.
 - **`https://api.mangadex.org/*` host permission**: Declared in `manifest.json` so the background worker can resolve MangaDex chapter metadata via the public API without asking the user to grant blanket optional host access for that origin.
 
+## Resolver + library companion flow
+
+The popup companion can preview and add the current page with:
+
+- `POST /api/resolve-url`
+- `POST /api/library/add-from-preview`
+
+It sends URL-level/public metadata only (current page URL, detected source/title/chapter hints). It does **not** upload full page HTML, does **not** fetch/cache/proxy chapter or panel images, and does **not** bypass paywalls, login walls, Cloudflare, DRM, or private APIs.
+
 ## Need help?
 
 - Issues: use the repo’s GitHub Issues (see main README).

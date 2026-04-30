@@ -65,6 +65,21 @@ async function postJson(path, payload) {
   return data;
 }
 
+function pickPreviewPayload(raw) {
+  const data = raw && typeof raw === "object" ? raw : {};
+  return {
+    url: String(data.url || "").trim(),
+    title: String(data.title || "").trim(),
+    canonical_title: String(data.canonical_title || "").trim(),
+    description: String(data.description || "").trim(),
+    chapter_count: data.chapter_count ?? "",
+    cover_url: String(data.cover_url || "").trim(),
+    latest_chapter: String(data.latest_chapter || "").trim(),
+    support_level: String(data.support_level || "").trim(),
+    source_name: String(data.source_name || "").trim(),
+  };
+}
+
 async function getJson(path) {
   const apiBase = await getApiBase();
   const res = await fetch(`${apiBase}${path}`, {
@@ -354,6 +369,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         const raw = normalizeApiBase(msg.payload?.apiBase || DEFAULT_API_BASE);
         await chrome.storage.local.set({ apiBase: raw });
         sendResponse({ ok: true, apiBase: raw });
+        return;
+      }
+      if (msg?.type === "RESOLVE_URL") {
+        const url = String(msg.payload?.url || "").trim();
+        const data = await postJson("/api/resolve-url", { url });
+        sendResponse({ ok: true, data });
+        return;
+      }
+      if (msg?.type === "ADD_FROM_PREVIEW") {
+        const payload = pickPreviewPayload(msg.payload || {});
+        const data = await postJson("/api/library/add-from-preview", payload);
+        sendResponse({ ok: true, data });
         return;
       }
       if (msg?.type === "TRACK_TAB_NOW") {
