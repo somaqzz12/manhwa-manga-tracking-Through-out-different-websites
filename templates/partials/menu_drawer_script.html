@@ -1,0 +1,41 @@
+<script>
+(function libraryDrawer() {
+  const panel = document.getElementById("library-tools-panel");
+  const backdrop = document.getElementById("library-tools-backdrop");
+  const toggle = document.getElementById("library-tools-toggle");
+  const closeBtn = document.getElementById("library-tools-close");
+  if (!panel || !toggle) return;
+
+  function openDrawer() {
+    panel.classList.add("is-open");
+    backdrop.classList.add("is-open");
+    panel.setAttribute("aria-hidden", "false");
+    backdrop.setAttribute("aria-hidden", "false");
+    toggle.setAttribute("aria-expanded", "true");
+    document.body.classList.add("drawer-open");
+  }
+  function closeDrawer() {
+    panel.classList.remove("is-open");
+    backdrop.classList.remove("is-open");
+    panel.setAttribute("aria-hidden", "true");
+    backdrop.setAttribute("aria-hidden", "true");
+    toggle.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("drawer-open");
+  }
+  function toggleDrawer() {
+    if (panel.classList.contains("is-open")) closeDrawer();
+    else openDrawer();
+  }
+  toggle.addEventListener("click", toggleDrawer);
+  closeBtn?.addEventListener("click", closeDrawer);
+  backdrop?.addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && panel.classList.contains("is-open")) closeDrawer();
+  });
+  window.openLibraryTools = openDrawer;
+  window.focusAddManga = () => {
+    openDrawer();
+    setTimeout(() => document.getElementById("add-url")?.focus(), 200);
+  };
+})();
+</script>

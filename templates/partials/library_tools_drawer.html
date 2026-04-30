@@ -1,16 +1,31 @@
-{# Right drawer: add manga, backup, sort, genre, extension note. #}
+{# Full-screen menu: navigation, index-only library controls, account, extension. #}
 {% set _sq = search_q|default('', true) %}
 {% set _sort = sort|default('added', true) %}
 {% set _page = page|default(1, true) %}
 
 <div class="drawer-backdrop" id="library-tools-backdrop" aria-hidden="true"></div>
-<aside class="library-drawer" id="library-tools-panel" aria-hidden="true" aria-labelledby="library-tools-title">
+<aside class="library-drawer" id="library-tools-panel" aria-hidden="true" aria-labelledby="library-menu-title">
   <div class="library-drawer-head">
-    <h2 id="library-tools-title" class="library-drawer-title">Library tools</h2>
+    <h2 id="library-menu-title" class="library-drawer-title">Menu</h2>
     <button type="button" class="dash-icon-btn library-drawer-close" id="library-tools-close" aria-label="Close">×</button>
   </div>
   <div class="library-drawer-body">
 
+    <nav class="drawer-nav" aria-label="Site">
+      <span class="sidebar-label">Navigate</span>
+      <a class="drawer-nav-link {% if request.endpoint == 'index' %}is-active{% endif %}" href="{{ url_for('index') }}">Dashboard</a>
+      {% if current_user is defined and current_user and not demo_mode|default(false) %}
+      <a class="drawer-nav-link {% if request.endpoint == 'next_up' %}is-active{% endif %}" href="{{ url_for('next_up') }}">Next up</a>
+      {% endif %}
+      <a class="drawer-nav-link {% if request.endpoint == 'sources_page' %}is-active{% endif %}" href="{{ url_for('sources_page') }}">Sources</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'source_requests_page' %}is-active{% endif %}" href="{{ url_for('source_requests_page') }}">Source requests</a>
+      <a class="drawer-nav-link drawer-nav-link--external" href="{{ extension_zip_download_url }}" target="_blank" rel="noopener noreferrer">Extension ZIP</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'privacy_page' %}is-active{% endif %}" href="{{ url_for('privacy_page') }}">Privacy</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'changelog_page' %}is-active{% endif %}" href="{{ url_for('changelog_page') }}">Changelog</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'demo_dashboard' %}is-active{% endif %}" href="{{ url_for('demo_dashboard') }}">Demo</a>
+    </nav>
+
+    {% if request.endpoint == 'index' %}
     <section class="library-drawer-section">
       <span class="sidebar-label">Genre filter</span>
       <select id="genreFilter" class="sidebar-select" aria-label="Filter by genre">
@@ -88,8 +103,25 @@
       </div>
     </section>
     {% else %}
-    <p class="muted" style="margin:0;">Adding series is disabled in demo mode.</p>
+    <p class="muted" style="margin:0 0 16px;">Adding series is disabled in demo mode.</p>
     {% endif %}
+    {% endif %}
+
+    <nav class="drawer-nav drawer-nav--account" aria-label="Account">
+      <span class="sidebar-label">Account</span>
+      {% if current_user is defined and current_user and not demo_mode|default(false) %}
+      <a class="drawer-nav-link {% if request.endpoint == 'account_settings' %}is-active{% endif %}" href="{{ url_for('account_settings') }}">Settings</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'delete_account' %}is-active{% endif %}" href="{{ url_for('delete_account') }}">Delete account</a>
+      <form action="{{ url_for('logout') }}" method="post" data-loading-form="true" style="margin:0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <button type="submit" class="drawer-nav-link drawer-nav-link--button" data-loading-text="…">Log out</button>
+      </form>
+      {% elif demo_mode|default(false) %}
+      <a class="drawer-nav-link drawer-nav-link--accent" href="{{ url_for('auth_page') }}">Sign in</a>
+      {% else %}
+      <a class="drawer-nav-link drawer-nav-link--accent" href="{{ url_for('auth_page') }}">Sign in</a>
+      {% endif %}
+    </nav>
 
     <section class="library-drawer-section muted" style="font-size:0.85rem;line-height:1.5;">
       <strong class="sidebar-label">Extension</strong>

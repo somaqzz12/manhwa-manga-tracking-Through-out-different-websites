@@ -23,6 +23,12 @@
       {% else %}
         <div class="story-cover-placeholder">No cover</div>
       {% endif %}
+      <div class="story-cover-overlay" aria-hidden="true">
+        <div class="story-cover-overlay-chips">
+          <span class="story-cover-chip">You {% if last_read_num is not none %}Ch.{{ last_read_num|clean }}{% else %}—{% endif %}</span>
+          <span class="story-cover-chip story-cover-chip--latest">Latest {% if latest_num is not none %}Ch.{{ latest_num|clean }}{% else %}?{% endif %}</span>
+        </div>
+      </div>
       {% if unr > 0 %}
         <span class="story-unread-badge" title="{{ b.unread_count|clean }} unread">{{ b.unread_count|clean }}</span>
         <span class="story-unread-glow" aria-hidden="true"></span>
@@ -35,11 +41,6 @@
     </div>
     <div class="story-body">
       <h2 class="story-title">{{ b["title"] }}</h2>
-      <div class="story-meta-line muted">
-        {% if last_read_num is not none %}Ch. {{ last_read_num|clean }}{% else %}Not started{% endif %}
-        <span aria-hidden="true"> · </span>
-        {% if latest_num is not none %}Latest {{ latest_num|clean }}{% else %}Latest ?{% endif %}
-      </div>
       {% if b.last_error %}
         <span class="story-inline-err" title="{{ b.last_error|e }}">Check error</span>
       {% endif %}

@@ -6,16 +6,17 @@
   <title>Supported sources — Manga Watchlist</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238b5cf6'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%239880ff'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
 </head>
-<body>
-  <div class="app-shell">
-    {% include "partials/app_sidebar.html" %}
-    <div class="main">
+<body class="page-app">
+  <div class="app-shell app-shell--full">
+    {% include "partials/shell_topbar.html" %}
+    {% include "partials/library_tools_drawer.html" %}
+    <div class="main dash-main">
       <div class="page-single-inner" style="max-width:1100px;">
-        <h1 class="page-title">Supported sources</h1>
+        <h1 class="page-title page-title--display">Supported sources</h1>
         <p class="lead">
           Open-source tracker with a growing <strong>source engine</strong>. Status reflects catalog defaults and (when present) the last <code>scripts/check_sources.py</code> run — we do not claim sites work until the checker proves it.
         </p>
@@ -64,5 +65,7 @@
       </div>
     </div>
   </div>
+  {% include "partials/menu_drawer_script.html" %}
+  {% include "partials/form_loading_snippet.html" %}
 </body>
 </html>

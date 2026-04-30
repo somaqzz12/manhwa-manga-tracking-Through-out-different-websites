@@ -12,9 +12,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%239880ff'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
 </head>
 <body class="page-dashboard">
-  <div class="app-shell">
-    {% include "partials/app_sidebar.html" %}
-
+  <div class="app-shell app-shell--full">
     <div class="main dash-main">
       {% include "partials/dash_topbar.html" %}
       {% include "partials/library_tools_drawer.html" %}
@@ -164,48 +162,9 @@
     </div>
   </div>
 
+  {% include "partials/menu_drawer_script.html" %}
   <script>
     const DEAD_SERIES_DAYS = {{ dead_series_days|int }};
-
-    (function libraryDrawer() {
-      const panel = document.getElementById("library-tools-panel");
-      const backdrop = document.getElementById("library-tools-backdrop");
-      const toggle = document.getElementById("library-tools-toggle");
-      const closeBtn = document.getElementById("library-tools-close");
-      if (!panel || !toggle) return;
-
-      function openDrawer() {
-        panel.classList.add("is-open");
-        backdrop.classList.add("is-open");
-        panel.setAttribute("aria-hidden", "false");
-        backdrop.setAttribute("aria-hidden", "false");
-        toggle.setAttribute("aria-expanded", "true");
-        document.body.classList.add("drawer-open");
-      }
-      function closeDrawer() {
-        panel.classList.remove("is-open");
-        backdrop.classList.remove("is-open");
-        panel.setAttribute("aria-hidden", "true");
-        backdrop.setAttribute("aria-hidden", "true");
-        toggle.setAttribute("aria-expanded", "false");
-        document.body.classList.remove("drawer-open");
-      }
-      function toggleDrawer() {
-        if (panel.classList.contains("is-open")) closeDrawer();
-        else openDrawer();
-      }
-      toggle.addEventListener("click", toggleDrawer);
-      closeBtn?.addEventListener("click", closeDrawer);
-      backdrop?.addEventListener("click", closeDrawer);
-      document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && panel.classList.contains("is-open")) closeDrawer();
-      });
-      window.openLibraryTools = openDrawer;
-      window.focusAddManga = () => {
-        openDrawer();
-        setTimeout(() => document.getElementById("add-url")?.focus(), 200);
-      };
-    })();
 
     document.getElementById("empty-add-first")?.addEventListener("click", () => {
       window.focusAddManga?.();

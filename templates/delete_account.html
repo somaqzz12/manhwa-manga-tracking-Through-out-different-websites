@@ -6,17 +6,18 @@
   <title>Delete account — Manga Watchlist</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238b5cf6'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%239880ff'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
 </head>
-<body>
-  <div class="app-shell">
-    {% include "partials/app_sidebar.html" %}
-    <div class="main">
+<body class="page-app">
+  <div class="app-shell app-shell--full">
+    {% include "partials/shell_topbar.html" %}
+    {% include "partials/library_tools_drawer.html" %}
+    <div class="main dash-main">
       <div class="page-single-inner" style="max-width:480px;">
         <section class="settings-section">
-          <h1 class="page-title" style="font-size:1.35rem;margin-bottom:12px;">Delete account</h1>
+          <h1 class="page-title page-title--display" style="font-size:1.35rem;margin-bottom:12px;">Delete account</h1>
           <p class="muted" style="margin:0 0 16px;line-height:1.5;">This permanently removes your user, all bookmarks, and all reading progress. This cannot be undone.</p>
 
           {% with messages = get_flashed_messages(with_categories=true) %}
@@ -27,7 +28,7 @@
             {% endif %}
           {% endwith %}
 
-          <form method="post" action="{{ url_for('delete_account') }}" data-confirm="Delete your account and all data permanently?">
+          <form method="post" action="{{ url_for('delete_account') }}" data-loading-form="true" data-confirm="Delete your account and all data permanently?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="row">
               <label for="pw">Confirm with your password</label>
@@ -40,11 +41,7 @@
       </div>
     </div>
   </div>
-  <script>
-    document.querySelector("form[data-confirm]")?.addEventListener("submit", function (e) {
-      const msg = this.getAttribute("data-confirm");
-      if (msg && !window.confirm(msg)) e.preventDefault();
-    });
-  </script>
+  {% include "partials/menu_drawer_script.html" %}
+  {% include "partials/form_loading_snippet.html" %}
 </body>
 </html>

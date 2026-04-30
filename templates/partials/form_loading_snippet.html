@@ -1,0 +1,13 @@
+<script>
+document.querySelectorAll("form[data-loading-form='true']").forEach((form) => {
+  form.addEventListener("submit", (e) => {
+    const msg = form.getAttribute("data-confirm");
+    if (msg && !window.confirm(msg)) {
+      e.preventDefault();
+      return;
+    }
+    const btn = form.querySelector("button[type='submit']");
+    if (btn) btn.disabled = true;
+  });
+});
+</script>
