@@ -197,7 +197,7 @@ class AppRegressionTests(unittest.TestCase):
         res = self.client.get("/")
         self.assertEqual(res.status_code, 200)
         body = res.get_data(as_text=True)
-        self.assertIn("Search manga, manhwa, or paste a URL...", body)
+        self.assertIn("Title, or paste a series URL", body)
         self.assertIn('id="hero-discover-form"', body)
         self.assertIn('id="hero-q"', body)
         self.assertIn('window.location.href = addBase + "?url="', body)

@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Manga Watchlist product roadmap: working tracker, catalog, community source index, and long-term vision.">
+  <title>Roadmap — Manga Watchlist</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f5efe6;
+      --panel: #fffaf3;
+      --panel-2: #f8f1e8;
+      --border: #e3d7c8;
+      --text: #241c17;
+      --muted: #7c6f63;
+      --accent: #9b6b43;
+      --accent-2: #b08968;
+      --accent-hover: #7d5635;
+      --ok: #2d6a4f;
+      --next: #7c5e10;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14100d;
+        --panel: #1d1713;
+        --panel-2: #261e19;
+        --border: #3a2f28;
+        --text: #f3eadf;
+        --muted: #b9a898;
+        --accent: #c49a6c;
+        --accent-2: #dfb982;
+        --accent-hover: #d4a97d;
+        --ok: #74c69d;
+        --next: #e9c46a;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; color: var(--text); background: var(--bg); line-height: 1.55; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 20px 18px 64px; }
+    .site-header {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px;
+      margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); text-decoration: none; }
+    .brand-mark {
+      width: 38px; height: 38px; border-radius: 12px;
+      background: linear-gradient(145deg, var(--accent-2), var(--accent));
+      color: #fffaf3; display: grid; place-items: center; font-size: 0.75rem; font-weight: 800;
+    }
+    .brand-text { font-family: "Playfair Display", Fraunces, Georgia, serif; font-size: 1.1rem; }
+    .back { font-size: 0.9rem; font-weight: 600; }
+    .back a { color: var(--accent); text-decoration: none; }
+    .back a:hover { text-decoration: underline; }
+    h1 {
+      font-family: "Playfair Display", Fraunces, Georgia, serif;
+      font-size: clamp(1.75rem, 3.5vw, 2.35rem);
+      margin: 0 0 10px;
+      letter-spacing: -0.02em;
+      line-height: 1.12;
+    }
+    h2 {
+      font-family: "Playfair Display", Fraunces, Georgia, serif;
+      font-size: 1.25rem;
+      margin: 2rem 0 0.6rem;
+    }
+    .lede { color: var(--muted); font-size: 1.05rem; margin: 0 0 1rem; }
+    .phase {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px 20px 16px;
+      margin: 18px 0;
+    }
+    .phase h3 { margin: 0 0 10px; font-size: 1.05rem; font-family: Inter, system-ui, sans-serif; }
+    .status {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+    }
+    .status--now { background: color-mix(in srgb, var(--ok) 18%, var(--panel-2)); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 35%, var(--border)); }
+    .status--next { background: color-mix(in srgb, var(--next) 16%, var(--panel-2)); color: var(--next); border: 1px solid color-mix(in srgb, var(--next) 30%, var(--border)); }
+    .status--plan { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
+    ul { margin: 0; padding-left: 1.2rem; }
+    li { margin: 0.35rem 0; }
+    .pitch {
+      margin-top: 2rem;
+      padding: 16px 18px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      font-size: 0.92rem;
+    }
+    .pitch strong { color: var(--text); }
+    .lang {
+      margin-top: 2rem;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+    .lang h2 { font-size: 1rem; font-family: Inter, system-ui, sans-serif; margin-top: 1.25rem; }
+    .bad, .good { margin: 0.25rem 0 0; padding-left: 1rem; }
+    .bad { border-left: 3px solid #b45309; }
+    .good { border-left: 3px solid var(--ok); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="site-header">
+      <a class="brand" href="{{ url_for('home') }}">
+        <span class="brand-mark" aria-hidden="true">MW</span>
+        <span class="brand-text">Manga Watchlist</span>
+      </a>
+      <span class="back"><a href="{{ url_for('home') }}">Home</a></span>
+    </header>
+
+    <h1>Product roadmap</h1>
+    <p class="lede"><strong>Main promise:</strong> Track what you read, wherever you read it.</p>
+    <p class="lede"><strong>Bigger promise:</strong> One watchlist for every manga, manhwa, manhua, and webtoon site you use.</p>
+    <p class="lede"><strong>Long-term:</strong> A community-powered source index for tracking — without hosting manga, copying chapters, or pretending every site has an API.</p>
+
+    <section class="phase">
+      <span class="status status--now">Phase 1 — Working tracker</span>
+      <h3>Status: In progress / working</h3>
+      <ul>
+        <li>Browser extension tracking</li>
+        <li>Dashboard library</li>
+        <li>Manual URL saving</li>
+        <li>MangaDex search</li>
+        <li>Original-site links</li>
+        <li>Basic source support labels</li>
+      </ul>
+    </section>
+
+    <section class="phase">
+      <span class="status status--next">Phase 2 — Better catalog</span>
+      <h3>Status: Next</h3>
+      <ul>
+        <li>Seed real series metadata</li>
+        <li>Aliases and alternate titles</li>
+        <li>Better search</li>
+        <li>Covers safely</li>
+        <li>Series detail pages</li>
+        <li>Source links per series</li>
+      </ul>
+    </section>
+
+    <section class="phase">
+      <span class="status status--plan">Phase 3 — Community source index</span>
+      <h3>Status: Planned</h3>
+      <ul>
+        <li>Users submit source URLs</li>
+        <li>Links marked private, pending, or verified</li>
+        <li>Promote trusted source links</li>
+        <li>Known sources surfaced per series</li>
+        <li>Duplicate series detection across sources</li>
+      </ul>
+    </section>
+
+    <section class="phase">
+      <span class="status status--plan">Phase 4 — Smarter tracking</span>
+      <h3>Status: Planned</h3>
+      <ul>
+        <li>More extension detectors</li>
+        <li>Better chapter detection</li>
+        <li>Better title matching</li>
+        <li>Progress history</li>
+        <li>Notifications where possible</li>
+        <li>Import / export library</li>
+      </ul>
+    </section>
+
+    <section class="phase">
+      <span class="status status--plan">Phase 5 — Big vision</span>
+      <h3>Status: Long-term</h3>
+      <ul>
+        <li>One universal watchlist for manga/manhwa progress</li>
+        <li>Community-built source map</li>
+        <li>Open-source, self-hostable tracking</li>
+        <li>No manga hosting</li>
+        <li>No fake scraping promises</li>
+        <li>Real source links, real progress, real user data</li>
+      </ul>
+    </section>
+
+    <h2>The long-term goal (how we’re building)</h2>
+    <p class="lede">Most manga and manhwa sites don’t offer public APIs, and many block server-side scraping. Instead of promising a universal web scraper:</p>
+    <ul>
+      <li>Official and API-friendly sources can be searched directly (e.g. MangaDex).</li>
+      <li>Scan sites are tracked through the <strong>browser extension</strong>, where the reader already is.</li>
+      <li>Any unsupported URL can be saved <strong>manually</strong>.</li>
+      <li><strong>User-submitted</strong> source links help the catalog grow over time.</li>
+    </ul>
+
+    <div class="pitch">
+      <p style="margin:0 0 10px;"><strong>Try it:</strong> I’m building Manga Watchlist, an open-source tracker for manga and manhwa. It is not a reader and it does not host manga. The goal is one dashboard for everything you read across different websites. The extension detects what chapter you are on, the site saves your progress, and you can always open the original source again. It’s early, but the long-term goal is a community-powered source index — a real map of where series can be tracked on the web.</p>
+    </div>
+
+    <div class="lang">
+      <h2>What we avoid saying</h2>
+      <p class="bad">“Search every manga site”, “100 sources supported”, “Automatically tracks every website”, “Universal scraper”, “Read manga here”, “Free manga reader”. Those over-promise.</p>
+      <h2>What we do say</h2>
+      <p class="good">Track across the sites you already use · Extension-powered tracking · Paste any URL · Growing source catalog · Community-powered source index · MangaDex direct search · Manual fallback for unsupported sites.</p>
+    </div>
+
+    <p class="lede" style="margin-top:2rem;"><a href="{{ url_for('home') }}">← Back to home</a> · <a href="{{ url_for('privacy_page') }}">Privacy</a></p>
+  </div>
+</body>
+</html>

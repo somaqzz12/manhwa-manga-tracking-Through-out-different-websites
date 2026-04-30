@@ -6,17 +6,47 @@ Live at **[mangawatchlist.space](https://mangawatchlist.space)**.
 
 > **License:** This project is licensed under [PolyForm Noncommercial 1.0.0](LICENSE). Commercial use is not permitted without explicit permission.
 
-A self-hosted manga and manhwa tracker. Add a series listing URL, the server scrapes the latest chapter every 30 minutes, the dashboard shows what you're behind on, and an optional Chrome extension picks up the chapter you're currently reading and syncs progress automatically.
+## Positioning
 
-### What this system does (end-to-end)
+**Manga Watchlist is an extension-powered tracking dashboard** for manga, manhwa, manhua, and webtoons. It helps you remember **what** you read, **where** you read it, and **what chapter** you left off on.
 
-1. **You run one web app** (Flask + gunicorn in production). It stores users, passwords (hashed), and each user’s **bookmarks**: a series title, the **series listing URL** you pasted, optional **series key** / **story grouping**, and **reading progress** (which chapter you last opened or marked seen).
-2. **The server discovers “what’s latest”** by HTTP-fetching each bookmark’s listing page on a schedule (APScheduler). It uses a **JSON source catalog** ([`sources/catalog.json`](sources/catalog.json)) for known sites (selectors, MangaDex API, etc.) and **generic heuristics** for unknown hosts. Results are cached on each bookmark (latest chapter number, label, last check time). Optional **Selenium** can retry stubborn JS-heavy pages when enabled.
-3. **The dashboard** is server-rendered HTML: library list, sort/search/pagination, “behind” / unread-style signals, **Continue** links, per-series and bulk **mark seen**, **check now**, **edit** (including linking **alternate URLs** for the same story), **import/export** JSON, **public list** slug, **RSS** with a secret token, optional **email** new-chapter notifications (SMTP), **source requests** voting, and static pages (**privacy**, **changelog**, **supported sources** with live **health** stats when `_health.json` exists).
-4. **JSON and cookie-authenticated APIs** let the **Chrome extension** (same browser profile as your login) call **`/api/series/ensure`**, **`/api/progress`**, and **`/api/unread-count`** so chapter pages update your library without manually pasting URLs every time. A separate **Bearer API token** can drive **`/api/v1/bookmarks`** for scripts or integrations.
-5. **Admin and maintenance** routes exist for power users (debug scrape, merge duplicates, user admin HTML) behind **`ADMIN_API_TOKEN`** / **`ADMIN_USERNAME`** as documented below.
+- **Main promise:** Track what you read, wherever you read it.
+- **Bigger promise:** One watchlist for every site you read on.
+- **Long-term:** A **community-powered source index** — a map of where series can be tracked on the web, **without** hosting manga, copying chapters, or pretending every site has an API.
 
-This repository also contains an optional **Next.js** [`landing/`](landing/) site for marketing pages; the main product UI for logged-in use is the Flask app.
+**Manga Watchlist is not a manga reader.** It does not host chapters or reader pages. It stores metadata, progress, source URLs, and links back to the original websites.
+
+**Today:** extension tracking, manual URL saving, **MangaDex** search, a personal dashboard, and honest **source capability** labels.
+
+**We say:** track across the sites you already use · extension-powered tracking · paste any URL · growing source catalog · MangaDex direct search · manual fallback.
+
+**We avoid implying:** “search every manga site”, “100 sources”, “universal scraper”, “read manga here”, or anything that sounds like we replace legal readers.
+
+### Try-it pitch
+
+I’m building Manga Watchlist, an open-source tracker for manga and manhwa. It is not a reader and it does not host manga. The goal is one dashboard for everything you read across different websites. The browser extension detects what chapter you are on, the website saves your progress, and you can always open the original source again. It’s early, but the long-term goal is a community-powered source index — a real map of where series can be tracked on the web.
+
+## Roadmap (public)
+
+Detailed phases live on the deployed site at **`/roadmap`** (see `templates/roadmap.html`). Summary:
+
+| Phase | Focus | Status |
+| --- | --- | --- |
+| **1 — Working tracker** | Extension, dashboard, manual URL, MangaDex search, original-site links, support labels | In progress |
+| **2 — Better catalog** | Real metadata seed, aliases, search, covers, series pages, per-series source links | Next |
+| **3 — Community source index** | Submissions, verified/pending/private links, dedupe across sources | Planned |
+| **4 — Smarter tracking** | More detectors, chapter/title matching, progress history, notifications where possible, import/export | Planned |
+| **5 — Big vision** | Universal watchlist metaphor, open/self-hostable, **no** fake scraping promises | Long-term |
+
+## Technical overview (how it works)
+
+1. **You run one web app** (Flask + gunicorn in production). It stores users, passwords (hashed), and each user’s **bookmarks**: series title, **listing URL**, optional **series key** / **story grouping**, and **reading progress**.
+2. **Optional server-side chapter checks** use HTTP + a JSON **source catalog** ([`sources/catalog.json`](sources/catalog.json)) for known sites (selectors, MangaDex API, etc.) and **generic heuristics** where appropriate — this is **not** marketed as universal scraping; many sites are **extension** or **manual** only.
+3. **Dashboard:** library, search, import/export, source comparison, and static pages (**privacy**, **changelog**, **roadmap**, **supported sources**).
+4. **Extension APIs** (`/api/series/ensure`, `/api/progress`, etc.) sync progress from the browser where the user already reads.
+5. **Admin** routes for power users (behind `ADMIN_API_TOKEN` / `ADMIN_USERNAME`) as documented below.
+
+This repository also contains an optional **Next.js** [`landing/`](landing/) site for marketing; the main product UI is the Flask app.
 
 Dashboard screenshots live in repo docs once added: save a capture as `docs/screenshot.png` and uncomment the image line below if you want it in the GitHub-rendered README.
 
@@ -25,9 +55,9 @@ Dashboard screenshots live in repo docs once added: save a capture as `docs/scre
 ## Features
 
 - Local accounts with hashed passwords, CSRF protection, and rate-limited auth.
-- Add series from any reader by pasting the series listing URL.
-- Automatic latest-chapter detection on a 30-minute schedule (configurable, runnable in parallel).
-- Site profiles for popular hosts (AsuraScans, MangaKatana, ArenaScan, MangaDex, etc.) plus generic heuristics for everything else.
+- Add series by pasting a **public** series listing URL; **extension** sync for active reading.
+- Optional scheduled latest-chapter checks for sites where server-side fetch is supported (never marketed as universal).
+- Site profiles for select hosts (e.g. MangaDex API, curated CSS adapters in `sources/catalog.json`) plus **manual** and **extension** paths elsewhere.
 - Cover image extraction from Open Graph tags or the largest cover image on the page.
 - Optional Selenium fallback for JS-only sites that block plain HTTP scraping.
 - Reading progress tracked per chapter, "Continue" links that resume where you left off, and an unread badge per series.

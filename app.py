@@ -305,7 +305,7 @@ def inject_template_globals():
     return {
         "bug_report_href": os.getenv("BUG_REPORT_URL", DEFAULT_BUG_REPORT_URL),
         "contact_email": os.getenv("CONTACT_EMAIL", "").strip(),
-        "site_description": "Discover manga and manhwa. Search titles or paste URLs, compare sources, and track updates everywhere.",
+        "site_description": "Track what you read, wherever you read it. Extension-powered manga, manhwa, manhua, and webtoon progress — one library, links back to original sites.",
         "min_password_length": MIN_PASSWORD_LENGTH,
         "github_url": (os.getenv("GITHUB_URL") or _DEFAULT_GITHUB_URL).strip(),
         "extension_zip_download_url": _extension_zip_download_url(),
@@ -3188,6 +3188,10 @@ def extension_page():
     return render_template("extension_landing.html", current_user=get_current_user())
 
 
+def roadmap_page():
+    return render_template("roadmap.html", current_user=get_current_user())
+
+
 register_public_routes(
     app,
     {
@@ -3199,6 +3203,7 @@ register_public_routes(
         "terms_page": terms_page,
         "dmca_page": dmca_page,
         "extension_page": extension_page,
+        "roadmap_page": roadmap_page,
     },
 )
 

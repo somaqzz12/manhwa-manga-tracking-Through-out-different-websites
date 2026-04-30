@@ -4,7 +4,7 @@
       <span class="dashboard-mark">MW</span>
       <span class="sidebar-brand-text">
         <strong class="sidebar-title">Manga Watchlist</strong>
-        <small class="sidebar-subtitle">Reading tracker</small>
+        <small class="sidebar-subtitle">Track what you read, wherever you read it</small>
       </span>
     </a>
   </div>
@@ -23,6 +23,7 @@
     <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'sources_page' %} is-active{% endif %}" href="{{ url_for('sources_page') }}"><span>Sources</span></a>
     <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'source_requests_page' %} is-active{% endif %}" href="{{ url_for('source_requests_page') }}"><span>Source Requests</span></a>
     <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'extension_page' %} is-active{% endif %}" href="{{ url_for('extension_page') }}"><span>Extension</span></a>
+    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'roadmap_page' %} is-active{% endif %}" href="{{ url_for('roadmap_page') }}"><span>Roadmap</span></a>
 
     <div class="sidebar-bottom">
       <span class="dashboard-nav-label sidebar-section-label">Account</span>

@@ -246,11 +246,12 @@
 <body>
   <div class="hero">
     <div class="logo" aria-hidden="true">MW</div>
-    <h1>Track Every Chapter.</h1>
-    <p class="subtitle">One dashboard for all your manga and manhwa across every site.</p>
+    <h1>Never lose your place again.</h1>
+    <p class="subtitle">Track manga, manhwa, manhua, and webtoon progress across the sites you already use. Manga Watchlist is a tracking dashboard — not a reader. Extension, paste a URL, or search the catalog.</p>
     <div class="cta-row">
-      <a class="btn btn-primary" href="/auth" aria-label="Get started with Manga Watchlist">Get Started →</a>
-      <a class="btn btn-ghost" href="/auth?mode=login" aria-label="Sign in">Sign In</a>
+      <a class="btn btn-primary" href="{{ url_for('extension_page') }}" aria-label="Install the browser extension">Install extension</a>
+      <a class="btn btn-primary" href="{{ url_for('auth_page', mode='register') }}" aria-label="Start tracking">Start tracking</a>
+      <a class="btn btn-ghost" href="{{ url_for('discover_page') }}" aria-label="Search the catalog">Search catalog</a>
     </div>
     <div class="github-card">
       <a href="{{ github_url }}" rel="noopener noreferrer" target="_blank">
@@ -276,6 +277,8 @@
       <span class="dot">·</span>
       <a href="{{ url_for('demo_dashboard') }}">Demo</a>
       {% endif %}
+      <span class="dot">·</span>
+      <a href="{{ url_for('roadmap_page') }}">Roadmap</a>
       <span class="dot">·</span>
       <a href="{{ url_for('privacy_page') }}">Privacy</a>
       <span class="dot">·</span>

@@ -12,4 +12,5 @@ def register_public_routes(app, handlers: dict[str, callable]) -> None:
     app.add_url_rule("/terms", endpoint="terms_page", view_func=handlers["terms_page"], methods=["GET"])
     app.add_url_rule("/dmca", endpoint="dmca_page", view_func=handlers["dmca_page"], methods=["GET"])
     app.add_url_rule("/extension", endpoint="extension_page", view_func=handlers["extension_page"], methods=["GET"])
+    app.add_url_rule("/roadmap", endpoint="roadmap_page", view_func=handlers["roadmap_page"], methods=["GET"])
 

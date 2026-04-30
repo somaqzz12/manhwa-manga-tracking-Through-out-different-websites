@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="{{ site_description }}">
-  <title>Manga Watchlist — Discover &amp; track manga</title>
+  <title>Manga Watchlist — Track what you read, wherever you read it</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
@@ -294,6 +294,27 @@
     .mini-card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; }
     .label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
     .foot-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+    .vision-promise {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 0 0 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .vision-list { margin: 0; padding-left: 1.2rem; }
+    .vision-list li { margin: 0.4rem 0; }
+    .vision-kicker { font-size: 0.95rem; color: var(--muted); margin: 0 0 14px; max-width: 42rem; line-height: 1.5; }
+    .site-footer {
+      margin-top: 36px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+    .site-footer a { color: var(--accent); font-weight: 600; text-decoration: none; }
+    .site-footer a:hover { text-decoration: underline; }
+    .site-footer .dot { margin: 0 8px; opacity: 0.5; }
   </style>
 </head>
 <body>
@@ -304,6 +325,7 @@
         <span class="brand-text">Manga Watchlist</span>
       </a>
       <nav class="nav-main" aria-label="Primary">
+        <a href="{{ url_for('roadmap_page') }}">Roadmap</a>
         <a href="{{ url_for('discover_page') }}">Discover</a>
         <a href="{{ url_for('sources_page') }}">Sources</a>
         <a href="{{ url_for('extension_page') }}">Extension</a>
@@ -322,25 +344,78 @@
     </header>
 
     <section class="hero">
-      <h1>Discover manga and manhwa. Track updates everywhere.</h1>
-      <p class="section-lead">Search a title or paste a URL. We&rsquo;ll find sources, metadata, and the best way to track it.</p>
+      <p class="vision-promise">Track what you read, wherever you read it</p>
+      <h1>Never lose your place again.</h1>
+      <p class="section-lead">Track manga, manhwa, manhua, and webtoon progress across the <strong>sites you already use</strong>.</p>
+      <p class="section-lead" style="margin-top:4px;">Manga Watchlist is <strong>not a manga reader</strong>. It is a tracking dashboard: use the browser extension, paste a URL, or search the catalog. We save your title, source, chapter, and progress — with links back to the original websites.</p>
+      <div class="hero-actions" style="margin-top:18px;">
+        <a class="btn primary" href="{{ url_for('extension_page') }}">Install extension</a>
+        {% if current_user %}
+        <a class="btn primary" href="{{ url_for('index') }}">Start tracking</a>
+        {% else %}
+        <a class="btn primary" href="{{ url_for('auth_page', mode='register') }}">Start tracking</a>
+        {% endif %}
+        <a class="btn" href="{{ url_for('discover_page') }}">Search catalog</a>
+      </div>
       <form class="hero-form" action="{{ url_for('discover_page') }}" method="get" id="hero-discover-form" autocomplete="off">
+        <p class="section-note" style="margin-top:18px;">Search or paste a URL</p>
         <div class="hero-input-row">
-          <input type="search" name="q" id="hero-q" placeholder="Search manga, manhwa, or paste a URL..." aria-label="Search or paste URL">
-          <button type="submit" class="btn primary">Search</button>
-        </div>
-        <div class="hero-actions">
-          <a class="btn primary" href="{{ url_for('app_add_url') }}">Add URL</a>
-          <a class="btn" href="{{ url_for('discover_page') }}">Browse discover</a>
+          <input type="search" name="q" id="hero-q" placeholder="Title, or paste a series URL…" aria-label="Search catalog or paste URL">
+          <button type="submit" class="btn primary">Go</button>
         </div>
       </form>
       <p class="try-links">
-        Try:
+        Quick tries (catalog / discover):
         <a href="{{ url_for('discover_page', q='Solo Leveling') }}">Solo Leveling</a> ·
         <a href="{{ url_for('discover_page', q='One Piece') }}">One Piece</a> ·
         <a href="{{ url_for('discover_page', q='Tower of God') }}">Tower of God</a> ·
         <a href="{{ url_for('discover_page', q='Omniscient Reader') }}">Omniscient Reader</a>
       </p>
+    </section>
+
+    <section class="block">
+      <p class="section-note">Today</p>
+      <h2>What works today</h2>
+      <p class="vision-kicker">Honest scope builds trust — we are not pretending the whole web is searchable from the server.</p>
+      <ul class="vision-list">
+        <li>Track reading progress with the <strong>browser extension</strong></li>
+        <li>Save series from <strong>supported</strong> websites and keep <strong>one dashboard</strong> for your library</li>
+        <li>Store title, source, chapter, and <strong>original URL</strong></li>
+        <li><strong>MangaDex</strong> search directly where the API allows</li>
+        <li><strong>Paste any</strong> source URL and save it manually when needed</li>
+        <li><strong>Open the original site</strong> anytime from your library</li>
+      </ul>
+    </section>
+
+    <section class="block">
+      <p class="section-note">Next</p>
+      <h2>Coming next</h2>
+      <ul class="vision-list">
+        <li>Bigger searchable manga/manhwa catalog</li>
+        <li>More extension detectors for more websites</li>
+        <li>Better duplicate matching between sources</li>
+        <li>Verified source links for popular series</li>
+        <li>Smarter title search and aliases</li>
+        <li>Cleaner dashboard and progress history</li>
+        <li>Community-submitted source links</li>
+      </ul>
+    </section>
+
+    <section class="block">
+      <p class="section-note">Vision</p>
+      <h2>The long-term goal</h2>
+      <p class="section-lead" style="font-size:0.98rem;">Manga Watchlist is building a <strong>community-powered source index</strong> for manga and manhwa tracking. Most sites don’t have public APIs; many block server scraping. Our approach:</p>
+      <ul class="vision-list">
+        <li>Official / API-friendly sources can be searched directly</li>
+        <li>Scan sites are tracked through the <strong>extension</strong> (where you already read)</li>
+        <li>Unsupported URLs can still be saved <strong>manually</strong></li>
+        <li><strong>User-submitted</strong> links help the catalog grow over time</li>
+      </ul>
+      <p class="section-lead" style="font-size:0.95rem;margin-top:14px;">Over time, the index becomes a clearer map of where series can be tracked — <strong>without</strong> hosting manga, copying chapters, or pretending every site has an API.</p>
+      <div class="foot-cta">
+        <a class="btn primary" href="{{ url_for('roadmap_page') }}">Full roadmap</a>
+        <a class="btn" href="{{ url_for('discover_page') }}">Search catalog</a>
+      </div>
     </section>
 
     <section class="block">
@@ -450,19 +525,31 @@
 
     <section class="block" id="extension">
       <p class="section-note">Companion</p>
-      <h2>Read on the web? Use the extension.</h2>
-      <p class="section-lead" style="font-size:0.95rem;">Detect the page you’re on, add safe metadata to your library, and mark progress. Install steps, permissions, and privacy rules are on the extension page.</p>
+      <h2>Extension-powered tracking</h2>
+      <p class="section-lead" style="font-size:0.95rem;">The extension runs in your browser on the <strong>sites you already use</strong>. It helps detect the page you are on and sync chapter progress to your dashboard — without Manga Watchlist acting as a universal server scraper.</p>
       <div class="foot-cta">
-        <a class="btn primary" href="{{ url_for('extension_page') }}">Extension</a>
-        <a class="btn" href="{{ url_for('discover_page') }}">Discover</a>
+        <a class="btn primary" href="{{ url_for('extension_page') }}">Install &amp; docs</a>
+        <a class="btn" href="{{ url_for('discover_page') }}">Search catalog</a>
         <a class="btn" href="{{ url_for('index') }}">Open app</a>
       </div>
     </section>
 
     <section class="block">
-      <h2>Safety</h2>
-      <p class="section-lead" style="font-size:0.95rem;"><strong style="color:var(--text);">We do not host chapters or panels.</strong></p>
+      <h2>What we are not</h2>
+      <p class="section-lead" style="font-size:0.95rem;"><strong style="color:var(--text);">We do not host manga, chapters, or reader pages.</strong> We store metadata, progress, source URLs, and links back to originals. We don’t claim to “search every manga site” or replace your reader — we help you <strong>remember what you read and where you left off</strong>.</p>
     </section>
+
+    <footer class="site-footer">
+      <a href="{{ url_for('roadmap_page') }}">Roadmap</a>
+      <span class="dot">·</span>
+      <a href="{{ url_for('privacy_page') }}">Privacy</a>
+      <span class="dot">·</span>
+      <a href="{{ url_for('changelog_page') }}">Changelog</a>
+      <span class="dot">·</span>
+      <a href="{{ url_for('sources_page') }}">Sources</a>
+      <span class="dot">·</span>
+      <a href="{{ bug_report_href }}" target="_blank" rel="noopener noreferrer">Report an issue</a>
+    </footer>
   </div>
   <script>
     (function () {
