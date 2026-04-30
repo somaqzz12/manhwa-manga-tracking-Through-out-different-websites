@@ -20,19 +20,14 @@
         <header class="hero hero--gallery" style="margin-bottom:18px;">
           <div>
             <h1 class="page-title page-title--display">Add URL</h1>
-            <p class="hero-meta muted">Paste any listing URL — we resolve metadata when we can, and always let you save the link.</p>
+            <p class="hero-meta muted">Paste a URL to detect source and preview metadata.</p>
           </div>
         </header>
 
         <div class="panel add-url-panel">
-          <p class="muted" style="margin:0 0 14px;font-size:0.95rem;line-height:1.55;">
-            <strong>Core rule:</strong> any URL is accepted. Supported sites become <strong>automatic</strong> chapter checks.
-            Unsupported sites become <strong>manual</strong> bookmarks. Request new domains under <a href="{{ url_for('source_requests_page') }}">Source requests</a>.
-          </p>
           {% if prefill_title and not prefill_url %}
-          <p class="muted" style="margin:0 0 14px;font-size:0.92rem;line-height:1.5;">
-            Looking for <strong>{{ prefill_title|e }}</strong>? Paste a series listing URL below, or start from
-            <a href="{{ url_for('discover_page', q=prefill_title) }}">Discover</a> to compare sources.
+          <p class="muted" style="margin:0 0 14px;font-size:0.9rem;line-height:1.45;">
+            Title context: <strong>{{ prefill_title|e }}</strong>
           </p>
           {% endif %}
           <form id="resolveForm" class="discover-search-title" style="align-items:stretch;">
@@ -42,6 +37,7 @@
         </div>
 
         <div id="out" class="panel add-url-preview" style="margin-top:16px;min-height:48px;display:none;" aria-live="polite"></div>
+        <p id="resolveState" class="muted" style="margin:10px 0 0;font-size:0.86rem;"></p>
 
         <p class="muted" style="margin-top:20px;font-size:0.9rem;">
           <a href="{{ url_for('index') }}">← Back to library</a>
@@ -51,6 +47,32 @@
   </div>
   <script>
     let lastPreview = null;
+    const currentUserLoggedIn = {{ (current_user is not none)|tojson }};
+    const addNextUrl = {{ request.full_path|tojson }};
+    const loginWithNext = {{ url_for('auth_page', mode='login')|tojson }} + "?next=" + encodeURIComponent(addNextUrl);
+    const resolveState = document.getElementById("resolveState");
+    const toast = (function () {
+      const el = document.createElement("div");
+      el.style.position = "fixed";
+      el.style.right = "16px";
+      el.style.bottom = "16px";
+      el.style.maxWidth = "320px";
+      el.style.padding = "10px 12px";
+      el.style.border = "1px solid var(--border)";
+      el.style.background = "var(--panel)";
+      el.style.borderRadius = "12px";
+      el.style.boxShadow = "0 8px 24px rgba(0,0,0,0.08)";
+      el.style.fontSize = "0.86rem";
+      el.style.display = "none";
+      document.body.appendChild(el);
+      let t = null;
+      return function show(msg) {
+        el.textContent = msg;
+        el.style.display = "block";
+        if (t) clearTimeout(t);
+        t = setTimeout(() => { el.style.display = "none"; }, 1800);
+      };
+    })();
 
     document.addEventListener("DOMContentLoaded", function () {
       var inp = document.getElementById("urlInput");
@@ -78,9 +100,9 @@
       if (s === "official_api") return "Automatic";
       if (s === "site_adapter") return "Supported";
       if (s === "generic_detector") return "Experimental";
+      if (s === "extension_assisted" || s === "requested") return "Extension-assisted";
       if (s === "manual_only" || s === "manual") return "Manual";
       if (s === "blocked") return "Unavailable";
-      if (s === "requested") return "Extension-assisted";
       return raw || "—";
     }
 
@@ -114,6 +136,7 @@
     function renderError(message) {
       const out = document.getElementById("out");
       out.style.display = "block";
+      if (resolveState) resolveState.textContent = "Manual tracking only.";
       const wrapper = document.createElement("div");
       const lead = document.createElement("p");
       const bold = document.createElement("strong");
@@ -126,7 +149,7 @@
       const hint = document.createElement("p");
       hint.className = "muted";
       hint.style.fontSize = "0.88rem";
-      hint.textContent = "You can still add it as a manual bookmark — metadata may be limited.";
+      hint.textContent = "Automatic detection could not read this page from the server. You can save it manually, or open it and use the extension to capture metadata from your browser.";
       wrapper.appendChild(lead);
       wrapper.appendChild(detail);
       wrapper.appendChild(hint);
@@ -135,18 +158,30 @@
 
     async function addFromPreview() {
       if (!lastPreview) return;
+      if (!currentUserLoggedIn) {
+        if (resolveState) resolveState.textContent = "Sign in to save.";
+        window.location.href = loginWithNext;
+        return;
+      }
+      if (resolveState) resolveState.textContent = "Adding to library...";
       const manualTitle = document.getElementById("manualTitle")?.value?.trim() || "";
       const manualLatest = document.getElementById("manualLatest")?.value?.trim() || "";
       const payload = {
-        url: lastPreview.source_url || document.getElementById("urlInput").value.trim(),
+        source_url: lastPreview.source_url || document.getElementById("urlInput").value.trim(),
+        source_name: lastPreview.source_name || "",
+        source_domain: lastPreview.source_domain || "",
         title: manualTitle || lastPreview.title || "",
         canonical_title: lastPreview.canonical_title || "",
         description: lastPreview.description || "",
         chapter_count: lastPreview.chapter_count || "",
         cover_url: lastPreview.cover_url || "",
         latest_chapter: manualLatest || lastPreview.latest_chapter || "",
+        current_chapter: lastPreview.current_chapter || "",
         support_level: lastPreview.support_level || "manual_only",
-        source_name: lastPreview.source_name || "",
+        chapters: Array.isArray(lastPreview.chapters) ? lastPreview.chapters : [],
+        warnings: Array.isArray(lastPreview.warnings) ? lastPreview.warnings : [],
+        detection_source: lastPreview.detection_source || "backend",
+        confidence: lastPreview.confidence ?? "",
       };
       const res = await fetch("/api/library/add-from-preview", {
         method: "POST",
@@ -155,14 +190,11 @@
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        alert(data.error || "Failed to add to library");
+        toast(data.error || "Failed to add.");
         return;
       }
-      if (data.duplicate) {
-        alert("This URL is already in your library.");
-      } else {
-        alert("Added to library.");
-      }
+      if (resolveState) resolveState.textContent = "Added to library.";
+      toast(data.duplicate ? "Already in library." : "Added to library.");
       window.location.href = "/app";
     }
 
@@ -170,6 +202,8 @@
       const chapters = Array.isArray(data.chapters) ? data.chapters.length : (data.chaptersFound || 0);
       const chapterCount = data.chapter_count || chapters || "";
       const manual = (data.support_level || "").toLowerCase() === "manual_only";
+      const extensionAssisted = (data.support_level || "").toLowerCase() === "extension_assisted";
+      if (resolveState) resolveState.textContent = manual ? "Manual tracking only." : "Found source.";
       const fragment = document.createDocumentFragment();
 
       const top = document.createElement("div");
@@ -254,6 +288,19 @@
         manualCallout.appendChild(mh);
         fragment.appendChild(manualCallout);
       }
+      if (extensionAssisted) {
+        const extCallout = document.createElement("div");
+        extCallout.className = "panel";
+        extCallout.style.marginTop = "14px";
+        extCallout.style.background = "color-mix(in srgb, var(--accent) 7%, var(--panel))";
+        extCallout.style.borderStyle = "solid";
+        const msg = document.createElement("p");
+        msg.style.margin = "0";
+        msg.style.fontSize = "0.92rem";
+        msg.textContent = "Detected from your browser. Automatic backend checks may be limited.";
+        extCallout.appendChild(msg);
+        fragment.appendChild(extCallout);
+      }
 
       if (Array.isArray(data.warnings) && data.warnings.length) {
         const warningsList = document.createElement("ul");
@@ -277,7 +324,7 @@
         titleInput.id = "manualTitle";
         titleInput.className = "input-full";
         titleInput.placeholder = "Title (required for manual tracking)";
-        titleInput.value = String(data.title || "");
+        titleInput.value = String(data.title || {{ prefill_title|tojson }} || "");
         titleInput.style.borderRadius = "12px";
 
         const latestInput = document.createElement("input");
@@ -299,7 +346,7 @@
       addBtn.id = "addToLibraryBtn";
       addBtn.type = "button";
       addBtn.className = "btn primary";
-      addBtn.textContent = "Add to library";
+      addBtn.textContent = currentUserLoggedIn ? "Add to library" : "Sign in to save";
       actions.appendChild(addBtn);
       if (manual) {
         const reqBtn = document.createElement("a");
@@ -315,11 +362,22 @@
 
     document.getElementById("resolveForm").addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (resolveState) resolveState.textContent = "Detecting source...";
       const url = document.getElementById("urlInput").value.trim();
       const out = document.getElementById("out");
       out.style.display = "block";
+      const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.dataset.originalText = submitBtn.textContent || "";
+        submitBtn.textContent = "Detecting...";
+      }
       const res = await fetch("/api/resolve-url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
       const data = await res.json();
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = submitBtn.dataset.originalText || "Resolve URL";
+      }
       if (!res.ok || data.error) {
         renderError(data.error || "Unknown error");
         return;

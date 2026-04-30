@@ -214,12 +214,12 @@ class AppRegressionTests(unittest.TestCase):
         loc = res.headers.get("Location", "")
         self.assertIn("/app/add", loc)
 
-    def test_app_add_redirects_unauthenticated_with_next(self):
+    def test_app_add_allows_unauthenticated_preview_with_prefill(self):
         res = self.client.get("/app/add?url=https%3A%2F%2Fexample.com%2Fm", follow_redirects=False)
-        self.assertEqual(res.status_code, 302)
-        loc = res.headers.get("Location", "")
-        self.assertIn("/auth", loc)
-        self.assertIn("next=", loc)
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("Add URL", body)
+        self.assertIn("https://example.com/m", body)
 
     def test_api_resolve_url_manual_fallback_on_detection_failure(self):
         with patch.object(app, "is_public_http_url", return_value=True), patch.object(
@@ -391,12 +391,190 @@ class AppRegressionTests(unittest.TestCase):
         self.assertEqual(int(row["chapter_count"]), 123)
         self.assertEqual(row["cover_url"], "https://img.example/cover.jpg")
 
+    def test_add_from_preview_accepts_extension_assisted_payload(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("extassist", "extassist@example.com", generate_password_hash("secret12"), now),
+            )
+            uid = int(conn.execute("SELECT id FROM users WHERE email = ?", ("extassist@example.com",)).fetchone()["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        with patch.object(app, "is_public_http_url", side_effect=lambda u: str(u).startswith("https://")):
+            res = self.client.post(
+                "/api/library/add-from-preview",
+                json={
+                    "source_url": "https://example.com/series/abc",
+                    "support_level": "extension_assisted",
+                    "detection_source": "extension",
+                    "title": "From Extension",
+                },
+            )
+        self.assertEqual(res.status_code, 200)
+        payload = res.get_json() or {}
+        self.assertTrue(payload.get("ok"))
+        self.assertTrue(payload.get("created"))
+
+    def test_add_from_preview_extension_assisted_saves_cover_without_backend_refetch(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("extmeta", "extmeta@example.com", generate_password_hash("secret12"), now),
+            )
+            uid = int(conn.execute("SELECT id FROM users WHERE email = ?", ("extmeta@example.com",)).fetchone()["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        with patch.object(app, "is_public_http_url", side_effect=lambda u: str(u).startswith("https://")), patch.object(
+            app, "source_engine_resolve_url", side_effect=AssertionError("should not refetch backend resolver")
+        ):
+            res = self.client.post(
+                "/api/library/add-from-preview",
+                json={
+                    "source_url": "https://example.com/series/extmeta",
+                    "support_level": "extension_assisted",
+                    "detection_source": "extension",
+                    "title": "Browser Title",
+                    "cover_url": "https://img.example/extmeta.jpg",
+                },
+            )
+        self.assertEqual(res.status_code, 200)
+        out = res.get_json() or {}
+        self.assertTrue(out.get("ok"))
+        added_url = (out.get("series") or {}).get("url")
+        with app.get_conn() as conn:
+            row = conn.execute("SELECT title, cover_url FROM bookmarks WHERE url = ?", (added_url,)).fetchone()
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertEqual(row["title"], "Browser Title")
+        self.assertEqual(row["cover_url"], "https://img.example/extmeta.jpg")
+
+    def test_add_from_preview_dedupes_extension_assisted_source_url(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("extdupe", "extdupe@example.com", generate_password_hash("secret12"), now),
+            )
+            uid = int(conn.execute("SELECT id FROM users WHERE email = ?", ("extdupe@example.com",)).fetchone()["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        with patch.object(app, "is_public_http_url", side_effect=lambda u: str(u).startswith("https://")):
+            first = self.client.post(
+                "/api/library/add-from-preview",
+                json={
+                    "source_url": "https://example.com/series/dupe",
+                    "support_level": "extension_assisted",
+                    "detection_source": "extension",
+                    "title": "Dupe",
+                },
+            )
+            second = self.client.post(
+                "/api/library/add-from-preview",
+                json={
+                    "source_url": "https://example.com/series/dupe/",
+                    "support_level": "extension_assisted",
+                    "detection_source": "extension",
+                    "title": "Dupe 2",
+                },
+            )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertTrue((second.get_json() or {}).get("duplicate"))
+
+    def test_add_from_preview_ignores_invalid_cover_scheme(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("badcover", "badcover@example.com", generate_password_hash("secret12"), now),
+            )
+            uid = int(conn.execute("SELECT id FROM users WHERE email = ?", ("badcover@example.com",)).fetchone()["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        with patch.object(app, "is_public_http_url", side_effect=lambda u: str(u).startswith("https://")):
+            res = self.client.post(
+                "/api/library/add-from-preview",
+                json={
+                    "source_url": "https://example.com/series/cover",
+                    "support_level": "extension_assisted",
+                    "detection_source": "extension",
+                    "title": "Cover Test",
+                    "cover_url": "javascript:alert(1)",
+                },
+            )
+        self.assertEqual(res.status_code, 200)
+        added_url = ((res.get_json() or {}).get("series") or {}).get("url")
+        with app.get_conn() as conn:
+            row = conn.execute("SELECT cover_url FROM bookmarks WHERE url = ?", (added_url,)).fetchone()
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertEqual(row["cover_url"], "")
+
     def test_add_from_preview_requires_authentication(self):
         res = self.client.post(
             "/api/library/add-from-preview",
             json={"url": "https://example.com/series/demo", "support_level": "manual_only", "title": "Demo"},
         )
         self.assertEqual(res.status_code, 401)
+
+    def test_add_from_preview_manual_only_requires_title_when_missing(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("manualreq", "manualreq@example.com", generate_password_hash("secret12"), now),
+            )
+            uid = int(conn.execute("SELECT id FROM users WHERE email = ?", ("manualreq@example.com",)).fetchone()["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        with patch.object(app, "is_public_http_url", side_effect=lambda u: str(u).startswith("https://")):
+            res = self.client.post(
+                "/api/library/add-from-preview",
+                json={
+                    "source_url": "https://example.com/series/no-title",
+                    "support_level": "manual_only",
+                    "detection_source": "manual",
+                },
+            )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("title is required", (res.get_json() or {}).get("error", ""))
+
+    def test_add_from_preview_rejects_unsafe_private_urls(self):
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("unsafeurl", "unsafeurl@example.com", generate_password_hash("secret12"), now),
+            )
+            uid = int(conn.execute("SELECT id FROM users WHERE email = ?", ("unsafeurl@example.com",)).fetchone()["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        with patch.object(app, "is_public_http_url", return_value=False):
+            res = self.client.post(
+                "/api/library/add-from-preview",
+                json={
+                    "source_url": "http://localhost/series/private",
+                    "support_level": "extension_assisted",
+                    "detection_source": "extension",
+                    "title": "Nope",
+                },
+            )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("valid public http", (res.get_json() or {}).get("error", ""))
 
     def test_app_add_preview_uses_safe_dom_rendering(self):
         template_path = Path(app.app.root_path) / "templates" / "app_add.html"

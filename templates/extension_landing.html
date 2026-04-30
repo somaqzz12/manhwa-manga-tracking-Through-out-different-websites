@@ -216,11 +216,12 @@
         {% if current_user %}
         <a href="{{ url_for('index') }}">Dashboard</a>
         <a href="{{ url_for('app_add_url') }}">Add URL</a>
-        <a class="nav-cta" href="{{ url_for('account_settings') }}">Account</a>
+        <a class="nav-cta" href="{{ url_for('account_settings') }}">Account/Settings</a>
+        <a class="nav-cta nav-primary" href="{{ url_for('index') }}">Open app</a>
         {% else %}
         <a href="{{ url_for('auth_page', mode='login') }}">Sign in</a>
         <a href="{{ url_for('auth_page', mode='register') }}">Create account</a>
-        <a class="nav-cta" href="{{ url_for('index') }}">Open app</a>
+        <a class="nav-cta nav-primary" href="{{ url_for('index') }}">Open app</a>
         {% endif %}
       </nav>
     </header>

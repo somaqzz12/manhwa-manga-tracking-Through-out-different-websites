@@ -68,15 +68,21 @@ async function postJson(path, payload) {
 function pickPreviewPayload(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
   return {
-    url: String(data.url || "").trim(),
+    source_url: String(data.source_url || data.url || "").trim(),
     title: String(data.title || "").trim(),
     canonical_title: String(data.canonical_title || "").trim(),
     description: String(data.description || "").trim(),
     chapter_count: data.chapter_count ?? "",
     cover_url: String(data.cover_url || "").trim(),
     latest_chapter: String(data.latest_chapter || "").trim(),
+    current_chapter: String(data.current_chapter || "").trim(),
     support_level: String(data.support_level || "").trim(),
     source_name: String(data.source_name || "").trim(),
+    source_domain: String(data.source_domain || "").trim(),
+    chapters: Array.isArray(data.chapters) ? data.chapters : [],
+    warnings: Array.isArray(data.warnings) ? data.warnings : [],
+    detection_source: String(data.detection_source || "").trim(),
+    confidence: data.confidence ?? "",
   };
 }
 

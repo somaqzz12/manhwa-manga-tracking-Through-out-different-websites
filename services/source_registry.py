@@ -147,11 +147,16 @@ def _flatten_tachiyomi_manifest(payload: Any) -> list[dict]:
         ver = str(ext.get("version") or "").strip()
         ext_lang = str(ext.get("lang") or ext.get("language") or "").strip()
         nsfw = bool(ext.get("nsfw", False))
+        if nsfw:
+            # Product policy: NSFW sources are excluded at import-time.
+            continue
         srcs = ext.get("sources")
         if not isinstance(srcs, list):
             continue
         for src in srcs:
             if not isinstance(src, dict):
+                continue
+            if bool(src.get("nsfw", False)):
                 continue
             base = str(src.get("baseUrl") or "").strip()
             sid = str(src.get("id") or "").strip()
@@ -366,6 +371,29 @@ def sources_with_health() -> list[dict]:
     return rows
 
 
+def _is_public_source(rec: dict) -> bool:
+    if not isinstance(rec, dict):
+        return False
+    return not bool(rec.get("nsfw", False))
+
+
+def list_public_sources() -> list[dict]:
+    return [rec for rec in list_sources() if _is_public_source(rec)]
+
+
+def public_sources_with_health() -> list[dict]:
+    health = load_health()
+    by_id = health.get("by_id") if isinstance(health.get("by_id"), dict) else {}
+    updated_at = health.get("updated_at")
+    rows = []
+    for src in list_public_sources():
+        row = dict(src)
+        row["health"] = dict(by_id.get(src["id"], {})) if isinstance(by_id.get(src["id"]), dict) else {}
+        row["last_tested_at"] = row["health"].get("checked_at") or updated_at
+        rows.append(row)
+    return rows
+
+
 def aggregate_status_counts(sources: Optional[list[dict]] = None) -> dict[str, int]:
     srcs = sources or list_sources()
     health = load_health()
@@ -397,7 +425,7 @@ def public_api_snapshot() -> dict[str, Any]:
     by_id = health.get("by_id") if isinstance(health.get("by_id"), dict) else {}
     domains: set[str] = set()
     sources: list[dict] = []
-    for rec in list_sources():
+    for rec in list_public_sources():
         for d in rec.get("domains") or []:
             domains.add(str(d).strip().lower())
         hid = rec["id"]

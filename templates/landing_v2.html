@@ -311,21 +311,22 @@
         {% if current_user %}
         <a href="{{ url_for('index') }}">Dashboard</a>
         <a href="{{ url_for('app_add_url') }}">Add URL</a>
-        <a class="nav-cta" href="{{ url_for('account_settings') }}">Account</a>
+        <a class="nav-cta" href="{{ url_for('account_settings') }}">Account/Settings</a>
+        <a class="nav-cta nav-primary" href="{{ url_for('index') }}">Open app</a>
         {% else %}
         <a href="{{ url_for('auth_page', mode='login') }}">Sign in</a>
         <a href="{{ url_for('auth_page', mode='register') }}">Create account</a>
-        <a class="nav-cta" href="{{ url_for('index') }}">Open app</a>
+        <a class="nav-cta nav-primary" href="{{ url_for('index') }}">Open app</a>
         {% endif %}
       </nav>
     </header>
 
     <section class="hero">
       <h1>Discover manga and manhwa. Track updates everywhere.</h1>
-      <p class="section-lead">Search a title or paste a URL. Manga Watchlist finds covers, descriptions, chapters, available websites, and the best source to track.</p>
+      <p class="section-lead">Search a title or paste a URL. We&rsquo;ll find sources, metadata, and the best way to track it.</p>
       <form class="hero-form" action="{{ url_for('discover_page') }}" method="get" id="hero-discover-form" autocomplete="off">
         <div class="hero-input-row">
-          <input type="search" name="q" id="hero-q" placeholder="Search manga, manhwa, or paste a URL…" aria-label="Search or paste URL">
+          <input type="search" name="q" id="hero-q" placeholder="Search manga, manhwa, or paste a URL..." aria-label="Search or paste URL">
           <button type="submit" class="btn primary">Search</button>
         </div>
         <div class="hero-actions">
@@ -419,25 +420,6 @@
     </section>
 
     <section class="block">
-      <p class="section-note">Featured examples</p>
-      <h2>Recently updated</h2>
-      <p class="section-lead" style="font-size:0.95rem;">Sample rows — not a live feed.</p>
-      <table class="table" style="margin-top:12px;">
-        <thead><tr><th>Title</th><th>Source</th><th>Latest</th><th>Status</th></tr></thead>
-        <tbody>
-          {% for row in landing_recent_updates %}
-          <tr>
-            <td>{{ row.title|e }}</td>
-            <td>{{ row.source|e }}</td>
-            <td>{{ row.chapter|e }}</td>
-            <td>{{ row.status|e }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </section>
-
-    <section class="block">
       <h2>Where should I track Solo Leveling?</h2>
       <p class="section-lead" style="font-size:0.95rem;">Source comparison is the heart of the product — same title, different sites, different support levels.</p>
       <table class="table" style="margin-top:14px;">
@@ -450,20 +432,6 @@
         </tbody>
       </table>
       <p class="compare-rec">Recommended: <strong>MangaDex</strong> for automatic chapter checks when healthy.</p>
-    </section>
-
-    <section class="block">
-      <h2>Supported sources</h2>
-      <p class="section-lead" style="font-size:0.95rem;">Automatic adapters, experimental detection, and manual bookmarks — every URL is still accepted.</p>
-      <div class="grid-3" style="margin-top:14px;">
-        <div class="mini-card"><span class="label">Automatic</span><p style="margin:8px 0 0;font-size:0.92rem;color:var(--muted);">MangaDex, MANGA Plus, ComicWalker, and other API-backed catalogs.</p></div>
-        <div class="mini-card"><span class="label">Supported</span><p style="margin:8px 0 0;font-size:0.92rem;color:var(--muted);">Popular readers with dedicated parsers — see the live Sources page.</p></div>
-        <div class="mini-card"><span class="label">Manual &amp; requests</span><p style="margin:8px 0 0;font-size:0.92rem;color:var(--muted);">Paste any listing URL; request new domains when you need adapters.</p></div>
-      </div>
-      <div class="foot-cta">
-        <a class="btn primary" href="/sources">Browse sources</a>
-        <a class="btn" href="/source-requests">Source requests</a>
-      </div>
     </section>
 
     <section class="block" id="extension">
@@ -479,15 +447,7 @@
 
     <section class="block">
       <h2>Safety</h2>
-      <p class="section-lead" style="font-size:0.95rem;"><strong style="color:var(--text);">We do not host chapters or panels.</strong> We store metadata, URLs, and your reading progress — not reader pages or panel images.</p>
-    </section>
-
-    <section class="block">
-      <h2>Get started</h2>
-      <div class="foot-cta">
-        <a class="btn primary" href="{{ url_for('auth_page', mode='register') }}">Create account</a>
-        <a class="btn" href="{{ url_for('discover_page') }}">Discover titles</a>
-      </div>
+      <p class="section-lead" style="font-size:0.95rem;"><strong style="color:var(--text);">We do not host chapters or panels.</strong></p>
     </section>
   </div>
   <script>
@@ -497,6 +457,12 @@
       var addBase = {{ url_for('app_add_url')|tojson }};
       if (!form || !input) return;
       form.addEventListener("submit", function (e) {
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) {
+          btn.disabled = true;
+          btn.dataset.originalText = btn.textContent || "";
+          btn.textContent = "Searching...";
+        }
         var v = (input.value || "").trim();
         if (/^https?:\/\//i.test(v)) {
           e.preventDefault();

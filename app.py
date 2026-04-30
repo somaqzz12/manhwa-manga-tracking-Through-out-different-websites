@@ -3080,23 +3080,21 @@ def app_library():
 
 
 def app_add_url():
-    if not login_required():
-        return _login_redirect_preserve_destination()
-    user_id = get_actor_user_id()
     current_user = get_current_user()
-    if current_user is None:
-        session.pop("user_id", None)
-        return _login_redirect_preserve_destination()
-    raw_rows, _ = _fetch_user_story_rows(user_id, "")
-    total_count = len(raw_rows)
-    with CHECK_ALL_STATUS_LOCK:
-        check_all_running = CHECK_ALL_RUNNING
-        check_all_last_finished_at = CHECK_ALL_LAST_FINISHED_AT
-    check_all_status_text = (
-        "Check running..."
-        if check_all_running
-        else f"Last checked: {_format_relative_age(check_all_last_finished_at)}"
-    )
+    total_count = 0
+    check_all_status_text = ""
+    if current_user is not None:
+        user_id = get_actor_user_id()
+        raw_rows, _ = _fetch_user_story_rows(user_id, "")
+        total_count = len(raw_rows)
+        with CHECK_ALL_STATUS_LOCK:
+            check_all_running = CHECK_ALL_RUNNING
+            check_all_last_finished_at = CHECK_ALL_LAST_FINISHED_AT
+        check_all_status_text = (
+            "Check running..."
+            if check_all_running
+            else f"Last checked: {_format_relative_age(check_all_last_finished_at)}"
+        )
     prefill_url = (request.args.get("url") or "").strip()
     prefill_title = (request.args.get("title") or "").strip()
     return render_template(
@@ -4032,6 +4030,104 @@ def api_alt_sources():
     return jsonify({"ok": True, "current_source_id": curr_id, "alternatives": alternatives[:40]})
 
 
+_PREVIEW_SUPPORT_LEVELS = {
+    "official_api",
+    "site_adapter",
+    "generic_detector",
+    "extension_assisted",
+    "manual_only",
+    "requested",
+    "blocked",
+}
+
+
+def _preview_support_label(raw: str) -> str:
+    level = str(raw or "").strip().lower()
+    if level == "official_api":
+        return "Automatic"
+    if level == "site_adapter":
+        return "Supported"
+    if level == "generic_detector":
+        return "Experimental"
+    if level == "extension_assisted":
+        return "Extension-assisted"
+    return "Manual"
+
+
+def _chapter_preview_dict(raw: dict) -> dict:
+    item = raw if isinstance(raw, dict) else {}
+    url = str(item.get("url") or "").strip()
+    if not is_public_http_url(url):
+        return {}
+    out = {"url": url}
+    number = str(item.get("number") or "").strip()
+    if number:
+        out["number"] = number
+    title = str(item.get("title") or "").strip()
+    if title:
+        out["title"] = title
+    released = str(item.get("released_at") or "").strip()
+    if released:
+        out["released_at"] = released
+    return out
+
+
+def _coerce_preview_payload(raw: dict, *, detection_source: str, fallback_url: str = "") -> dict:
+    data = raw if isinstance(raw, dict) else {}
+    source_url = str(data.get("source_url") or data.get("url") or fallback_url or "").strip()
+    source_name = str(data.get("source_name") or "").strip()
+    source_domain = str(data.get("source_domain") or "").strip()
+    support_level = str(data.get("support_level") or "manual_only").strip().lower()
+    if support_level not in _PREVIEW_SUPPORT_LEVELS:
+        support_level = "manual_only"
+    title = str(data.get("title") or "").strip()[:220]
+    canonical_title = str(data.get("canonical_title") or "").strip()[:220]
+    description = str(data.get("description") or "").strip()[:2000]
+    cover_url = str(data.get("cover_url") or "").strip()
+    if cover_url and not is_public_http_url(cover_url):
+        cover_url = ""
+    latest_chapter = str(data.get("latest_chapter") or "").strip()
+    current_chapter = str(data.get("current_chapter") or "").strip()
+    chapter_count_raw = data.get("chapter_count")
+    try:
+        chapter_count = int(chapter_count_raw) if chapter_count_raw not in (None, "") else None
+    except (TypeError, ValueError):
+        chapter_count = None
+    if chapter_count is not None and chapter_count < 0:
+        chapter_count = None
+    warnings = [str(w).strip() for w in (data.get("warnings") or []) if str(w or "").strip()]
+    chapters_raw = data.get("chapters")
+    chapters = []
+    if isinstance(chapters_raw, list):
+        for ch in chapters_raw[:40]:
+            row = _chapter_preview_dict(ch)
+            if row:
+                chapters.append(row)
+    confidence_raw = data.get("confidence")
+    try:
+        confidence = float(confidence_raw) if confidence_raw not in (None, "") else 0.0
+    except (TypeError, ValueError):
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+    return {
+        "source_url": source_url,
+        "source_name": source_name or "Manual",
+        "source_domain": source_domain,
+        "support_level": support_level,
+        "title": title,
+        "canonical_title": canonical_title,
+        "description": description,
+        "cover_url": cover_url,
+        "latest_chapter": latest_chapter,
+        "current_chapter": current_chapter,
+        "chapter_count": chapter_count,
+        "chapters": chapters,
+        "warnings": warnings,
+        "detection_source": detection_source if detection_source in ("backend", "extension", "manual") else "manual",
+        "confidence": confidence,
+    }
+
+
 def api_resolve_url():
     data = request.get_json(silent=True) or {}
     raw_url = (data.get("url") or "").strip()[: RESOLVE_URL_MAX_LEN + 1]
@@ -4058,27 +4154,43 @@ def api_resolve_url():
     try:
         preview = source_engine_resolve_url(normalized)
     except Exception:
-        fallback = {
-            "ok": True,
-            "status": "manual",
-            "support_level": "manual_only",
-            "supportLabel": "Manual Only",
-            "source_name": "Manual",
-            "source_url": normalized,
-            "title": "",
-            "chaptersFound": 0,
-            "warnings": ["Automatic detection failed. Manual tracking is available."],
-        }
+        fallback = _coerce_preview_payload(
+            {
+                "source_url": normalized,
+                "support_level": "manual_only",
+                "source_name": "Manual",
+                "warnings": [
+                    "Automatic detection could not read this page from the server. "
+                    "You can save it manually, or open it and use the extension to capture metadata from your browser."
+                ],
+            },
+            detection_source="manual",
+            fallback_url=normalized,
+        )
+        fallback["ok"] = True
+        fallback["status"] = "manual"
+        fallback["supportLabel"] = _preview_support_label(fallback.get("support_level"))
+        fallback["chaptersFound"] = 0
         _cache_set(_RESOLVE_CACHE, normalized, fallback)
         return jsonify(fallback)
-    payload = asdict(preview)
+    payload = _coerce_preview_payload(asdict(preview), detection_source="backend", fallback_url=normalized)
+    if not payload.get("source_url"):
+        payload["source_url"] = normalized
+    if not payload.get("source_domain"):
+        try:
+            payload["source_domain"] = (urlparse(payload["source_url"]).hostname or "").lower().replace("www.", "")
+        except Exception:
+            payload["source_domain"] = ""
     payload["status"] = "supported" if preview.support_level not in ("manual_only", "blocked") else "manual"
-    payload["supportLabel"] = preview.support_level.replace("_", " ").title()
-    payload["chaptersFound"] = len(preview.chapters or [])
+    payload["supportLabel"] = _preview_support_label(payload.get("support_level"))
+    payload["chaptersFound"] = len(payload.get("chapters") or [])
     payload["ok"] = True
     if payload.get("support_level") == "manual_only":
         warnings = list(payload.get("warnings") or [])
-        warnings.append("Automatic detection is unavailable for this URL. You can still track it manually.")
+        warnings.append(
+            "Automatic detection could not read this page from the server. "
+            "You can save it manually, or open it and use the extension to capture metadata from your browser."
+        )
         payload["warnings"] = warnings
     _cache_set(_RESOLVE_CACHE, normalized, payload)
     return jsonify(payload)
@@ -4241,29 +4353,26 @@ def api_library_add_from_preview():
     if user_id is None:
         return jsonify({"ok": False, "error": "authentication required"}), 401
     data = request.get_json(silent=True) or {}
-    raw_url = (data.get("url") or "").strip()
+    normalized_input = _coerce_preview_payload(data, detection_source=str(data.get("detection_source") or "manual").strip().lower())
+    raw_url = (normalized_input.get("source_url") or "").strip()
     if not raw_url:
-        return jsonify({"ok": False, "error": "url is required"}), 400
+        return jsonify({"ok": False, "error": "source_url is required"}), 400
     if len(raw_url) > RESOLVE_URL_MAX_LEN:
         return jsonify({"ok": False, "error": "url is too long"}), 400
     if not is_public_http_url(raw_url):
         return jsonify({"ok": False, "error": "valid public http(s) url required"}), 400
-    support_level = (data.get("support_level") or "manual_only").strip().lower()
-    title = (data.get("title") or "").strip()[:220]
-    canonical_title = (data.get("canonical_title") or "").strip()[:220]
-    description = (data.get("description") or "").strip()[:2000]
-    cover_url = (data.get("cover_url") or "").strip()
-    if cover_url and not is_public_http_url(cover_url):
-        cover_url = ""
-    chapter_count_raw = data.get("chapter_count")
-    try:
-        chapter_count = int(chapter_count_raw) if chapter_count_raw not in (None, "") else None
-    except (TypeError, ValueError):
-        chapter_count = None
-    if chapter_count is not None and chapter_count < 0:
-        chapter_count = None
-    latest_chapter_raw = str(data.get("latest_chapter") or "").strip()
-    if support_level == "manual_only" and not title:
+    support_level = (normalized_input.get("support_level") or "manual_only").strip().lower()
+    detection_source = normalized_input.get("detection_source") or "manual"
+    if detection_source == "extension" or support_level == "extension_assisted":
+        support_level = "extension_assisted"
+    title = normalized_input.get("title") or ""
+    canonical_title = normalized_input.get("canonical_title") or ""
+    description = normalized_input.get("description") or ""
+    cover_url = normalized_input.get("cover_url") or ""
+    chapter_count = normalized_input.get("chapter_count")
+    latest_chapter_raw = normalized_input.get("latest_chapter") or ""
+    current_chapter_raw = normalized_input.get("current_chapter") or ""
+    if support_level == "manual_only" and not (title or canonical_title):
         return jsonify({"ok": False, "error": "title is required for manual tracking"}), 400
     canonical_url = resolve_series_listing_url(raw_url)
     norm = normalize_bookmark_url(canonical_url)
@@ -4305,6 +4414,16 @@ def api_library_add_from_preview():
                 conn.execute(
                     "UPDATE bookmarks SET latest_seen_num = ?, latest_seen = ?, latest_seen_url = ?, last_checked = ? WHERE id = ?",
                     (latest_num, f"Ch {latest_chapter_raw}", canonical_url, now, int(row["id"])),
+                )
+        if current_chapter_raw:
+            try:
+                current_num = float(current_chapter_raw)
+            except ValueError:
+                current_num = None
+            if current_num is not None and math.isfinite(current_num) and current_num >= 0:
+                conn.execute(
+                    "UPDATE bookmarks SET read_chapter_num = ?, read_chapter = ?, read_chapter_url = ?, updated_at = ? WHERE id = ?",
+                    (current_num, f"Ch {current_chapter_raw}", canonical_url, now, int(row["id"])),
                 )
     return jsonify({"ok": True, "created": True, "duplicate": False, "series": dict(row)})
 

@@ -8,6 +8,7 @@ SupportLevel = Literal[
     "official_api",
     "site_adapter",
     "generic_detector",
+    "extension_assisted",
     "manual_only",
     "requested",
     "blocked",

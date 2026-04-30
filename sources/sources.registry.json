@@ -3,17 +3,168 @@
     "id": "mangadex",
     "name": "MangaDex",
     "homepage": "https://mangadex.org",
-    "domains": ["mangadex.org"],
+    "domains": [
+      "mangadex.org"
+    ],
     "source_type": "official_public_api",
     "support_level": "official_api",
     "adapter_status": "enabled_candidate",
     "risk_level": "low"
   },
   {
+    "id": "bilibili",
+    "name": "Bilibili Comics",
+    "homepage": "https://www.bilibilicomics.com",
+    "domains": [
+      "bilibilicomics.com",
+      "www.bilibilicomics.com"
+    ],
+    "source_type": "official_site",
+    "support_level": "site_adapter",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low"
+  },
+  {
+    "id": "bookwalker",
+    "name": "BookWalker",
+    "homepage": "https://global.bookwalker.jp",
+    "domains": [
+      "global.bookwalker.jp"
+    ],
+    "source_type": "official_site",
+    "support_level": "site_adapter",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low",
+    "example_series_url": "https://global.bookwalker.jp/de70dd1234",
+    "region_language_focus": "English / Japanese",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": true,
+    "can_fetch_chapter_list": true,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Digital bookstore with licensed titles."
+    ],
+    "implementation_notes": "BookWalker product pages include title metadata, authors, and volume numbers; an adapter can parse these.",
+    "recommended_first_step": "Develop a site adapter to fetch series metadata and volume lists from public product pages."
+  },
+  {
+    "id": "comikey",
+    "name": "Comikey",
+    "homepage": "https://comikey.com",
+    "domains": [
+      "comikey.com"
+    ],
+    "source_type": "official_site",
+    "support_level": "site_adapter",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low",
+    "example_series_url": "https://comikey.com/comics",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": true,
+    "can_fetch_chapter_list": true,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Officially licensed digital publisher; no piracy."
+    ],
+    "implementation_notes": "Comikey web pages expose metadata and chapter lists that can be parsed via HTML. Respect terms of service.",
+    "recommended_first_step": "Build a site adapter to fetch series details and chapter lists."
+  },
+  {
+    "id": "comicfury",
+    "name": "ComicFury",
+    "homepage": "https://comicfury.com",
+    "domains": [
+      "comicfury.com",
+      "www.comicfury.com"
+    ],
+    "source_type": "webcomic_platform",
+    "support_level": "site_adapter",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low",
+    "example_series_url": "https://comicfury.com/comic/1234",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": true,
+    "can_fetch_chapter_list": true,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Webcomic host for independent creators; track metadata without mirroring content."
+    ],
+    "implementation_notes": "ComicFury hosts independent webcomics with simple HTML pages. Metadata and chapter lists can be parsed easily.",
+    "recommended_first_step": "Implement a site adapter to fetch series metadata and chapter lists from public pages."
+  },
+  {
+    "id": "comicwalker",
+    "name": "ComicWalker",
+    "homepage": "https://comic-walker.com",
+    "domains": [
+      "comic-walker.com",
+      "comicwalker-api.nicomanga.jp"
+    ],
+    "source_type": "official_site",
+    "support_level": "site_adapter",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low"
+  },
+  {
+    "id": "globalcomix",
+    "name": "GlobalComix",
+    "homepage": "https://globalcomix.com",
+    "domains": [
+      "globalcomix.com"
+    ],
+    "source_type": "webcomic_platform",
+    "support_level": "site_adapter",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low",
+    "example_series_url": "https://globalcomix.com/c/series/1234",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": true,
+    "can_fetch_chapter_list": true,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Creator platform with rights retained by creators; avoid storing hosted page/image content."
+    ],
+    "implementation_notes": "GlobalComix offers structured URLs for series and issues; metadata is available via public pages and site data.",
+    "recommended_first_step": "Create an adapter that scrapes series metadata and issue lists from public pages."
+  },
+  {
+    "id": "inkr",
+    "name": "INKR Comics",
+    "homepage": "https://inkr.com",
+    "domains": [
+      "inkr.com"
+    ],
+    "source_type": "official_site",
+    "support_level": "site_adapter",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low",
+    "example_series_url": "https://inkr.com/title/1234",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": true,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Licensed publisher/platform; avoid authenticated or protected content."
+    ],
+    "implementation_notes": "The site uses dynamic front-end APIs; some metadata may be extractable, but chapter lists may require authentication.",
+    "recommended_first_step": "Implement a basic adapter for title search and metadata; leave chapters for manual tracking."
+  },
+  {
     "id": "mangaplus",
     "name": "MANGA Plus",
     "homepage": "https://mangaplus.shueisha.co.jp",
-    "domains": ["mangaplus.shueisha.co.jp"],
+    "domains": [
+      "mangaplus.shueisha.co.jp"
+    ],
     "source_type": "official_site",
     "support_level": "site_adapter",
     "adapter_status": "enabled_candidate",
@@ -23,37 +174,354 @@
     "id": "nicoseiga",
     "name": "Nico Seiga",
     "homepage": "https://seiga.nicovideo.jp",
-    "domains": ["seiga.nicovideo.jp"],
+    "domains": [
+      "seiga.nicovideo.jp"
+    ],
     "source_type": "official_site",
     "support_level": "site_adapter",
     "adapter_status": "enabled_candidate",
     "risk_level": "low"
   },
   {
-    "id": "comicwalker",
-    "name": "ComicWalker",
-    "homepage": "https://comic-walker.com",
-    "domains": ["comic-walker.com", "comicwalker-api.nicomanga.jp"],
+    "id": "viz",
+    "name": "VIZ Manga & Shonen Jump",
+    "homepage": "https://www.viz.com",
+    "domains": [
+      "viz.com",
+      "manga.viz.com"
+    ],
     "source_type": "official_site",
     "support_level": "site_adapter",
     "adapter_status": "enabled_candidate",
-    "risk_level": "low"
+    "risk_level": "low",
+    "example_series_url": "https://www.viz.com/shonenjump/series/1234",
+    "region_language_focus": "English / US",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": true,
+    "can_fetch_chapter_list": true,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Official digital manga service; respect subscriptions and region restrictions."
+    ],
+    "implementation_notes": "VIZ provides web pages for series with metadata, chapter lists, and previews. An adapter can extract public information.",
+    "recommended_first_step": "Develop a site adapter to fetch metadata and chapter lists; respect subscription and region restrictions."
+  },
+  {
+    "id": "voyceme",
+    "name": "VoyceMe",
+    "homepage": "https://www.voyce.me",
+    "domains": [
+      "voyce.me",
+      "www.voyce.me"
+    ],
+    "source_type": "webcomic_platform",
+    "support_level": "site_adapter",
+    "adapter_status": "enabled_candidate",
+    "risk_level": "low",
+    "example_series_url": "https://voyce.me/series/1234",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": true,
+    "can_fetch_chapter_list": true,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Independent creator platform; track metadata only and do not mirror hosted content."
+    ],
+    "implementation_notes": "VoyceMe pages include structured metadata and chapter lists. An adapter can parse them without login.",
+    "recommended_first_step": "Develop a site adapter to fetch series information and chapters from public pages."
+  },
+  {
+    "id": "animeplanet",
+    "name": "Anime-Planet (manga section)",
+    "homepage": "https://www.anime-planet.com/manga",
+    "domains": [
+      "anime-planet.com"
+    ],
+    "source_type": "aggregator",
+    "support_level": "generic_detector",
+    "adapter_status": "planned",
+    "risk_level": "low",
+    "example_series_url": "https://www.anime-planet.com/manga/series-name",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": true,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Discovery/tracking site; does not host manga chapters."
+    ],
+    "implementation_notes": "Pages provide cover images and metadata; no chapters are hosted.",
+    "recommended_first_step": "Create a detector that extracts series names, authors, and descriptions."
   },
   {
     "id": "webtoon",
     "name": "WEBTOON",
     "homepage": "https://www.webtoons.com",
-    "domains": ["webtoons.com", "www.webtoons.com"],
+    "domains": [
+      "webtoons.com",
+      "www.webtoons.com"
+    ],
     "source_type": "official_site",
     "support_level": "generic_detector",
     "adapter_status": "planned",
     "risk_level": "low"
   },
   {
+    "id": "mangaupdates",
+    "name": "MangaUpdates",
+    "homepage": "https://www.mangaupdates.com",
+    "domains": [
+      "mangaupdates.com"
+    ],
+    "source_type": "aggregator",
+    "support_level": "generic_detector",
+    "adapter_status": "planned",
+    "risk_level": "medium",
+    "example_series_url": "https://www.mangaupdates.com/series/xyz",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": true,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Metadata/release information aggregator; do not fetch hosted chapters."
+    ],
+    "implementation_notes": "Use only for metadata such as title and description; do not attempt to fetch chapters.",
+    "recommended_first_step": "Implement a generic detector that extracts basic metadata from series pages."
+  },
+  {
+    "id": "azuki",
+    "name": "Azuki (Omoi)",
+    "homepage": "https://omoi.com",
+    "domains": [
+      "omoi.com",
+      "azuki.co"
+    ],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "planned",
+    "risk_level": "low",
+    "example_series_url": "https://omoi.com/series/1234",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": false,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Legal digital manga service; subscription content should stay manual-only unless public metadata is available."
+    ],
+    "implementation_notes": "Azuki catalog access may be available via web/apps, but much content is behind subscription. Start with manual support.",
+    "recommended_first_step": "Allow manual URL saving; consider a site adapter if public metadata and chapter lists are exposed."
+  },
+  {
+    "id": "jnovelclub",
+    "name": "J-Novel Club",
+    "homepage": "https://j-novel.club",
+    "domains": [
+      "j-novel.club"
+    ],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "planned",
+    "risk_level": "low",
+    "example_series_url": "https://j-novel.club/s/series/1234",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": false,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Digital-first publisher; subscription content should not be fetched."
+    ],
+    "implementation_notes": "J-Novel Club offers subscription reading; metadata may not be fully accessible without login.",
+    "recommended_first_step": "Provide manual URL support. Investigate if public series pages expose metadata."
+  },
+  {
+    "id": "kmanga",
+    "name": "K Manga",
+    "homepage": "https://kmanga.kodansha.com",
+    "domains": [
+      "kmanga.kodansha.com"
+    ],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "planned",
+    "risk_level": "low",
+    "example_series_url": "https://kmanga.kodansha.com/series/1234",
+    "region_language_focus": "English (US)",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": false,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Official Kodansha manga service; web metadata may be limited."
+    ],
+    "implementation_notes": "Most content is accessible via mobile apps; the website may be limited. Start with manual support.",
+    "recommended_first_step": "Allow manual URL saving; monitor if web pages expose metadata that could be parsed later."
+  },
+  {
+    "id": "lezhin",
+    "name": "Lezhin Comics",
+    "homepage": "https://www.lezhinus.com/en",
+    "domains": [
+      "lezhinus.com",
+      "www.lezhinus.com",
+      "lezhin.com"
+    ],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "low"
+  },
+  {
+    "id": "mangamo",
+    "name": "Mangamo",
+    "homepage": "https://www.mangamo.com",
+    "domains": [
+      "mangamo.com"
+    ],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "planned",
+    "risk_level": "low",
+    "example_series_url": "https://www.mangamo.com/title/1234",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": false,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Licensed manga app/platform; web catalog metadata may be limited."
+    ],
+    "implementation_notes": "Mangamo requires user authentication and uses mobile apps. Metadata may be limited on the web.",
+    "recommended_first_step": "Allow manual URL saving; revisit if a web catalog becomes available."
+  },
+  {
+    "id": "manganato",
+    "name": "Manganato",
+    "homepage": "https://manganato.com",
+    "domains": [
+      "manganato.com",
+      "chapmanganato.com"
+    ],
+    "source_type": "scanlation_site",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "high",
+    "example_series_url": "https://manganato.com/manga-xyz",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": false,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "High-risk scanlation/aggregator source; do not scrape or fetch content."
+    ],
+    "implementation_notes": "Do not scrape or fetch any content. Only allow users to manually save URLs if needed.",
+    "recommended_first_step": "Allow manual URL saving only. Warn users about legal risks."
+  },
+  {
+    "id": "mangatoon",
+    "name": "MangaToon",
+    "homepage": "https://mangatoon.mobi",
+    "domains": [
+      "mangatoon.mobi"
+    ],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "planned",
+    "risk_level": "low",
+    "example_series_url": "https://mangatoon.mobi/en/detail/1234",
+    "region_language_focus": "Multi-language (EN, ES, ID, etc.)",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": false,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Official platform; pages may be dynamic or gated."
+    ],
+    "implementation_notes": "Pages rely heavily on JavaScript and may require authentication, so start with manual URL support.",
+    "recommended_first_step": "Allow manual saving of series URLs; consider a site adapter later if static metadata becomes accessible."
+  },
+  {
+    "id": "manta",
+    "name": "Manta Comics",
+    "homepage": "https://manta.net",
+    "domains": [
+      "manta.net"
+    ],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "planned",
+    "risk_level": "low",
+    "example_series_url": "https://manta.net/en/series/1234",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": false,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Official licensed platform; subscription and app flows may protect content."
+    ],
+    "implementation_notes": "Manta pages may require login and use dynamic APIs. Manual tracking is safer initially.",
+    "recommended_first_step": "Allow manual URL saving; evaluate feasibility of a site adapter later."
+  },
+  {
+    "id": "pocketcomics",
+    "name": "Pocket Comics",
+    "homepage": "https://www.pocketcomics.com",
+    "domains": [
+      "pocketcomics.com",
+      "www.pocketcomics.com"
+    ],
+    "source_type": "official_site",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "low"
+  },
+  {
+    "id": "pixivcomic",
+    "name": "pixiv Comic",
+    "homepage": "https://comic.pixiv.net",
+    "domains": [
+      "comic.pixiv.net"
+    ],
+    "source_type": "webcomic_platform",
+    "support_level": "manual_only",
+    "adapter_status": "planned",
+    "risk_level": "low",
+    "example_series_url": "https://comic.pixiv.net/works/1234",
+    "region_language_focus": "Japanese",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": false,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Official pixiv manga platform; respect language, access, and platform constraints."
+    ],
+    "implementation_notes": "Pages are primarily in Japanese and may require translation. Manual support is safer initially.",
+    "recommended_first_step": "Support manual URL entries; consider a site adapter later for Japanese metadata."
+  },
+  {
     "id": "tapas",
     "name": "Tapas",
     "homepage": "https://tapas.io",
-    "domains": ["tapas.io", "api.tapas.io"],
+    "domains": [
+      "tapas.io",
+      "api.tapas.io"
+    ],
     "source_type": "official_site",
     "support_level": "manual_only",
     "adapter_status": "experimental_later",
@@ -63,47 +531,47 @@
     "id": "tappytoon",
     "name": "Tappytoon",
     "homepage": "https://www.tappytoon.com",
-    "domains": ["tappytoon.com", "www.tappytoon.com"],
+    "domains": [
+      "tappytoon.com",
+      "www.tappytoon.com"
+    ],
     "source_type": "official_site",
     "support_level": "manual_only",
     "adapter_status": "not_enabled",
     "risk_level": "low"
   },
   {
-    "id": "lezhin",
-    "name": "Lezhin Comics",
-    "homepage": "https://www.lezhinus.com/en",
-    "domains": ["lezhinus.com", "www.lezhinus.com", "lezhin.com"],
+    "id": "toomics",
+    "name": "Toomics",
+    "homepage": "https://toomics.com",
+    "domains": [
+      "toomics.com"
+    ],
     "source_type": "official_site",
     "support_level": "manual_only",
-    "adapter_status": "not_enabled",
-    "risk_level": "low"
-  },
-  {
-    "id": "pocketcomics",
-    "name": "Pocket Comics",
-    "homepage": "https://www.pocketcomics.com",
-    "domains": ["pocketcomics.com", "www.pocketcomics.com"],
-    "source_type": "official_site",
-    "support_level": "manual_only",
-    "adapter_status": "not_enabled",
-    "risk_level": "low"
-  },
-  {
-    "id": "bilibili",
-    "name": "Bilibili Comics",
-    "homepage": "https://www.bilibilicomics.com",
-    "domains": ["bilibilicomics.com", "www.bilibilicomics.com"],
-    "source_type": "official_site",
-    "support_level": "site_adapter",
-    "adapter_status": "enabled_candidate",
-    "risk_level": "low"
+    "adapter_status": "planned",
+    "risk_level": "low",
+    "example_series_url": "https://toomics.com/en/webtoon/episode/1234",
+    "region_language_focus": "Multi-language (EN, KR, TH, etc.)",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": false,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Subscription service; copyrighted content is protected."
+    ],
+    "implementation_notes": "Pages often require login and contain dynamic content. Only manual URL tracking is recommended.",
+    "recommended_first_step": "Support manual URLs; investigate if any public metadata is accessible without authentication."
   },
   {
     "id": "webcomics",
     "name": "WebComics",
     "homepage": "https://www.webcomicsapp.com",
-    "domains": ["webcomicsapp.com", "www.webcomicsapp.com"],
+    "domains": [
+      "webcomicsapp.com",
+      "www.webcomicsapp.com"
+    ],
     "source_type": "official_site",
     "support_level": "manual_only",
     "adapter_status": "planned",
@@ -113,39 +581,50 @@
     "id": "asura",
     "name": "Asura",
     "homepage": "https://www.asurascans.com",
-    "domains": ["asurascans.com", "www.asurascans.com", "asuracomic.net"],
+    "domains": [
+      "asurascans.com",
+      "www.asurascans.com",
+      "asuracomic.net"
+    ],
     "source_type": "scanlation_site",
     "support_level": "manual_only",
     "adapter_status": "not_enabled",
     "risk_level": "high"
   },
   {
-    "id": "reaper",
-    "name": "Reaper Scans",
-    "homepage": "https://reaperscans.com",
-    "domains": ["reaperscans.com"],
+    "id": "batoto",
+    "name": "Bato.to",
+    "homepage": "https://bato.to",
+    "domains": [
+      "bato.to"
+    ],
     "source_type": "scanlation_site",
-    "support_level": "blocked",
+    "support_level": "manual_only",
     "adapter_status": "not_enabled",
-    "risk_level": "high"
+    "risk_level": "high",
+    "example_series_url": "https://bato.to/series/xyz",
+    "region_language_focus": "English / global",
+    "can_search_titles": true,
+    "can_resolve_url": true,
+    "can_fetch_metadata": false,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "High-risk scanlation hub; scraping is not advised."
+    ],
+    "implementation_notes": "The domain has been subject to legal enforcement and may change; scraping is not advised.",
+    "recommended_first_step": "Only allow manual URL entries. Do not implement an adapter."
   },
   {
     "id": "flamescans",
     "name": "Flame Scans",
     "homepage": "https://flamescans.org",
-    "domains": ["flamescans.org", "flamescans.com"],
+    "domains": [
+      "flamescans.org",
+      "flamescans.com"
+    ],
     "source_type": "scanlation_site",
     "support_level": "manual_only",
-    "adapter_status": "not_enabled",
-    "risk_level": "high"
-  },
-  {
-    "id": "luminous",
-    "name": "Luminous Scans",
-    "homepage": "https://luminous-scans.com",
-    "domains": ["luminous-scans.com", "luminousscans.com"],
-    "source_type": "scanlation_site",
-    "support_level": "blocked",
     "adapter_status": "not_enabled",
     "risk_level": "high"
   },
@@ -153,17 +632,9 @@
     "id": "mangabuddy",
     "name": "MangaBuddy",
     "homepage": "https://mangabuddy.com",
-    "domains": ["mangabuddy.com"],
-    "source_type": "aggregator",
-    "support_level": "manual_only",
-    "adapter_status": "not_enabled",
-    "risk_level": "high"
-  },
-  {
-    "id": "mangareader",
-    "name": "MangaReader",
-    "homepage": "https://mangareader.to",
-    "domains": ["mangareader.to"],
+    "domains": [
+      "mangabuddy.com"
+    ],
     "source_type": "aggregator",
     "support_level": "manual_only",
     "adapter_status": "not_enabled",
@@ -173,7 +644,10 @@
     "id": "mangakakalot",
     "name": "MangaKakalot",
     "homepage": "https://mangakakalot.com",
-    "domains": ["mangakakalot.com", "mangakakalot.gg"],
+    "domains": [
+      "mangakakalot.com",
+      "mangakakalot.gg"
+    ],
     "source_type": "aggregator",
     "support_level": "manual_only",
     "adapter_status": "not_enabled",
@@ -183,7 +657,22 @@
     "id": "mangapark",
     "name": "MangaPark",
     "homepage": "https://mangapark.net",
-    "domains": ["mangapark.net", "mangapark.io"],
+    "domains": [
+      "mangapark.net",
+      "mangapark.io"
+    ],
+    "source_type": "aggregator",
+    "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "high"
+  },
+  {
+    "id": "mangareader",
+    "name": "MangaReader",
+    "homepage": "https://mangareader.to",
+    "domains": [
+      "mangareader.to"
+    ],
     "source_type": "aggregator",
     "support_level": "manual_only",
     "adapter_status": "not_enabled",
@@ -193,9 +682,60 @@
     "id": "manhwaclan",
     "name": "Manhwa Clan",
     "homepage": "https://manhwaclan.com",
-    "domains": ["manhwaclan.com"],
+    "domains": [
+      "manhwaclan.com"
+    ],
     "source_type": "aggregator",
     "support_level": "manual_only",
+    "adapter_status": "not_enabled",
+    "risk_level": "high"
+  },
+  {
+    "id": "netcomics",
+    "name": "NetComics (defunct)",
+    "homepage": "https://netcomics.com",
+    "domains": [
+      "netcomics.com"
+    ],
+    "source_type": "official_site",
+    "support_level": "blocked",
+    "adapter_status": "not_enabled",
+    "risk_level": "medium",
+    "example_series_url": "",
+    "region_language_focus": "English / US",
+    "can_search_titles": false,
+    "can_resolve_url": false,
+    "can_fetch_metadata": false,
+    "can_fetch_chapter_list": false,
+    "public_endpoints": [],
+    "risk_reasons": [
+      "Service appears unavailable/defunct; no current fetch target."
+    ],
+    "implementation_notes": "The site online services appear unavailable; no data should be fetched.",
+    "recommended_first_step": "Do not support this source; mark as blocked."
+  },
+  {
+    "id": "luminous",
+    "name": "Luminous Scans",
+    "homepage": "https://luminous-scans.com",
+    "domains": [
+      "luminous-scans.com",
+      "luminousscans.com"
+    ],
+    "source_type": "scanlation_site",
+    "support_level": "blocked",
+    "adapter_status": "not_enabled",
+    "risk_level": "high"
+  },
+  {
+    "id": "reaper",
+    "name": "Reaper Scans",
+    "homepage": "https://reaperscans.com",
+    "domains": [
+      "reaperscans.com"
+    ],
+    "source_type": "scanlation_site",
+    "support_level": "blocked",
     "adapter_status": "not_enabled",
     "risk_level": "high"
   }

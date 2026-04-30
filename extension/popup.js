@@ -46,6 +46,7 @@ function formatSupportLabel(raw) {
   if (s === "official_api") return "Automatic";
   if (s === "site_adapter") return "Supported";
   if (s === "generic_detector") return "Experimental";
+  if (s === "extension_assisted") return "Extension-assisted";
   if (s === "manual_only" || s === "manual") return "Manual";
   if (s === "blocked") return "Unavailable";
   if (s === "requested") return "Extension-assisted";
@@ -70,6 +71,69 @@ let lastPreview = null;
 let lastTabUrl = "";
 let lastPageData = null;
 
+function toCanonicalPreviewShape(raw, fallbackUrl = "") {
+  const src = raw && typeof raw === "object" ? raw : {};
+  return {
+    source_url: String(src.source_url || src.url || fallbackUrl || "").trim(),
+    source_name: String(src.source_name || "Manual").trim(),
+    source_domain: String(src.source_domain || "").trim(),
+    support_level: String(src.support_level || "manual_only").trim(),
+    title: String(src.title || "").trim(),
+    canonical_title: String(src.canonical_title || "").trim(),
+    description: String(src.description || "").trim(),
+    cover_url: String(src.cover_url || "").trim(),
+    latest_chapter: String(src.latest_chapter || "").trim(),
+    current_chapter: String(src.current_chapter || "").trim(),
+    chapter_count: src.chapter_count ?? "",
+    chapters: Array.isArray(src.chapters) ? src.chapters : [],
+    warnings: Array.isArray(src.warnings) ? src.warnings : [],
+    detection_source: String(src.detection_source || "manual").trim(),
+    confidence: src.confidence ?? 0,
+  };
+}
+
+function buildExtensionAssistedPreview(basePreview, pageData, fallbackUrl) {
+  const backend = toCanonicalPreviewShape(basePreview, fallbackUrl);
+  const data = pageData && typeof pageData === "object" ? pageData : {};
+  const hasDetected =
+    Boolean(String(data.title || "").trim()) ||
+    Boolean(String(data.coverUrl || "").trim()) ||
+    data.chapterNum != null;
+  if (!hasDetected) return backend;
+  const sourceUrl = String(data.seriesUrl || data.chapterUrl || backend.source_url || fallbackUrl || "").trim();
+  const sourceDomain =
+    String(data.sourceDomain || "").trim() ||
+    (() => {
+      try {
+        return new URL(sourceUrl).hostname.replace(/^www\./i, "").toLowerCase();
+      } catch {
+        return backend.source_domain || "";
+      }
+    })();
+  const confidenceRaw = String(data.detectionConfidence || "").toLowerCase();
+  const confidence = confidenceRaw === "high" ? 0.92 : confidenceRaw === "medium" ? 0.7 : 0.5;
+  const latestChapter = data.chapterNum != null ? String(data.chapterNum) : backend.latest_chapter;
+  return {
+    ...backend,
+    source_url: sourceUrl || backend.source_url,
+    source_name: backend.source_name || sourceDomain || "Manual",
+    source_domain: sourceDomain,
+    support_level: "extension_assisted",
+    title: String(data.title || backend.title || "").trim(),
+    canonical_title: String(data.title || backend.canonical_title || "").trim(),
+    description: String(data.description || backend.description || "").trim(),
+    cover_url: String(data.coverUrl || backend.cover_url || "").trim(),
+    latest_chapter: latestChapter,
+    current_chapter: latestChapter,
+    detection_source: "extension",
+    confidence: confidence,
+    warnings: [
+      "Detected from your browser. Automatic backend checks may be limited.",
+      ...(backend.warnings || []),
+    ],
+  };
+}
+
 function bindPreview(apiBase) {
   const previewBtn = $("previewButton");
   if (!previewBtn || previewBtn.dataset.bound === "1") return;
@@ -89,10 +153,17 @@ function bindPreview(apiBase) {
       previewBtn.disabled = false;
       return;
     }
-    renderResolverPreview(res.data, apiBase);
-    const supportLevel = String(res.data.support_level || "");
-    if (supportLevel.toLowerCase() === "manual_only") {
-      setStatus("Manual-only source: add with a title to track.");
+    const canonical = toCanonicalPreviewShape(res.data, targetUrl);
+    const supportLevel = String(canonical.support_level || "").toLowerCase();
+    const finalPreview =
+      supportLevel === "manual_only"
+        ? buildExtensionAssistedPreview(canonical, lastPageData, targetUrl)
+        : canonical;
+    renderResolverPreview(finalPreview, apiBase);
+    if (String(finalPreview.support_level || "").toLowerCase() === "manual_only") {
+      setStatus("Manual tracking only.");
+    } else if (String(finalPreview.support_level || "").toLowerCase() === "extension_assisted") {
+      setStatus("Detected from browser.");
     } else {
       setStatus("Preview ready.");
     }
@@ -113,16 +184,17 @@ function renderResolverPreview(preview, apiBase) {
   const host = $("previewHost");
   host.replaceChildren();
   host.classList.remove("hidden");
-  lastPreview = preview;
+  const shaped = toCanonicalPreviewShape(preview, lastTabUrl);
+  lastPreview = shaped;
 
   const top = document.createElement("div");
   top.className = "preview-row";
 
-  if (isSafeHttpUrl(preview.cover_url || "")) {
+  if (isSafeHttpUrl(shaped.cover_url || "")) {
     const img = document.createElement("img");
     img.className = "preview-cover";
     img.alt = "";
-    img.src = preview.cover_url;
+    img.src = shaped.cover_url;
     img.addEventListener("error", () => {
       img.replaceWith(createCoverPlaceholder());
     });
@@ -135,16 +207,16 @@ function renderResolverPreview(preview, apiBase) {
   details.style.flex = "1";
   const title = document.createElement("div");
   title.className = "preview-title";
-  title.textContent = preview.canonical_title || preview.title || "Unknown title";
+  title.textContent = shaped.canonical_title || shaped.title || "Unknown title";
   details.appendChild(title);
-  details.appendChild(makePreviewLine("Source", preview.source_name || "Manual"));
-  details.appendChild(makePreviewLine("Support", formatSupportLabel(preview.support_level)));
-  details.appendChild(makePreviewLine("Latest", preview.latest_chapter || "Unknown"));
-  if (preview.description) details.appendChild(makePreviewLine("Description", preview.description));
+  details.appendChild(makePreviewLine("Source", shaped.source_name || shaped.source_domain || "Manual"));
+  details.appendChild(makePreviewLine("Support", formatSupportLabel(shaped.support_level)));
+  details.appendChild(makePreviewLine("Latest", shaped.latest_chapter || "Unknown"));
+  if (shaped.description) details.appendChild(makePreviewLine("Description", shaped.description));
   top.appendChild(details);
   host.appendChild(top);
 
-  const warnings = Array.isArray(preview.warnings) ? preview.warnings : [];
+  const warnings = Array.isArray(shaped.warnings) ? shaped.warnings : [];
   if (warnings.length) {
     const list = document.createElement("ul");
     list.className = "warn-list";
@@ -156,9 +228,17 @@ function renderResolverPreview(preview, apiBase) {
     host.appendChild(list);
   }
 
-  const manualOnly = String(preview.support_level || "").toLowerCase() === "manual_only";
+  const level = String(shaped.support_level || "").toLowerCase();
+  const manualOnly = level === "manual_only";
+  const extensionAssisted = level === "extension_assisted";
   let manualTitleInput = null;
   let requestSupportBtn = null;
+  if (extensionAssisted) {
+    const extNote = document.createElement("div");
+    extNote.className = "manual-note";
+    extNote.textContent = "Detected from browser. Automatic backend checks may be limited.";
+    host.appendChild(extNote);
+  }
   if (manualOnly) {
     const manualNote = document.createElement("div");
     manualNote.className = "manual-note";
@@ -166,7 +246,7 @@ function renderResolverPreview(preview, apiBase) {
       "Manual tracking only. We can save this URL, but automatic chapter checks are not available for this source yet.";
     host.appendChild(manualNote);
   }
-  if (manualOnly && !String(preview.title || "").trim()) {
+  if (manualOnly && !String(shaped.title || "").trim()) {
     manualTitleInput = document.createElement("input");
     manualTitleInput.className = "input-mini";
     manualTitleInput.id = "manualPreviewTitle";
@@ -200,15 +280,21 @@ function renderResolverPreview(preview, apiBase) {
   addBtn.addEventListener("click", async () => {
     addBtn.disabled = true;
     const payload = {
-      url: preview.source_url || lastTabUrl || "",
-      title: preview.title || "",
-      canonical_title: preview.canonical_title || "",
-      description: preview.description || "",
-      chapter_count: preview.chapter_count || "",
-      cover_url: preview.cover_url || "",
-      latest_chapter: preview.latest_chapter || "",
-      support_level: preview.support_level || "manual_only",
-      source_name: preview.source_name || "",
+      source_url: shaped.source_url || lastTabUrl || "",
+      source_name: shaped.source_name || "",
+      source_domain: shaped.source_domain || "",
+      support_level: shaped.support_level || "manual_only",
+      title: shaped.title || "",
+      canonical_title: shaped.canonical_title || "",
+      description: shaped.description || "",
+      cover_url: shaped.cover_url || "",
+      latest_chapter: shaped.latest_chapter || "",
+      current_chapter: shaped.current_chapter || "",
+      chapter_count: shaped.chapter_count || "",
+      chapters: Array.isArray(shaped.chapters) ? shaped.chapters : [],
+      warnings: Array.isArray(shaped.warnings) ? shaped.warnings : [],
+      detection_source: shaped.detection_source || (extensionAssisted ? "extension" : "backend"),
+      confidence: shaped.confidence ?? "",
     };
     if (manualTitleInput) {
       const forcedTitle = manualTitleInput.value.trim();
