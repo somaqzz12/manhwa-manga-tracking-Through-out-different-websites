@@ -83,7 +83,7 @@ def search_title(query: str, *, skip_adapter_ids: set[str] | None = None) -> lis
         aid = str(getattr(adapter, "id", "") or "")
         if aid in skip:
             continue
-        if not adapter_supports(adapter, "title_search"):
+        if not adapter_supports(adapter, "website_search"):
             continue
         try:
             rows = adapter.search(q)
@@ -95,4 +95,4 @@ def search_title(query: str, *, skip_adapter_ids: set[str] | None = None) -> lis
 
 
 def list_title_search_sources() -> list[dict]:
-    return list_sources_by_capability("title_search")
+    return list_sources_by_capability("website_search")

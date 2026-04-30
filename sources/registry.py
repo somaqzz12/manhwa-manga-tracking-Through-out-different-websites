@@ -72,13 +72,13 @@ def _legacy_from_sources(row: dict) -> dict:
 
 
 def _capabilities_from_registry_row(row: dict, *, support: str, enabled: bool) -> list[str]:
-    caps: set[str] = {"url_resolve"}
+    caps: set[str] = {"url_resolve", "extension_detect"}
     if support == "official_api":
-        caps.update({"title_search", "chapter_check", "cover_image"})
+        caps.update({"website_search", "chapter_check", "cover_image"})
     if support in {"site_adapter", "generic_detector"} and enabled:
         caps.update({"chapter_check", "cover_image"})
     if bool(row.get("can_search_titles")) and support == "official_api":
-        caps.add("title_search")
+        caps.add("website_search")
     if support == "manual_only":
         caps.add("manual_only")
     if support == "blocked":
@@ -112,12 +112,16 @@ def adapter_supports(adapter, capability: str) -> bool:
     for row in SOURCE_REGISTRY:
         if str(row.get("id") or "").strip().lower() != aid:
             continue
-        row_caps = row.get("capabilities")
-        if isinstance(row_caps, list) and cap in {str(c).strip().lower() for c in row_caps}:
+        row_caps = {str(c).strip().lower() for c in (row.get("capabilities") or [])}
+        if cap in row_caps:
+            return True
+        if cap == "website_search" and "title_search" in row_caps:
+            return True
+        if cap == "title_search" and "website_search" in row_caps:
             return True
         return False
     if aid == "mangadex":
-        return cap in {"title_search", "url_resolve", "chapter_check", "cover_image"}
+        return cap in {"website_search", "title_search", "url_resolve", "chapter_check", "cover_image"}
     return cap == "url_resolve"
 
 
@@ -127,8 +131,14 @@ def list_sources_by_capability(capability: str) -> list[dict]:
         return []
     out: list[dict] = []
     for row in SOURCE_REGISTRY:
-        caps = row.get("capabilities")
-        if isinstance(caps, list) and cap in {str(c).strip().lower() for c in caps}:
+        caps = {str(c).strip().lower() for c in (row.get("capabilities") or [])}
+        if cap in caps:
+            out.append(dict(row))
+            continue
+        if cap == "website_search" and "title_search" in caps:
+            out.append(dict(row))
+            continue
+        if cap == "title_search" and "website_search" in caps:
             out.append(dict(row))
     return out
 

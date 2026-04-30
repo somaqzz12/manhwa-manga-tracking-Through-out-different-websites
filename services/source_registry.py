@@ -106,13 +106,24 @@ def normalize_source_record(raw: dict) -> Optional[dict]:
     caps = raw.get("capabilities")
     capabilities: list[str]
     if isinstance(caps, list):
-        capabilities = [str(c).strip() for c in caps if str(c).strip()]
+        capabilities = []
+        for c in caps:
+            s = str(c).strip()
+            if not s:
+                continue
+            if s.lower() == "title_search":
+                s = "website_search"
+            capabilities.append(s)
     else:
-        capabilities = ["url_resolve"]
+        capabilities = ["url_resolve", "extension_detect"]
         if chapter_sel:
             capabilities.append("chapter_check")
         if strategy == "mangadex_api":
-            capabilities.append("title_search")
+            capabilities.append("website_search")
+
+    caps_l = {str(x).lower() for x in capabilities}
+    if "extension_detect" not in caps_l:
+        capabilities.append("extension_detect")
 
     return {
         **raw,
@@ -366,7 +377,14 @@ def adapter_supports(adapter_or_profile, capability: str) -> bool:
         return cap == "url_resolve"
     caps = profile.get("capabilities")
     if isinstance(caps, list):
-        return cap in {str(c).strip().lower() for c in caps}
+        row_caps = {str(c).strip().lower() for c in caps}
+        if cap in row_caps:
+            return True
+        if cap == "website_search" and "title_search" in row_caps:
+            return True
+        if cap == "title_search" and "website_search" in row_caps:
+            return True
+        return False
     return cap == "url_resolve"
 
 
@@ -395,22 +413,12 @@ def get_source_capabilities(source_id_or_url: str) -> list[str]:
                 profile = row
                 break
     if not profile:
-        return ["manual_only"]
+        return ["url_resolve", "extension_detect", "manual_only"]
     caps = profile.get("capabilities")
     if isinstance(caps, list) and caps:
         return [str(c) for c in caps]
-    return ["url_resolve"]
+    return ["url_resolve", "extension_detect"]
 
-
-def get_source_capabilities(url: str) -> list[str]:
-    profile = get_profile_for_url(url)
-    if not profile:
-        return ["url_resolve"]
-    caps = profile.get("capabilities")
-    if isinstance(caps, list):
-        out = [str(c).strip() for c in caps if str(c).strip()]
-        return out or ["url_resolve"]
-    return ["url_resolve"]
 
 
 def load_health() -> dict:

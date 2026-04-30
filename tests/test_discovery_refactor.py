@@ -13,7 +13,6 @@ from sources.adapters.css_source import CssSourceAdapter
 from sources.adapters.mangadex import MangaDexAdapter
 from sources.generic_detector import GenericDetector
 from sources import resolver as source_resolver
-from sources import registry as source_registry_module
 from sources.protection import detect_protected_html
 from services import source_registry
 
@@ -196,14 +195,16 @@ class DiscoveryRefactorTests(unittest.TestCase):
 
     def test_source_registry_capabilities_helper_defaults(self) -> None:
         caps = source_registry.get_source_capabilities("https://unknown.example/series/x")
-        self.assertEqual(caps, ["url_resolve"])
+        self.assertIn("url_resolve", caps)
+        self.assertIn("extension_detect", caps)
 
     def test_registry_capability_labels_are_honest(self) -> None:
-        md_caps = source_registry_module.get_source_capabilities("mangadex")
-        self.assertIn("title_search", md_caps)
-        self.assertIn("chapter_check", md_caps)
-        asura_caps = source_registry_module.get_source_capabilities("asura")
-        self.assertNotIn("title_search", asura_caps)
+        md_caps = source_registry.get_source_capabilities("https://mangadex.org/title/00000000-0000-0000-0000-000000000001")
+        self.assertIn("website_search", md_caps)
+        self.assertNotIn("title_search", md_caps)
+        asura_caps = source_registry.get_source_capabilities("https://asurascans.com/comics/test")
+        self.assertNotIn("website_search", asura_caps)
+        self.assertIn("extension_detect", asura_caps)
 
     def test_resolver_search_only_calls_title_search_capable_adapters(self) -> None:
         class _AdapterNoSearch:

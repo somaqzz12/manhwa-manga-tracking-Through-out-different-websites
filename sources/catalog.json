@@ -14,7 +14,7 @@
       "chapter_number_strategy": "link_text_href",
       "parsing_strategy": "css_chapter_links",
       "page_type": "series",
-      "capabilities": ["url_resolve", "chapter_check"],
+      "capabilities": ["extension_detect", "url_resolve", "chapter_check", "manual_only"],
       "needs_js": false,
       "notes": "Madara-style variants; selectors may need updates when the theme changes.",
       "sample_series_url": "https://asurascans.com/comics/solo-farming-in-the-tower"
@@ -118,6 +118,7 @@
       "chapter_number_strategy": "link_text_href",
       "parsing_strategy": "css_chapter_links",
       "page_type": "series",
+      "capabilities": ["extension_detect", "url_resolve", "chapter_check", "manual_only"],
       "needs_js": false,
       "notes": "Nato/Nelo family sites share similar DOM.",
       "sample_series_url": "https://www.manganato.gg/manga/solo-leveling"
@@ -152,7 +153,7 @@
       "chapter_number_strategy": "api",
       "parsing_strategy": "mangadex_api",
       "page_type": "both",
-      "capabilities": ["url_resolve", "chapter_check", "title_search"],
+      "capabilities": ["website_search", "url_resolve", "chapter_check", "extension_detect"],
       "needs_js": false,
       "notes": "Uses official api.mangadex.org for latest chapter; paste title or chapter URL.",
       "sample_series_url": "https://mangadex.org/title/a1c7c817-4e59-43b7-9365-09675a149a6f"
@@ -273,6 +274,7 @@
       "chapter_number_strategy": "link_text_href",
       "parsing_strategy": "css_chapter_links",
       "page_type": "series",
+      "capabilities": ["extension_detect", "url_resolve", "chapter_check", "manual_only"],
       "needs_js": false,
       "notes": "",
       "sample_series_url": "https://toonily.com/webtoon/solo-leveling/"
