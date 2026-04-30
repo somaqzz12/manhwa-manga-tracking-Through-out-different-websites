@@ -684,6 +684,10 @@ def _ensure_bookmarks_metadata_columns(conn) -> None:
         conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS canonical_title TEXT")
         conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS description TEXT")
         conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS chapter_count INTEGER")
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS source_name TEXT")
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS source_domain TEXT")
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS support_level TEXT")
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS detection_source TEXT")
         return
     cols = conn.execute("PRAGMA table_info(bookmarks)").fetchall()
     names = {c["name"] for c in cols}
@@ -693,6 +697,14 @@ def _ensure_bookmarks_metadata_columns(conn) -> None:
         conn.execute("ALTER TABLE bookmarks ADD COLUMN description TEXT")
     if "chapter_count" not in names:
         conn.execute("ALTER TABLE bookmarks ADD COLUMN chapter_count INTEGER")
+    if "source_name" not in names:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN source_name TEXT")
+    if "source_domain" not in names:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN source_domain TEXT")
+    if "support_level" not in names:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN support_level TEXT")
+    if "detection_source" not in names:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN detection_source TEXT")
 
 
 def _ensure_users_integration_columns(conn) -> None:
@@ -2855,6 +2867,7 @@ def home():
         landing_popular_manga=home_data["popular_manga"],
         landing_recent_updates=home_data["recently_updated_examples"],
         landing_source_comparison=home_data["source_comparison_example"],
+        landing_source_comparison_slug=home_data.get("source_comparison_slug") or "solo-leveling",
         landing_source_summary=home_data["supported_source_summary"],
         landing_is_demo=home_data["is_demo"],
         current_user=get_current_user(),
@@ -2901,20 +2914,27 @@ def discover_page():
         landing_popular_manga=home_data["popular_manga"],
         landing_recent_updates=home_data["recently_updated_examples"],
         landing_source_comparison=home_data["source_comparison_example"],
+        landing_source_comparison_slug=home_data.get("source_comparison_slug") or "solo-leveling",
         landing_is_demo=home_data["is_demo"],
     )
 
 
 def public_series(slug: str):
     safe_slug = (slug or "").strip().lower()[:120]
-    row = next((it for it in discovery.search_local_series(safe_slug.replace("-", " ")) if it.get("slug") == safe_slug), None)
-    if row is None:
-        row = discovery.get_series_by_id(1 if safe_slug == "solo-leveling" else 0)
+    row = discovery.get_series_by_slug(safe_slug)
+    title = (row.get("title") if row else safe_slug.replace("-", " ").title()) if safe_slug else "Series"
+    sources = list(row.get("sources") or []) if row else []
+    recommended = (row.get("recommended_source") if row else None) or ""
     return render_template(
         "public_series.html",
         slug=safe_slug,
-        title=(row.get("title") if row else safe_slug.replace("-", " ").title()) if safe_slug else "Series",
-        source_preview=(row.get("sources") if row else LANDING_SOURCE_PREVIEW),
+        title=title,
+        description=(row.get("description") if row else "") or "",
+        source_preview=sources,
+        recommended_source=recommended,
+        sources_count=len([s for s in sources if (s.get("url") or "").strip()]),
+        missing_catalog_entry=row is None,
+        current_user=get_current_user(),
     )
 
 
@@ -4010,6 +4030,22 @@ def _preview_support_label(raw: str) -> str:
     return "Manual"
 
 
+def _preview_latest_chapter_num(raw: str) -> Optional[float]:
+    s = str(raw or "").strip()
+    if not s:
+        return None
+    n = parse_chapter_number(s)
+    if n is not None and math.isfinite(n) and n >= 0:
+        return float(n)
+    try:
+        v = float(s)
+        if math.isfinite(v) and v >= 0:
+            return v
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
 def _chapter_preview_dict(raw: dict) -> dict:
     item = raw if isinstance(raw, dict) else {}
     url = str(item.get("url") or "").strip()
@@ -4326,15 +4362,44 @@ def api_library_add_from_preview():
     description = normalized_input.get("description") or ""
     cover_url = normalized_input.get("cover_url") or ""
     chapter_count = normalized_input.get("chapter_count")
-    latest_chapter_raw = normalized_input.get("latest_chapter") or ""
-    current_chapter_raw = normalized_input.get("current_chapter") or ""
+    latest_chapter_raw = str(normalized_input.get("latest_chapter") or "").strip()
+    current_chapter_raw = str(normalized_input.get("current_chapter") or "").strip()
+    chapters_preview = normalized_input.get("chapters") or []
+    if (
+        not latest_chapter_raw
+        and isinstance(chapters_preview, list)
+        and chapters_preview
+    ):
+        last_ch = chapters_preview[-1]
+        if isinstance(last_ch, dict):
+            latest_chapter_raw = str(last_ch.get("number") or "").strip()
     if support_level == "manual_only" and not (title or canonical_title):
         return jsonify({"ok": False, "error": "title is required for manual tracking"}), 400
     canonical_url = resolve_series_listing_url(raw_url)
     norm = normalize_bookmark_url(canonical_url)
+    source_name = str(normalized_input.get("source_name") or "").strip()[:200] or None
+    source_domain = str(normalized_input.get("source_domain") or "").strip()[:200]
+    if not source_domain:
+        try:
+            source_domain = (urlparse(canonical_url).hostname or "").strip()[:200]
+        except Exception:
+            source_domain = ""
+    source_domain = source_domain or None
+    support_level_store = str(support_level or "manual_only").strip().lower()[:64]
+    detection_source_store = str(detection_source or "manual").strip().lower()[:32]
+    latest_seen_url = canonical_url
+    if isinstance(chapters_preview, list) and chapters_preview:
+        last = chapters_preview[-1]
+        if isinstance(last, dict):
+            ch_url = str(last.get("url") or "").strip()
+            if ch_url and is_public_http_url(ch_url):
+                try:
+                    latest_seen_url = resolve_series_listing_url(ch_url)
+                except Exception:
+                    latest_seen_url = ch_url
     with get_conn() as conn:
         existing_rows = conn.execute(
-            "SELECT id, title, url FROM bookmarks WHERE user_id = ?",
+            "SELECT id, url FROM bookmarks WHERE user_id = ?",
             (user_id,),
         ).fetchall()
         existing = None
@@ -4343,44 +4408,84 @@ def api_library_add_from_preview():
                 existing = row
                 break
         if existing is not None:
-            return jsonify({"ok": True, "created": False, "duplicate": True, "series": dict(existing)})
+            full = conn.execute(
+                """
+                SELECT id, title, canonical_title, description, chapter_count, url, cover_url, latest_seen, latest_seen_num,
+                       latest_seen_url, source_name, source_domain, support_level, detection_source
+                FROM bookmarks WHERE id = ? AND user_id = ?
+                """,
+                (int(existing["id"]), user_id),
+            ).fetchone()
+            if full is None:
+                return jsonify({"ok": False, "error": "bookmark not found"}), 500
+            return jsonify({"ok": True, "created": False, "duplicate": True, "series": dict(full)})
         add_title = title or canonical_title or extract_series_slug(canonical_url).replace("-", " ").title() or "Untitled series"
         now = _now_iso_z()
         sid = story_groups.new_solo_story_id()
         conn.execute(
             """
             INSERT OR IGNORE INTO bookmarks
-            (user_id, title, canonical_title, description, chapter_count, url, cover_url, story_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (user_id, title, canonical_title, description, chapter_count, url, cover_url, story_id, created_at,
+             source_name, source_domain, support_level, detection_source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (user_id, add_title, canonical_title or None, description or None, chapter_count, canonical_url, cover_url or "", sid, now),
+            (
+                user_id,
+                add_title,
+                canonical_title or None,
+                description or None,
+                chapter_count,
+                canonical_url,
+                cover_url or "",
+                sid,
+                now,
+                source_name,
+                source_domain,
+                support_level_store,
+                detection_source_store,
+            ),
         )
         row = conn.execute(
-            "SELECT id, title, canonical_title, description, chapter_count, url, cover_url FROM bookmarks WHERE user_id = ? AND url = ?",
+            """
+            SELECT id, title, canonical_title, description, chapter_count, url, cover_url,
+                   source_name, source_domain, support_level, detection_source
+            FROM bookmarks WHERE user_id = ? AND url = ?
+            """,
             (user_id, canonical_url),
         ).fetchone()
         if row is None:
             return jsonify({"ok": False, "error": "failed to add series"}), 500
-        if latest_chapter_raw:
-            try:
-                latest_num = float(latest_chapter_raw)
-            except ValueError:
-                latest_num = None
-            if latest_num is not None and math.isfinite(latest_num) and latest_num >= 0:
-                conn.execute(
-                    "UPDATE bookmarks SET latest_seen_num = ?, latest_seen = ?, latest_seen_url = ?, last_checked = ? WHERE id = ?",
-                    (latest_num, f"Ch {latest_chapter_raw}", canonical_url, now, int(row["id"])),
-                )
-        if current_chapter_raw:
-            try:
-                current_num = float(current_chapter_raw)
-            except ValueError:
-                current_num = None
-            if current_num is not None and math.isfinite(current_num) and current_num >= 0:
+        latest_num = _preview_latest_chapter_num(latest_chapter_raw) if latest_chapter_raw else None
+        latest_lbl = None
+        if latest_num is not None:
+            latest_lbl = f"Ch {latest_num}" if float(int(latest_num)) == latest_num else f"Ch {latest_num}"
+        elif latest_chapter_raw:
+            latest_lbl = latest_chapter_raw[:120]
+        if latest_num is not None or latest_lbl:
+            conn.execute(
+                "UPDATE bookmarks SET latest_seen_num = ?, latest_seen = ?, latest_seen_url = ?, last_checked = ? WHERE id = ?",
+                (latest_num, latest_lbl, latest_seen_url, now, int(row["id"])),
+            )
+        current_num = _preview_latest_chapter_num(current_chapter_raw) if current_chapter_raw else None
+        if current_num is not None or current_chapter_raw:
+            read_lbl = None
+            if current_num is not None:
+                read_lbl = f"Ch {current_num}" if float(int(current_num)) == current_num else f"Ch {current_num}"
+            elif current_chapter_raw:
+                read_lbl = current_chapter_raw[:120]
+            if read_lbl:
                 conn.execute(
                     "UPDATE bookmarks SET read_chapter_num = ?, read_chapter = ?, read_chapter_url = ?, updated_at = ? WHERE id = ?",
-                    (current_num, f"Ch {current_chapter_raw}", canonical_url, now, int(row["id"])),
+                    (current_num, read_lbl, latest_seen_url, now, int(row["id"])),
                 )
+        row = conn.execute(
+            """
+            SELECT id, title, canonical_title, description, chapter_count, url, cover_url, latest_seen, latest_seen_num,
+                   latest_seen_url, source_name, source_domain, support_level, detection_source
+            FROM bookmarks WHERE id = ?
+            """,
+            (int(row["id"]),),
+        ).fetchone()
     return jsonify({"ok": True, "created": True, "duplicate": False, "series": dict(row)})
 
 

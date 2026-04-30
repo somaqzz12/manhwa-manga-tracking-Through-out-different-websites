@@ -120,10 +120,13 @@
             <div class="flash warning">Manual tracking only. Automatic detection could not read this page from the server. You can save it manually, or open it and use the extension to capture metadata from your browser.</div>
           {% else %}
             <p><strong>{{ resolved.title or "Unknown title" }}</strong></p>
-            <p class="muted" style="font-size:0.9rem;">Source: {{ resolved.source_name or "Unknown" }} · Support: {{ resolved.supportLabel }} · Chapters found: {{ resolved.chaptersFound }}</p>
+            {% if resolved.description %}
+            <p class="muted" style="font-size:0.9rem;">{{ resolved.description|e }}</p>
+            {% endif %}
+            <p class="muted" style="font-size:0.9rem;">Source: {{ resolved.source_name or "Unknown" }} · Support: {{ resolved.supportLabel }} · Chapters found: {{ resolved.chaptersFound or 0 }}</p>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-              <button type="button" class="btn primary" id="discoverAddManual" data-url="{{ (resolved.canonical_series_url or resolved.input_url or url_q or '')|e }}" data-title="{{ (resolved.title or '')|e }}">Add</button>
-              <a class="btn ghost" href="{{ url_for('app_add_url', url=(resolved.canonical_series_url or resolved.input_url or url_q or '')) }}">Open Add URL</a>
+              <a class="btn primary" href="{{ url_for('app_add_url', url=(resolved.source_url or url_q or '')) }}">Add in app</a>
+              <a class="btn ghost" href="{{ (resolved.source_url or url_q or '')|e }}" target="_blank" rel="noreferrer">Original site</a>
             </div>
           {% endif %}
         </section>
@@ -134,7 +137,7 @@
           <div class="discover-cards">
             {% for card in landing_starter_picks %}
             <article class="discover-card">
-              <a class="discover-cover" href="{{ url_for('discover_page', q=card.title) }}" aria-label="{{ card.title|e }}">
+              <a class="discover-cover" href="{{ url_for('public_series', slug=card.slug) }}" aria-label="{{ card.title|e }}">
                 <span class="discover-type-badge">{{ card.type_label|e }}</span>
                 {% if card.cover_url %}
                 <img src="{{ card.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.style.display='none';">
@@ -148,7 +151,7 @@
                   <span class="discover-pill">{{ card.sources_found }} sources</span>
                 </div>
                 <div class="discover-actions">
-                  <a class="btn ghost" href="{{ url_for('discover_page', q=card.title) }}">View sources</a>
+                  <a class="btn ghost" href="{{ url_for('public_series', slug=card.slug) }}">View sources</a>
                   <a class="btn primary" href="{{ url_for('app_add_url', title=card.title) }}">Add</a>
                 </div>
               </div>
@@ -162,7 +165,7 @@
           <div class="discover-cards">
             {% for card in landing_popular_manhwa %}
             <article class="discover-card">
-              <a class="discover-cover" href="{{ url_for('discover_page', q=card.title) }}" aria-label="{{ card.title|e }}">
+              <a class="discover-cover" href="{{ url_for('public_series', slug=card.slug) }}" aria-label="{{ card.title|e }}">
                 <span class="discover-type-badge">{{ card.type_label|e }}</span>
                 {% if card.cover_url %}
                 <img src="{{ card.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.style.display='none';">
@@ -176,7 +179,7 @@
                   <span class="discover-pill">{{ card.sources_found }} sources</span>
                 </div>
                 <div class="discover-actions">
-                  <a class="btn ghost" href="{{ url_for('discover_page', q=card.title) }}">View sources</a>
+                  <a class="btn ghost" href="{{ url_for('public_series', slug=card.slug) }}">View sources</a>
                   <a class="btn primary" href="{{ url_for('app_add_url', title=card.title) }}">Add</a>
                 </div>
               </div>
@@ -190,7 +193,7 @@
           <div class="discover-cards">
             {% for card in landing_popular_manga %}
             <article class="discover-card">
-              <a class="discover-cover" href="{{ url_for('discover_page', q=card.title) }}" aria-label="{{ card.title|e }}">
+              <a class="discover-cover" href="{{ url_for('public_series', slug=card.slug) }}" aria-label="{{ card.title|e }}">
                 <span class="discover-type-badge">{{ card.type_label|e }}</span>
                 {% if card.cover_url %}
                 <img src="{{ card.cover_url|e }}" alt="" loading="lazy" decoding="async" referrerpolicy="origin" onerror="this.style.display='none';">
@@ -204,7 +207,7 @@
                   <span class="discover-pill">{{ card.sources_found }} sources</span>
                 </div>
                 <div class="discover-actions">
-                  <a class="btn ghost" href="{{ url_for('discover_page', q=card.title) }}">View sources</a>
+                  <a class="btn ghost" href="{{ url_for('public_series', slug=card.slug) }}">View sources</a>
                   <a class="btn primary" href="{{ url_for('app_add_url', title=card.title) }}">Add</a>
                 </div>
               </div>
@@ -226,16 +229,28 @@
         </section>
 
         <section class="panel discover-section">
-          <h2>Source comparison example</h2>
+          <h2>Source comparison example{% if landing_is_demo %} · Demo{% endif %}</h2>
+          {% if landing_source_comparison %}
           <table class="discover-table">
-            <thead><tr><th>Source</th><th>Support</th><th>Notes</th></tr></thead>
+            <thead><tr><th>Source</th><th>Support</th><th>Notes</th><th>Open</th></tr></thead>
             <tbody>
               {% for row in landing_source_comparison %}
-              <tr><td>{{ row.source|e }}</td><td>{{ row.support|e }}</td><td>{{ row.notes|e }}</td></tr>
+              <tr>
+                <td>{{ row.source|e }}</td>
+                <td>{{ row.support|e }}</td>
+                <td>{{ row.notes|e }}</td>
+                <td>{% if row.url %}<a href="{{ row.url|e }}" target="_blank" rel="noreferrer">Original site</a>{% else %}—{% endif %}</td>
+              </tr>
               {% endfor %}
             </tbody>
           </table>
+          <p class="muted" style="margin:10px 0 0;font-size:0.86rem;"><a href="{{ url_for('public_series', slug=landing_source_comparison_slug) }}">Open full comparison page</a></p>
+          {% else %}
+          <p class="muted">No catalog sources. <a href="{{ url_for('app_add_url') }}">Paste URL</a> to track a listing.</p>
+          {% endif %}
         </section>
+
+        <div id="live-search-results" class="discover-live-results" aria-live="polite"></div>
 
         <div id="results" class="discover-results">
           {% for r in results %}
@@ -247,7 +262,7 @@
                 <p class="muted" style="margin:0;font-size:0.82rem;">{{ r.type|title }} · {{ r.status|title }} · Latest {{ r.latest_chapter or "?" }} · {{ r.sources_found }} sources</p>
               </div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <a class="btn ghost" href="{{ url_for('discover_page', q=r.title) }}">View sources</a>
+                <a class="btn ghost" href="{{ url_for('public_series', slug=r.slug) }}">View sources</a>
                 <a class="btn primary" href="{{ url_for('app_add_url', title=r.title) }}">Add</a>
               </div>
             </div>
@@ -272,6 +287,7 @@
     const currentUserLoggedIn = {{ (current_user is not none)|tojson }};
     const authLoginBase = {{ url_for('auth_page', mode='login', next=request.full_path)|tojson }};
     const appAddBase = {{ url_for('app_add_url')|tojson }};
+    const discoverBase = {{ url_for('discover_page')|tojson }};
     const toast = (function () {
       const el = document.createElement("div");
       el.style.position = "fixed";
@@ -318,24 +334,83 @@
       const v = (input?.value || "").trim();
       if (looksLikeUrl(v)) {
         e.preventDefault();
-        window.location.href = appAddBase + "?url=" + encodeURIComponent(v);
+        window.location.href = discoverBase + "?url=" + encodeURIComponent(v);
       }
     });
 
-    async function addManual(url, title, btn) {
-      if (!currentUserLoggedIn) {
-        window.location.href = authLoginBase;
+    function clearChildren(el) {
+      if (!el) return;
+      while (el.firstChild) el.removeChild(el.firstChild);
+    }
+
+    function renderLiveResults(items) {
+      const host = document.getElementById("live-search-results");
+      if (!host) return;
+      clearChildren(host);
+      const list = Array.isArray(items) ? items : [];
+      if (!list.length) {
+        const p = document.createElement("p");
+        p.className = "muted";
+        p.style.margin = "0 0 10px";
+        p.textContent = "No live matches from supported sites.";
+        host.appendChild(p);
+        const a = document.createElement("a");
+        a.className = "btn ghost";
+        a.href = appAddBase;
+        a.textContent = "Paste URL";
+        host.appendChild(a);
         return;
       }
-      setButtonBusy(btn, true, "Adding...");
-      const res = await fetch("/api/tracker/add-series", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({mode:"manual", manual_url:url, manual_title:title})
-      });
-      const data = await res.json();
-      setButtonBusy(btn, false);
-      toast(data.ok ? "Added to library." : (data.error || "Failed"));
+      const h = document.createElement("h2");
+      h.className = "section-title";
+      h.style.margin = "0 0 10px";
+      h.style.fontSize = "1.05rem";
+      h.textContent = "Live results";
+      host.appendChild(h);
+      for (const r of list) {
+        const panel = document.createElement("div");
+        panel.className = "panel discover-section";
+        const rowTop = document.createElement("div");
+        rowTop.style.display = "flex";
+        rowTop.style.flexWrap = "wrap";
+        rowTop.style.gap = "10px";
+        rowTop.style.justifyContent = "space-between";
+        const left = document.createElement("div");
+        const h3 = document.createElement("h3");
+        h3.className = "section-title";
+        h3.style.margin = "0 0 6px";
+        h3.style.fontSize = "1.05rem";
+        h3.textContent = String(r.title || "Untitled");
+        left.appendChild(h3);
+        const meta = document.createElement("p");
+        meta.className = "muted";
+        meta.style.margin = "0";
+        meta.style.fontSize = "0.82rem";
+        const sf = r.sources_found != null ? r.sources_found : (Array.isArray(r.sources) ? r.sources.length : 0);
+        meta.textContent = `${String(r.type || "unknown")} · Latest ${String(r.latest_chapter || "?")} · ${sf} sources`;
+        left.appendChild(meta);
+        rowTop.appendChild(left);
+        const actions = document.createElement("div");
+        actions.style.display = "flex";
+        actions.style.gap = "8px";
+        actions.style.flexWrap = "wrap";
+        const slug = String(r.slug || "").trim();
+        if (slug) {
+          const vs = document.createElement("a");
+          vs.className = "btn ghost";
+          vs.href = "/series/" + encodeURIComponent(slug);
+          vs.textContent = "View sources";
+          actions.appendChild(vs);
+        }
+        const add = document.createElement("a");
+        add.className = "btn primary";
+        add.href = appAddBase + "?title=" + encodeURIComponent(String(r.title || ""));
+        add.textContent = "Add";
+        actions.appendChild(add);
+        rowTop.appendChild(actions);
+        panel.appendChild(rowTop);
+        host.appendChild(panel);
+      }
     }
 
     document.getElementById("liveBtn")?.addEventListener("click", async () => {
@@ -351,21 +426,14 @@
       const data = await res.json();
       setButtonBusy(liveBtn, false);
       if (!data.ok) { toast(data.error || "Search failed"); return; }
-      toast(`Found ${Array.isArray(data.items) ? data.items.length : 0} live matches.`);
+      const n = Array.isArray(data.items) ? data.items.length : 0;
+      toast(n ? `Found ${n} live match(es).` : "No live matches.");
+      renderLiveResults(data.items || []);
     });
 
     document.getElementById("emptyLiveBtn")?.addEventListener("click", () => {
       document.getElementById("liveBtn")?.click();
     });
-
-    const manualBtn = document.getElementById("discoverAddManual");
-    if (manualBtn) {
-      manualBtn.addEventListener("click", () => {
-        const url = manualBtn.getAttribute("data-url") || "";
-        const title = manualBtn.getAttribute("data-title") || "";
-        addManual(url, title, manualBtn);
-      });
-    }
   </script>
   {% include "partials/menu_drawer_script.html" %}
   {% include "partials/form_loading_snippet.html" %}

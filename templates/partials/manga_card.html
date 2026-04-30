@@ -55,6 +55,7 @@
       <a class="btn btn-compact primary" href="{{ b['continue_url'] }}" target="_blank" rel="noreferrer">Continue</a>
     {% endif %}
     <a class="btn btn-compact" href="{{ b['latest_seen_url'] if (b.latest_seen_url or '')|trim else b['url'] }}" target="_blank" rel="noreferrer">Latest</a>
+    <a class="btn btn-compact ghost" href="{{ b['url'] }}" target="_blank" rel="noreferrer">Original site</a>
     <details class="story-card-menu">
       <summary class="story-card-menu-trigger" aria-label="More actions">⋯</summary>
       <div class="story-card-menu-panel">

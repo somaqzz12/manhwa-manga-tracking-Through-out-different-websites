@@ -73,6 +73,27 @@ def _cards_for_slugs(slugs: list[str], *, is_demo: bool) -> list[dict[str, Any]]
     return out
 
 
+def _source_comparison_rows_from_catalog(*, example_slug: str = "solo-leveling") -> list[dict[str, Any]]:
+    row = discovery.get_series_by_slug(example_slug)
+    if not row:
+        return []
+    sources = row.get("sources") or []
+    out: list[dict[str, Any]] = []
+    for src in sources:
+        url = str(src.get("url") or "").strip()
+        out.append(
+            {
+                "source": str(src.get("source_name") or "").strip(),
+                "support": discovery.source_label(src),
+                "notes": str(src.get("health_status") or "").strip() or "—",
+                "url": url,
+                "latest_chapter": src.get("latest_chapter"),
+                "is_demo": True,
+            }
+        )
+    return out
+
+
 def build_discovery_home_data(source_policy: dict[str, Any] | None = None) -> dict[str, Any]:
     ranked = sorted(discovery.LOCAL_DISCOVERY_CATALOG, key=lambda x: int(x.get("watch_count") or 0), reverse=True)
     recent = []
@@ -99,16 +120,14 @@ def build_discovery_home_data(source_policy: dict[str, Any] | None = None) -> di
                 }
             )
 
+    comparison = _source_comparison_rows_from_catalog()
     return {
         "starter_picks": _cards_for_slugs(_STARTER_SLUGS, is_demo=True),
         "popular_manhwa": _cards_for_slugs(_MANHWA_SLUGS, is_demo=True),
         "popular_manga": _cards_for_slugs(_MANGA_SLUGS, is_demo=True),
         "recently_updated_examples": recent,
-        "source_comparison_example": [
-            {"source": "MangaDex", "support": "Automatic", "notes": "Public metadata and catalog API", "is_demo": True},
-            {"source": "WEBTOON", "support": "Manual", "notes": "Official publisher site; track the URL manually", "is_demo": True},
-            {"source": "Asura", "support": "Manual", "notes": "Mirror source; automatic checks can be limited", "is_demo": True},
-        ],
+        "source_comparison_example": comparison,
+        "source_comparison_slug": "solo-leveling",
         "supported_source_summary": summary,
         "is_demo": True,
     }

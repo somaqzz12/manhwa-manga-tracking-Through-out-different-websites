@@ -175,3 +175,13 @@ def get_series_by_id(series_id: int) -> dict | None:
         if int(row.get("id") or 0) == int(series_id):
             return _decorate_series(row)
     return None
+
+
+def get_series_by_slug(slug: str) -> dict | None:
+    s = (slug or "").strip().lower()
+    if not s:
+        return None
+    for row in LOCAL_DISCOVERY_CATALOG:
+        if str(row.get("slug") or "").strip().lower() == s:
+            return _decorate_series(row)
+    return None

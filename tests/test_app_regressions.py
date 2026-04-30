@@ -368,8 +368,65 @@ class AppRegressionTests(unittest.TestCase):
         self.assertEqual(second.status_code, 200)
         second_payload = second.get_json() or {}
         self.assertTrue(second_payload.get("duplicate"))
+        series = second_payload.get("series") or {}
+        self.assertIn("cover_url", series)
+        self.assertIn("canonical_title", series)
+        self.assertIn("source_name", series)
+        self.assertIn("latest_seen_num", series)
 
-    def test_add_from_preview_saves_metadata_fields_when_provided(self):
+    def test_add_from_preview_duplicate_returns_stored_metadata(self):
+        """Second hit for same URL returns the same rich series row as created the first time."""
+        from werkzeug.security import generate_password_hash
+
+        with app.get_conn() as conn:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                ("dupfull", "dupfull@example.com", generate_password_hash("secret12"), now),
+            )
+            uid = int(conn.execute("SELECT id FROM users WHERE email = ?", ("dupfull@example.com",)).fetchone()["id"])
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+
+        payload = {
+            "source_url": "https://dupfull.example/series/meta",
+            "support_level": "extension_assisted",
+            "detection_source": "extension",
+            "source_name": "ExampleSrc",
+            "title": "Dup Full Title",
+            "canonical_title": "Dup Full Canonical",
+            "description": "Saved once",
+            "cover_url": "https://dupfull.example/cover.jpg",
+            "latest_chapter": "7",
+        }
+        with patch.object(app, "is_public_http_url", side_effect=lambda u: str(u).startswith("https://")):
+            first = self.client.post("/api/library/add-from-preview", json=payload)
+            second = self.client.post(
+                "/api/library/add-from-preview",
+                json={**payload, "title": "Ignored on dupe"},
+            )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertTrue((first.get_json() or {}).get("created"))
+        dup = second.get_json() or {}
+        self.assertTrue(dup.get("duplicate"))
+        s1 = (first.get_json() or {}).get("series") or {}
+        s2 = dup.get("series") or {}
+        for key in (
+            "id",
+            "url",
+            "title",
+            "canonical_title",
+            "description",
+            "cover_url",
+            "source_name",
+            "source_domain",
+            "support_level",
+            "detection_source",
+            "latest_seen_num",
+            "latest_seen_url",
+        ):
+            self.assertEqual(s2.get(key), s1.get(key), msg=f"mismatch on {key}")
         from werkzeug.security import generate_password_hash
 
         with app.get_conn() as conn:
@@ -389,11 +446,14 @@ class AppRegressionTests(unittest.TestCase):
                 json={
                     "url": "https://mangadex.org/title/abc",
                     "support_level": "official_api",
+                    "source_name": "MangaDex",
+                    "source_domain": "mangadex.org",
                     "title": "Display Title",
                     "canonical_title": "Canonical Title",
                     "description": "Metadata description",
                     "chapter_count": 123,
                     "cover_url": "https://img.example/cover.jpg",
+                    "latest_chapter": "Ch. 12",
                 },
             )
         self.assertEqual(res.status_code, 200)
@@ -404,7 +464,7 @@ class AppRegressionTests(unittest.TestCase):
         self.assertTrue(added_url)
         with app.get_conn() as conn:
             row = conn.execute(
-                "SELECT title, canonical_title, description, chapter_count, cover_url, url FROM bookmarks WHERE url = ? ORDER BY id DESC LIMIT 1",
+                "SELECT title, canonical_title, description, chapter_count, cover_url, url, source_name, source_domain, support_level, latest_seen_num FROM bookmarks WHERE url = ? ORDER BY id DESC LIMIT 1",
                 (added_url,),
             ).fetchone()
         self.assertIsNotNone(row)
@@ -414,6 +474,10 @@ class AppRegressionTests(unittest.TestCase):
         self.assertEqual(row["description"], "Metadata description")
         self.assertEqual(int(row["chapter_count"]), 123)
         self.assertEqual(row["cover_url"], "https://img.example/cover.jpg")
+        self.assertEqual(row["source_name"], "MangaDex")
+        self.assertEqual(row["source_domain"], "mangadex.org")
+        self.assertEqual(row["support_level"], "official_api")
+        self.assertAlmostEqual(float(row["latest_seen_num"]), 12.0)
 
     def test_add_from_preview_accepts_extension_assisted_payload(self):
         from werkzeug.security import generate_password_hash
@@ -573,14 +637,16 @@ class AppRegressionTests(unittest.TestCase):
         discover_res = self.client.get("/discover")
         self.assertEqual(discover_res.status_code, 200)
         discover_body = discover_res.get_data(as_text=True)
-        self.assertIn("/discover?q=", discover_body)
+        self.assertIn("/series/", discover_body)
         self.assertIn("/app/add?title=", discover_body)
+        self.assertIn('action="/discover"', discover_body)
 
         home_res = self.client.get("/")
         self.assertEqual(home_res.status_code, 200)
         home_body = home_res.get_data(as_text=True)
-        self.assertIn("/discover?q=", home_body)
+        self.assertIn("/series/", home_body)
         self.assertIn("/app/add?title=", home_body)
+        self.assertIn("/discover?q=", home_body)
 
     def test_demo_sections_are_labeled(self):
         discover_res = self.client.get("/discover")
@@ -588,6 +654,16 @@ class AppRegressionTests(unittest.TestCase):
         body = discover_res.get_data(as_text=True)
         self.assertIn("Starter picks · Demo", body)
         self.assertIn("Recently updated examples · Demo", body)
+        self.assertIn("Source comparison example · Demo", body)
+
+    def test_public_series_page_lists_sources(self):
+        res = self.client.get("/series/solo-leveling")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("Solo Leveling", body)
+        self.assertIn("Asura", body)
+        self.assertIn("Original site", body)
+        self.assertIn("/app/add", body)
 
     def test_add_from_preview_manual_only_requires_title_when_missing(self):
         from werkzeug.security import generate_password_hash
