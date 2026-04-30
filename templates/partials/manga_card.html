@@ -11,6 +11,7 @@
 {% endif %}
 <article
   class="story-card"
+  data-title="{{ (b['title'] or '')|lower }}"
   data-genre="{{ (b.get('genre') or '')|lower }}"
   data-updates="{% if b.new_update or unr > 0 %}1{% else %}0{% endif %}"
   data-reading="{% if b.read_chapter_num is not none %}1{% else %}0{% endif %}"

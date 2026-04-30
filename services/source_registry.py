@@ -62,6 +62,10 @@ def _coerce_domains(raw: dict) -> list[str]:
     d = raw.get("domains")
     if d is None and raw.get("domain"):
         d = [raw["domain"]]
+    if d is None and raw.get("baseUrl"):
+        parsed = urlparse(str(raw.get("baseUrl")).strip())
+        if parsed.netloc:
+            d = [parsed.netloc]
     if d is None:
         return []
     if isinstance(d, str):
@@ -118,6 +122,10 @@ def normalize_source_record(raw: dict) -> Optional[dict]:
         "needs_js": bool(raw.get("needs_js", False)),
         "notes": (raw.get("notes") or "").strip(),
         "sample_series_url": (raw.get("sample_series_url") or "").strip(),
+        "nsfw": bool(raw.get("nsfw", False)),
+        "extension": (raw.get("extension") or "").strip(),
+        "package": (raw.get("package") or "").strip(),
+        "version": (raw.get("version") or "").strip(),
         "api": strategy == "mangadex_api",
     }
 
@@ -126,13 +134,77 @@ def _load_json_file(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _flatten_tachiyomi_manifest(payload: Any) -> list[dict]:
+    out: list[dict] = []
+    if not isinstance(payload, list):
+        return out
+    for ext in payload:
+        if not isinstance(ext, dict):
+            continue
+        ext_name = str(ext.get("name") or ext.get("extension") or "").strip()
+        pkg = str(ext.get("pkg") or ext.get("package") or "").strip()
+        apk = str(ext.get("apk") or "").strip()
+        ver = str(ext.get("version") or "").strip()
+        ext_lang = str(ext.get("lang") or ext.get("language") or "").strip()
+        nsfw = bool(ext.get("nsfw", False))
+        srcs = ext.get("sources")
+        if not isinstance(srcs, list):
+            continue
+        for src in srcs:
+            if not isinstance(src, dict):
+                continue
+            base = str(src.get("baseUrl") or "").strip()
+            sid = str(src.get("id") or "").strip()
+            host = _normalize_registry_host(urlparse(base).netloc) if base else ""
+            if not host:
+                continue
+            derived_id = sid or host.replace(".", "_")
+            if pkg:
+                derived_id = f"{pkg}:{derived_id}"
+            out.append(
+                {
+                    "id": derived_id,
+                    "display_name": str(src.get("name") or ext_name or host).strip(),
+                    "domains": [host],
+                    "status": "partial",
+                    "language": str(src.get("lang") or ext_lang or "all").strip(),
+                    "content_type": "mixed",
+                    "title_selector": "",
+                    "cover_selector": "",
+                    "chapter_link_selector": "",
+                    "chapter_number_strategy": "link_text_href",
+                    "parsing_strategy": "css_chapter_links",
+                    "page_type": "series",
+                    "needs_js": False,
+                    "notes": "",
+                    "sample_series_url": "",
+                    "baseUrl": base,
+                    "source_id": sid,
+                    "extension": ext_name,
+                    "package": pkg,
+                    "apk": apk,
+                    "version": ver,
+                    "nsfw": nsfw,
+                }
+            )
+    return out
+
+
 def _collect_source_dicts_from_dir(sources_dir: Path) -> list[dict]:
     out: list[dict] = []
     if not sources_dir.is_dir():
         return out
+    manifest_path = sources_dir / "sources.manifest.json"
+    if manifest_path.is_file():
+        try:
+            payload = _load_json_file(manifest_path)
+            return _flatten_tachiyomi_manifest(payload)
+        except Exception as exc:
+            log.error("failed to read %s: %s", manifest_path, exc)
+            return []
     for path in sorted(sources_dir.glob("*.json")):
         name = path.name.lower()
-        if name.startswith("_") or name in ("health.json",):
+        if name.startswith("_") or name in ("health.json", "sources.manifest.json"):
             continue
         try:
             payload = _load_json_file(path)
@@ -143,6 +215,8 @@ def _collect_source_dicts_from_dir(sources_dir: Path) -> list[dict]:
             for item in payload["sources"]:
                 if isinstance(item, dict):
                     out.append(item)
+        elif isinstance(payload, list):
+            out.extend(_flatten_tachiyomi_manifest(payload))
         elif isinstance(payload, dict) and "id" in payload:
             out.append(payload)
     return out

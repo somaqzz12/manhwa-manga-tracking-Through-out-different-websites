@@ -38,4 +38,26 @@
     setTimeout(() => document.getElementById("add-url")?.focus(), 200);
   };
 })();
+
+(function themeMode() {
+  const STORAGE = "mt-theme";
+  const select = document.getElementById("themeSelect");
+  const body = document.body;
+  if (!body) return;
+
+  function apply(theme) {
+    const next = theme === "light" ? "light" : "dark";
+    body.setAttribute("data-theme", next);
+    if (select) select.value = next;
+  }
+
+  const saved = localStorage.getItem(STORAGE) || "dark";
+  apply(saved);
+
+  select?.addEventListener("change", () => {
+    const val = select.value === "light" ? "light" : "dark";
+    localStorage.setItem(STORAGE, val);
+    apply(val);
+  });
+})();
 </script>

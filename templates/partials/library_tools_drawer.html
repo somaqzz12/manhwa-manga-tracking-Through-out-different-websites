@@ -25,6 +25,15 @@
       <a class="drawer-nav-link {% if request.endpoint == 'demo_dashboard' %}is-active{% endif %}" href="{{ url_for('demo_dashboard') }}">Demo</a>
     </nav>
 
+    <section class="library-drawer-section">
+      <span class="sidebar-label">Theme</span>
+      <select id="themeSelect" class="sidebar-select" aria-label="Theme mode">
+        <option value="dark">Dark mode</option>
+        <option value="light">Normal mode</option>
+      </select>
+      <p class="muted" style="margin:8px 0 0;font-size:0.78rem;line-height:1.4;">Saved on this device and used app-wide.</p>
+    </section>
+
     {% if request.endpoint == 'index' %}
     <section class="library-drawer-section">
       <span class="sidebar-label">Genre filter</span>

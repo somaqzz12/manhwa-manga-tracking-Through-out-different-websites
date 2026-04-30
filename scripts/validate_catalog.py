@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate sources/catalog.json: every entry has domains and sample_series_url (http).
+"""Validate sources data files.
 
 Exit 1 if any rule fails so CI can block merges with empty samples.
 
@@ -54,13 +54,46 @@ def validate_payload(payload: dict) -> list[str]:
     return errors
 
 
+def validate_manifest_payload(payload: list) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(payload, list):
+        return ['manifest payload must be a list']
+    for i, ext in enumerate(payload):
+        if not isinstance(ext, dict):
+            errors.append(f"manifest[{i}] must be an object")
+            continue
+        ext_name = (ext.get("name") or ext.get("extension") or f"#{i}").strip()
+        srcs = ext.get("sources")
+        if not isinstance(srcs, list):
+            errors.append(f"{ext_name}: sources must be a list")
+            continue
+        for j, src in enumerate(srcs):
+            if not isinstance(src, dict):
+                errors.append(f"{ext_name}: sources[{j}] must be an object")
+                continue
+            base = (src.get("baseUrl") or "").strip()
+            if not base:
+                # Some connector/local extensions intentionally omit a base URL.
+                continue
+            if not base.startswith(("http://", "https://")):
+                errors.append(f"{ext_name}: sources[{j}] baseUrl must be an http(s) URL")
+                continue
+            try:
+                pu = urlparse(base)
+                if not pu.netloc:
+                    raise ValueError("no host")
+            except Exception:
+                errors.append(f"{ext_name}: sources[{j}] baseUrl is not parseable")
+    return errors
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Validate sources/catalog.json structure and samples.")
+    parser = argparse.ArgumentParser(description="Validate sources catalog/manifest structure.")
     parser.add_argument(
         "--path",
         type=Path,
-        default=ROOT / "sources" / "catalog.json",
-        help="Path to catalog JSON",
+        default=ROOT / "sources" / "sources.manifest.json",
+        help="Path to sources data JSON",
     )
     args = parser.parse_args(argv)
 
@@ -75,15 +108,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Invalid JSON: {exc}", file=sys.stderr)
         return 1
 
-    errs = validate_payload(payload)
+    if isinstance(payload, list):
+        errs = validate_manifest_payload(payload)
+    else:
+        errs = validate_payload(payload)
     if errs:
         for e in errs:
             print(e, file=sys.stderr)
         print(f"{len(errs)} error(s).", file=sys.stderr)
         return 1
 
-    sources = payload.get("sources") or []
-    print(f"OK: {len(sources)} source(s) validated at {path}")
+    if isinstance(payload, list):
+        total = 0
+        for ext in payload:
+            if isinstance(ext, dict) and isinstance(ext.get("sources"), list):
+                total += len(ext.get("sources"))
+        print(f"OK: manifest validated at {path} ({len(payload)} extension records, {total} sources)")
+    else:
+        sources = payload.get("sources") or []
+        print(f"OK: {len(sources)} source(s) validated at {path}")
     return 0
 
 

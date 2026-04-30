@@ -43,8 +43,16 @@
                 <span class="status-pill {{ eff }}">{{ eff }}</span>
                 <span>{{ s.domains | join(', ') }}</span>
                 · {{ s.language }} · {{ s.content_type }}
+                {% if s.nsfw %}· NSFW{% endif %}
                 {% if s.needs_js %}· needs JS{% endif %}
               </div>
+              {% if s.extension or s.package %}
+                <div class="muted" style="font-size:0.8rem;margin-bottom:8px;">
+                  {% if s.extension %}<span>{{ s.extension }}</span>{% endif %}
+                  {% if s.package %}{% if s.extension %} · {% endif %}<code>{{ s.package }}</code>{% endif %}
+                  {% if s.version %} · v{{ s.version }}{% endif %}
+                </div>
+              {% endif %}
               {% if h.get('checked_at') %}
                 <div class="muted" style="font-size:0.85rem;">Checked: {{ h.get('checked_at') }}{% if h.get('chapter_num') is not none %} · latest ch. {{ h.get('chapter_num') }}{% endif %}</div>
               {% endif %}

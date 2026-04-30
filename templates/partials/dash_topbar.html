@@ -9,7 +9,7 @@
   </a>
 
   <form class="dash-topbar-search" method="get" action="{{ url_for('index') }}" role="search">
-    <input type="search" name="q" value="{{ _sq }}" placeholder="Search your library…" autocomplete="off" aria-label="Search library" />
+    <input id="searchInput" type="search" name="q" value="{{ _sq }}" placeholder="Search your library…" autocomplete="off" aria-label="Search library" />
     <input type="hidden" name="sort" value="{{ _sort }}" />
     <input type="hidden" name="page" value="1" />
     <button type="submit" class="dash-topbar-search-submit" aria-label="Search">⌕</button>

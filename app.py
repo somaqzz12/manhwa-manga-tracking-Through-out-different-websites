@@ -3566,7 +3566,7 @@ def api_alt_sources():
             continue
         hid = src.get("id")
         row = by_h.get(hid) if hid else {}
-        st = str((row or {}).get("status") or "partial").lower()
+        st = str((row or {}).get("check_status") or (row or {}).get("status") or "partial").lower()
         if st == "broken":
             continue
         alternatives.append(

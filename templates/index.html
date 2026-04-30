@@ -11,8 +11,9 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%239880ff'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
 </head>
-<body class="page-dashboard">
-  <div class="app-shell app-shell--full">
+<body class="page-dashboard" data-theme="dark">
+  <div class="app-shell app-shell--dashboard">
+    {% include "partials/dashboard_sidebar.html" %}
     <div class="main dash-main">
       {% include "partials/dash_topbar.html" %}
       {% include "partials/library_tools_drawer.html" %}
@@ -211,6 +212,21 @@
         tab.addEventListener("click", () => apply(tab.getAttribute("data-filter") || "all"));
       });
       if (genreFilterEl) genreFilterEl.addEventListener("change", refreshGrid);
+    })();
+
+    (function sidebarSearchBridge() {
+      const sideSearch = document.getElementById("sidebarSearch");
+      const topSearch = document.getElementById("searchInput");
+      const topForm = topSearch?.closest("form");
+      if (!sideSearch || !topSearch) return;
+      sideSearch.value = topSearch.value || "";
+      let timer = null;
+      sideSearch.addEventListener("input", () => {
+        topSearch.value = sideSearch.value;
+        if (!topForm) return;
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => topForm.submit(), 220);
+      });
     })();
 
     document.querySelectorAll("form[data-loading-form='true']").forEach((form) => {
