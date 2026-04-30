@@ -3278,6 +3278,11 @@ def discover_page():
                 resolved["status"] = "supported" if support not in ("manual_only", "blocked", "unavailable") else "manual"
                 resolved["supportLabel"] = label
                 resolved["chaptersFound"] = len(preview.chapters or [])
+                # Avoid rendering MangaDex anti-hotlink cover placeholders in UI.
+                src_name = str(resolved.get("source_name") or "").strip().lower()
+                src_url = str(resolved.get("source_url") or "").strip().lower()
+                if src_name == "mangadex" or "mangadex.org" in src_url:
+                    resolved["cover_url"] = ""
             except Exception:
                 app.logger.exception("discover url resolver failed for input=%r", normalized_url_q)
                 resolved = {
