@@ -1232,6 +1232,185 @@ def _bookmark_title_search_clause(needle: str) -> tuple[str, list]:
     return " AND instr(lower(b.title), lower(?)) > 0", [n_lower]
 
 
+def _uli_title_search_clause(needle: str) -> tuple[str, list]:
+    n = (needle or "").strip()
+    if not n:
+        return "", []
+    n = n[:200].lower()
+    if IS_POSTGRES:
+        return (
+            " AND (position(lower(?) in lower(s.title::text)) > 0 OR position(lower(?) in lower(coalesce(s.canonical_title::text, ''))) > 0)",
+            [n, n],
+        )
+    return (
+        " AND (instr(lower(s.title), lower(?)) > 0 OR instr(lower(coalesce(s.canonical_title, '')), lower(?)) > 0)",
+        [n, n],
+    )
+
+
+def _fetch_user_library_uli_rows(conn, user_id: int, search_q: str) -> list[dict]:
+    clause, params = _uli_title_search_clause(search_q)
+    rows = conn.execute(
+        f"""
+        SELECT
+            uli.id AS uli_id,
+            uli.series_id,
+            uli.preferred_source_id,
+            s.slug AS series_slug,
+            s.title AS series_title,
+            s.canonical_title AS series_canonical_title,
+            s.cover_url AS series_cover_url,
+            s.norm_title_key,
+            s.description AS series_description,
+            ss.source_url,
+            ss.normalized_source_url,
+            ss.source_name,
+            ss.source_domain,
+            ss.support_level,
+            ss.detection_source,
+            ss.latest_chapter,
+            ss.latest_chapter_url,
+            ss.chapter_count,
+            ss.health_status
+        FROM user_library_item uli
+        INNER JOIN series s ON s.id = uli.series_id
+        INNER JOIN series_source ss ON ss.id = uli.preferred_source_id
+        WHERE uli.user_id = ?
+        {clause}
+        ORDER BY uli.id ASC
+        """,
+        (user_id, *params),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _dashboard_chapter_num_from_label(lc: str) -> Optional[float]:
+    """Best-effort chapter float for dashboard chips (plain '99' or 'Ch. 12')."""
+    if not (lc or "").strip():
+        return None
+    pn = parse_chapter_number(lc)
+    if pn is not None:
+        return pn
+    try:
+        return float(str(lc).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _bookmark_row_matches_uli(bookmark: dict, uli: dict) -> bool:
+    bu = normalize_bookmark_url(bookmark.get("url") or "")
+    su = (uli.get("normalized_source_url") or "").strip().lower()
+    if bu and su and bu == su:
+        return True
+    bkey = _normalize_title_duplicate_key(bookmark.get("title") or "")
+    tkey = (uli.get("norm_title_key") or "").strip().lower()
+    if bkey and tkey and bkey == tkey:
+        return True
+    return False
+
+
+def _synthetic_dashboard_row_from_uli(uli: dict, user_id: int) -> dict:
+    uli_id = int(uli["uli_id"])
+    src_url = (uli.get("source_url") or "").strip()
+    lc_raw = uli.get("latest_chapter")
+    lc = str(lc_raw).strip() if lc_raw is not None else ""
+    lcn = _dashboard_chapter_num_from_label(lc) if lc else None
+    lcurl = ((uli.get("latest_chapter_url") or "").strip() or src_url).strip()
+    sl = str(uli.get("support_level") or "")
+    hs = str(uli.get("health_status") or "")
+    return {
+        "id": -uli_id,
+        "user_id": user_id,
+        "story_id": f"norm-uli-{uli_id}",
+        "title": (uli.get("series_title") or "").strip() or "Series",
+        "url": src_url,
+        "cover_url": (uli.get("series_cover_url") or "").strip(),
+        "latest_seen": lc or None,
+        "latest_seen_num": lcn,
+        "latest_seen_url": lcurl or src_url,
+        "new_update": 0,
+        "last_checked": None,
+        "last_error": None,
+        "series_key": None,
+        "canonical_title": uli.get("series_canonical_title"),
+        "description": None,
+        "chapter_count": uli.get("chapter_count"),
+        "source_name": uli.get("source_name"),
+        "source_domain": uli.get("source_domain"),
+        "support_level": uli.get("support_level"),
+        "detection_source": uli.get("detection_source"),
+        "read_chapter_num": None,
+        "read_chapter_label": None,
+        "read_source_url": None,
+        "created_at": None,
+        "genre": "",
+        "has_bookmark": False,
+        "_support_label": library_model.public_support_label(sl, hs),
+        "_chapter_count_display": uli.get("chapter_count"),
+        "_source_display_name": (uli.get("source_name") or "").strip(),
+        "_source_display_domain": (uli.get("source_domain") or "").strip(),
+    }
+
+
+def _overlay_uli_on_bookmark_row(bookmark: dict, uli: dict) -> dict:
+    merged = dict(bookmark)
+    st = (uli.get("series_title") or "").strip()
+    if st:
+        bt = (merged.get("title") or "").strip()
+        merged["title"] = max(bt, st, key=len) if bt and st else (st or bt)
+    if not (merged.get("cover_url") or "").strip():
+        sc = (uli.get("series_cover_url") or "").strip()
+        if sc:
+            merged["cover_url"] = sc
+    src_url = (uli.get("source_url") or "").strip()
+    if src_url:
+        merged["url"] = src_url
+    lcurl = ((uli.get("latest_chapter_url") or "").strip() or src_url).strip()
+    if lcurl:
+        merged["latest_seen_url"] = lcurl
+    lc = uli.get("latest_chapter")
+    if lc is not None and str(lc).strip():
+        lcs = str(lc).strip()
+        if merged.get("latest_seen_num") is None:
+            pn = _dashboard_chapter_num_from_label(lcs)
+            if pn is not None:
+                merged["latest_seen_num"] = pn
+        if not (merged.get("latest_seen") or "").strip():
+            merged["latest_seen"] = lcs
+    if merged.get("chapter_count") is None and uli.get("chapter_count") is not None:
+        merged["chapter_count"] = uli.get("chapter_count")
+    sl = str(uli.get("support_level") or "")
+    hs = str(uli.get("health_status") or "")
+    merged["_support_label"] = library_model.public_support_label(sl, hs)
+    merged["_chapter_count_display"] = uli.get("chapter_count")
+    merged["_source_display_name"] = (uli.get("source_name") or "").strip()
+    merged["_source_display_domain"] = (uli.get("source_domain") or "").strip()
+    merged["has_bookmark"] = True
+    return merged
+
+
+def _merge_bookmarks_with_user_library(
+    bookmark_rows: list[dict],
+    uli_rows: list[dict],
+    user_id: int,
+) -> list[dict]:
+    consumed: set[int] = set()
+    out: list[dict] = []
+    for uli in uli_rows:
+        matched = [b for b in bookmark_rows if _bookmark_row_matches_uli(b, uli)]
+        for b in matched:
+            consumed.add(int(b["id"]))
+        if matched:
+            primary = min(matched, key=lambda x: int(x["id"]))
+            out.append(_overlay_uli_on_bookmark_row(dict(primary), uli))
+        else:
+            out.append(_synthetic_dashboard_row_from_uli(uli, user_id))
+    for b in bookmark_rows:
+        if int(b["id"]) not in consumed:
+            out.append(dict(b))
+    return out
+
+
 def _normalize_title_duplicate_key(title: str) -> str:
     t = (title or "").lower()
     t = re.sub(r"[^a-z0-9]+", " ", t)
@@ -1319,9 +1498,15 @@ def _fetch_user_story_rows(user_id: int, search_q: str = "") -> tuple[list[dict]
             """,
             (user_id, user_id, user_id, *title_params),
         ).fetchall()
-    raw_rows = [dict(r) for r in rows]
-    raw_by_id = {int(r["id"]): r for r in raw_rows}
-    return raw_rows, raw_by_id
+        bookmark_rows = [dict(r) for r in rows]
+        try:
+            uli_rows = _fetch_user_library_uli_rows(conn, user_id, search_q)
+        except Exception:
+            log.exception("user_library_item dashboard query failed; using bookmarks only")
+            uli_rows = []
+        merged = _merge_bookmarks_with_user_library(bookmark_rows, uli_rows, user_id)
+    raw_by_id = {int(r["id"]): r for r in merged}
+    return merged, raw_by_id
 
 
 def _build_sorted_story_cards(raw_rows: list[dict], raw_by_id: dict[int, dict], sort: str) -> list[dict]:
@@ -3028,8 +3213,13 @@ def discover_page():
             resolved["status"] = "supported" if preview.support_level != "manual" else "manual"
             resolved["supportLabel"] = preview.support_level.replace("_", " ").title()
             resolved["chaptersFound"] = len(preview.chapters or [])
-        except Exception as exc:
-            resolved = {"ok": False, "error": str(exc), "input_url": url_q}
+        except Exception:
+            app.logger.exception("discover url resolver failed for input=%r", url_q)
+            resolved = {
+                "ok": False,
+                "error": "Automatic detection could not read this URL. You can paste it into Add URL and save it manually.",
+                "input_url": url_q,
+            }
     return render_template(
         "discover.html",
         q=q,
@@ -4318,6 +4508,9 @@ def _coerce_preview_payload(raw: dict, *, detection_source: str, fallback_url: s
     if cover_url and not is_public_http_url(cover_url):
         cover_url = ""
     latest_chapter = str(data.get("latest_chapter") or "").strip()
+    latest_chapter_url = str(data.get("latest_chapter_url") or "").strip()
+    if latest_chapter_url and not is_public_http_url(latest_chapter_url):
+        latest_chapter_url = ""
     current_chapter = str(data.get("current_chapter") or "").strip()
     chapter_count_raw = data.get("chapter_count")
     try:
@@ -4350,6 +4543,7 @@ def _coerce_preview_payload(raw: dict, *, detection_source: str, fallback_url: s
         "description": description,
         "cover_url": cover_url,
         "latest_chapter": latest_chapter,
+        "latest_chapter_url": latest_chapter_url,
         "current_chapter": current_chapter,
         "chapter_count": chapter_count,
         "chapters": chapters,
@@ -4640,17 +4834,63 @@ def api_library_add_from_preview():
     detection_source_store = str(detection_source or "manual").strip().lower()[:32]
     latest_seen_url = canonical_url
     latest_chapter_url_norm = None
-    if isinstance(chapters_preview, list) and chapters_preview:
-        last = chapters_preview[-1]
-        if isinstance(last, dict):
-            ch_url = str(last.get("url") or "").strip()
-            if ch_url and is_public_http_url(ch_url):
-                try:
-                    latest_seen_url = resolve_series_listing_url(ch_url)
-                    latest_chapter_url_norm = latest_seen_url
-                except Exception:
-                    latest_seen_url = ch_url
-                    latest_chapter_url_norm = ch_url
+
+    def _safe_public_url(raw: str) -> Optional[str]:
+        v = str(raw or "").strip()
+        if not v or not is_public_http_url(v):
+            return None
+        try:
+            return resolve_series_listing_url(v)
+        except Exception:
+            return v
+
+    def _chapter_num(raw: Any) -> Optional[float]:
+        txt = str(raw or "").strip()
+        if not txt:
+            return None
+        p = parse_chapter_number(txt)
+        if p is not None:
+            return p
+        try:
+            return float(txt)
+        except (TypeError, ValueError):
+            return None
+
+    direct_latest_url = _safe_public_url(str(normalized_input.get("latest_chapter_url") or ""))
+    if direct_latest_url:
+        latest_seen_url = direct_latest_url
+        latest_chapter_url_norm = direct_latest_url
+    elif isinstance(chapters_preview, list) and chapters_preview:
+        target_latest = str(latest_chapter_raw or "").strip()
+        target_latest_num = _chapter_num(target_latest)
+        chosen_url: Optional[str] = None
+        best_num: Optional[float] = None
+        best_url: Optional[str] = None
+        for ch in chapters_preview[:80]:
+            if not isinstance(ch, dict):
+                continue
+            ch_url = _safe_public_url(ch.get("url"))
+            if not ch_url:
+                continue
+            ch_num_txt = str(ch.get("number") or "").strip()
+            ch_num = _chapter_num(ch_num_txt)
+            if target_latest:
+                if ch_num_txt and ch_num_txt == target_latest:
+                    chosen_url = ch_url
+                    break
+                if target_latest_num is not None and ch_num is not None and ch_num == target_latest_num:
+                    chosen_url = ch_url
+                    break
+            if ch_num is not None and (best_num is None or ch_num > best_num):
+                best_num = ch_num
+                best_url = ch_url
+        chosen_url = chosen_url or best_url
+        if chosen_url:
+            latest_seen_url = chosen_url
+            latest_chapter_url_norm = chosen_url
+        else:
+            latest_seen_url = canonical_url
+            latest_chapter_url_norm = canonical_url
     add_title = title or canonical_title or extract_series_slug(canonical_url).replace("-", " ").title() or "Untitled series"
     norm_meta: dict = {
         "source_url": canonical_url,

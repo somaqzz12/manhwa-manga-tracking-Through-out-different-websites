@@ -63,6 +63,17 @@ def aggregate_story_items(items: list[dict]) -> dict[str, Any]:
     title = max(titles, key=len) if titles else (items[0].get("title") or "")
 
     primary = min(items, key=lambda x: int(x.get("id") or 0))
+    # When no row has a numeric latest (or merge left gaps), still surface chapter URL/label from primary.
+    if latest_row is None:
+        if primary.get("latest_seen_num") is not None:
+            try:
+                latest_num = float(primary["latest_seen_num"])
+            except (TypeError, ValueError):
+                latest_num = None
+        if not (latest_url or "").strip():
+            latest_url = primary.get("latest_seen_url")
+        if not (latest_lbl or "").strip():
+            latest_lbl = primary.get("latest_seen")
     new_update = max(int(it.get("new_update") or 0) for it in items)
 
     hosts: list[str] = []
@@ -92,12 +103,13 @@ def aggregate_story_items(items: list[dict]) -> dict[str, Any]:
 
     story_id = (primary.get("story_id") or "").strip() or effective_story_id(primary)
 
-    return {
+    out: dict[str, Any] = {
         "id": int(primary["id"]),
         "story_id": story_id,
         "title": title,
         "url": primary.get("url") or "",
         "cover_url": cover_url,
+        "chapter_count": primary.get("chapter_count"),
         "latest_seen_num": latest_num,
         "latest_seen_url": latest_url,
         "latest_seen": latest_lbl,
@@ -105,7 +117,9 @@ def aggregate_story_items(items: list[dict]) -> dict[str, Any]:
         "read_source_url": read_url,
         "read_chapter_label": read_lbl,
         "unread_count": unread,
-        "continue_url": (read_url or "").strip() or (primary.get("url") or ""),
+        "continue_url": (read_url or "").strip()
+        or ((latest_url or "").strip() if latest_url else "")
+        or (primary.get("url") or ""),
         "new_update": new_update,
         "source_count": len(items),
         "source_hosts": hosts,
@@ -115,6 +129,18 @@ def aggregate_story_items(items: list[dict]) -> dict[str, Any]:
         "genre": primary.get("genre") or "",
         "series_key": primary.get("series_key"),
     }
+    for k in (
+        "_support_label",
+        "_chapter_count_display",
+        "_source_display_name",
+        "_source_display_domain",
+    ):
+        v = primary.get(k)
+        if v is not None and v != "":
+            out[k] = v
+    if "has_bookmark" in primary:
+        out["has_bookmark"] = bool(primary["has_bookmark"])
+    return out
 
 
 def group_and_aggregate(rows: list[dict]) -> list[dict]:

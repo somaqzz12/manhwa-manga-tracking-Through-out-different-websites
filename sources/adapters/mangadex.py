@@ -20,13 +20,19 @@ def _cover_url_from_manga(manga_obj: dict, included: list[dict]) -> Optional[str
     for rel in (manga_obj.get("relationships") or []):
         if rel.get("type") != "cover_art":
             continue
+        rel_fn = (rel.get("attributes") or {}).get("fileName")
+        if isinstance(rel_fn, str) and rel_fn.strip():
+            safe_fn = rel_fn.strip().lstrip("/")
+            return f"{MANGADEX_CDN_COVERS}/{mid}/{safe_fn}"
         cid = rel.get("id")
         node = by_id.get(str(cid)) if cid else None
         if not node:
             continue
         fn = (node.get("attributes") or {}).get("fileName")
         if fn and isinstance(fn, str) and mid:
-            return f"{MANGADEX_CDN_COVERS}/{mid}/{fn}"
+            safe_fn = fn.strip().lstrip("/")
+            if safe_fn:
+                return f"{MANGADEX_CDN_COVERS}/{mid}/{safe_fn}"
     return None
 
 

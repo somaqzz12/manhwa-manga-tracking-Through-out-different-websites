@@ -22,6 +22,42 @@ class _FakeResp:
 
 
 class MetadataDiscoveryTests(unittest.TestCase):
+    def test_mangadex_cover_prefers_relationship_file_name(self) -> None:
+        mid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        cid = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        manga_payload = {
+            "data": [
+                {
+                    "id": mid,
+                    "type": "manga",
+                    "attributes": {"title": {"en": "Chainsaw Man"}},
+                    "relationships": [
+                        {"id": cid, "type": "cover_art", "attributes": {"fileName": "from-relationship.jpg"}}
+                    ],
+                }
+            ],
+            "included": [
+                {"id": cid, "type": "cover_art", "attributes": {"fileName": "from-included.jpg"}},
+            ],
+        }
+        chapter_payload = {"data": [{"id": "ch1", "attributes": {"chapter": "12"}}], "total": 120}
+
+        def fake_get(url: str, *args, **kwargs):
+            if "/chapter" in url:
+                return _FakeResp(chapter_payload)
+            return _FakeResp(manga_payload)
+
+        def session_factory():
+            s = MagicMock()
+            s.get.side_effect = lambda url, **kw: fake_get(url, **kw)
+            return s
+
+        with patch("sources.adapters.mangadex.requests.get", side_effect=fake_get):
+            with patch("sources.adapters.mangadex.requests.Session", side_effect=session_factory):
+                rows = MangaDexAdapter().search("chainsaw")
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["cover_url"].endswith("/from-relationship.jpg"))
+
     def test_mangadex_search_parses_cover_and_chapter_meta(self) -> None:
         mid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
         cid = "ffffffff-ffff-ffff-ffff-ffffffffffff"
@@ -71,6 +107,40 @@ class MetadataDiscoveryTests(unittest.TestCase):
         self.assertEqual(r.get("latest_chapter"), "12")
         self.assertEqual(r.get("chapter_count"), 120)
         self.assertEqual(r["url"], f"https://mangadex.org/title/{mid}")
+
+    def test_mangadex_search_cover_falls_back_to_included(self) -> None:
+        mid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        cid = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        manga_payload = {
+            "data": [
+                {
+                    "id": mid,
+                    "type": "manga",
+                    "attributes": {"title": {"en": "Chainsaw Man"}},
+                    "relationships": [{"id": cid, "type": "cover_art"}],
+                }
+            ],
+            "included": [
+                {"id": cid, "type": "cover_art", "attributes": {"fileName": "from-included.jpg"}},
+            ],
+        }
+        chapter_payload = {"data": [{"id": "ch1", "attributes": {"chapter": "12"}}], "total": 120}
+
+        def fake_get(url: str, *args, **kwargs):
+            if "/chapter" in url:
+                return _FakeResp(chapter_payload)
+            return _FakeResp(manga_payload)
+
+        def session_factory():
+            s = MagicMock()
+            s.get.side_effect = lambda url, **kw: fake_get(url, **kw)
+            return s
+
+        with patch("sources.adapters.mangadex.requests.get", side_effect=fake_get):
+            with patch("sources.adapters.mangadex.requests.Session", side_effect=session_factory):
+                rows = MangaDexAdapter().search("chainsaw")
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["cover_url"].endswith("/from-included.jpg"))
 
     def test_discover_search_formats_api_shape(self) -> None:
         raw = {

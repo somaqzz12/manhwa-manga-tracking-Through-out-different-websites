@@ -117,7 +117,7 @@
         <section class="panel discover-section">
           <h2>URL detection</h2>
           {% if resolved.error %}
-            <div class="flash warning">Manual tracking only. Automatic detection could not read this page from the server. You can save it manually, or open it and use the extension to capture metadata from your browser.</div>
+            <div class="flash warning">Manual tracking only. {{ resolved.error|e }}</div>
           {% else %}
             <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
               {% if resolved.cover_url %}

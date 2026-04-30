@@ -186,7 +186,27 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn("Search manga, manhwa, or paste a URL...", body)
         self.assertIn('id="hero-discover-form"', body)
         self.assertIn('id="hero-q"', body)
-        self.assertIn("?url=", body)
+        self.assertIn('window.location.href = addBase + "?url="', body)
+        self.assertNotIn('window.location.href = discoverBase + "?url="', body)
+
+    def test_public_drawer_uses_public_navigation_links(self):
+        res = self.client.get("/discover")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn('href="/">Home</a>', body)
+        self.assertIn("Open App</a>", body)
+        self.assertIn("Sign in</a>", body)
+        self.assertIn("Create account</a>", body)
+        self.assertNotIn(">Library</a>", body)
+        self.assertNotIn("Import / Export</a>", body)
+
+    def test_discover_url_error_hides_raw_exception_details(self):
+        with patch.object(app, "source_engine_resolve_url", side_effect=RuntimeError("secret stack trace detail")):
+            res = self.client.get("/discover?url=https%3A%2F%2Fbad.example%2Fseries")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("Automatic detection could not read this URL.", body)
+        self.assertNotIn("secret stack trace detail", body)
 
     def test_discover_query_specific_results_or_empty_state(self):
         from unittest.mock import patch

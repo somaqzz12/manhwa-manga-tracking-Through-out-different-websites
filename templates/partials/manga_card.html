@@ -45,6 +45,20 @@
     </div>
     <div class="story-body">
       <h2 class="story-title">{{ b["title"] }}</h2>
+      {% if b.get('_source_display_name') or b.get('_source_display_domain') or b.get('_chapter_count_display') is not none or b.get('_support_label') or b.get('chapter_count') is not none %}
+      <p class="muted" style="margin:4px 0 0;font-size:0.8rem;line-height:1.35;">
+        {% if b.get('_source_display_name') %}{{ b._source_display_name|e }}{% endif %}
+        {% if b.get('_source_display_domain') %}<span class="muted"> · {{ b._source_display_domain|e }}</span>{% endif %}
+        {% if b.get('_chapter_count_display') is not none %}
+        <span class="muted"> · {{ b._chapter_count_display|int }} ch</span>
+        {% elif b.get('chapter_count') is not none %}
+        <span class="muted"> · {{ b.chapter_count|int }} ch</span>
+        {% endif %}
+        {% if b.get('_support_label') %}
+        <span class="muted"> · {{ b._support_label|e }}</span>
+        {% endif %}
+      </p>
+      {% endif %}
       {% if b.last_error %}
         <span class="story-inline-err" title="{{ b.last_error|e }}">Check error</span>
       {% endif %}
@@ -60,7 +74,7 @@
       <summary class="story-card-menu-trigger" aria-label="More actions">⋯</summary>
       <div class="story-card-menu-panel">
         <a href="{{ b['url'] }}" target="_blank" rel="noreferrer">Listing</a>
-        {% if not demo_mode %}
+        {% if not demo_mode and b.get('has_bookmark', true) %}
         <a href="{{ url_for('edit_bookmark', bookmark_id=b['id'], **edit_link_kw) }}">Edit</a>
         <form action="{{ url_for('check_story_group') }}" method="post" data-loading-form="true">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

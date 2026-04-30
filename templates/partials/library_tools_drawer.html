@@ -2,6 +2,7 @@
 {% set _sq = search_q|default('', true) %}
 {% set _sort = sort|default('added', true) %}
 {% set _page = page|default(1, true) %}
+{% set _is_app_page = request.path.startswith('/app') or request.endpoint in ['index', 'next_up', 'edit_bookmark', 'account_settings', 'delete_account'] %}
 
 <div class="drawer-backdrop" id="library-tools-backdrop" aria-hidden="true"></div>
 <aside class="library-drawer" id="library-tools-panel" aria-hidden="true" aria-labelledby="library-menu-title">
@@ -13,16 +14,27 @@
 
     <nav class="drawer-nav mobile-nav-section" aria-label="Site">
       <span class="sidebar-label">Navigate</span>
+      {% if _is_app_page %}
       <a class="drawer-nav-link {% if request.endpoint == 'index' %}is-active{% endif %}" href="{{ url_for('index') }}">Library</a>
       <a class="drawer-nav-link {% if request.endpoint == 'app_add_url' %}is-active{% endif %}" href="{{ url_for('app_add_url') }}">Add URL</a>
       <a class="drawer-nav-link {% if request.endpoint == 'discover_page' %}is-active{% endif %}" href="{{ url_for('discover_page') }}">Discover</a>
-      {% if current_user is defined and current_user and not demo_mode|default(false) %}
-      <a class="drawer-nav-link {% if request.endpoint == 'next_up' %}is-active{% endif %}" href="{{ url_for('next_up') }}">Next up</a>
-      {% endif %}
       <a class="drawer-nav-link {% if request.endpoint == 'sources_page' %}is-active{% endif %}" href="{{ url_for('sources_page') }}">Sources</a>
       <a class="drawer-nav-link {% if request.endpoint == 'source_requests_page' %}is-active{% endif %}" href="{{ url_for('source_requests_page') }}">Source Requests</a>
       <a class="drawer-nav-link {% if request.endpoint == 'extension_page' %}is-active{% endif %}" href="{{ url_for('extension_page') }}">Extension</a>
       <a class="drawer-nav-link" href="/export" title="Export JSON. Import from Restore backup below when on the dashboard.">Import / Export</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'account_settings' %}is-active{% endif %}" href="{{ url_for('account_settings') }}">Settings</a>
+      {% else %}
+      <a class="drawer-nav-link {% if request.endpoint == 'home' %}is-active{% endif %}" href="{{ url_for('home') }}">Home</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'discover_page' %}is-active{% endif %}" href="{{ url_for('discover_page') }}">Discover</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'sources_page' %}is-active{% endif %}" href="{{ url_for('sources_page') }}">Sources</a>
+      <a class="drawer-nav-link {% if request.endpoint == 'extension_page' %}is-active{% endif %}" href="{{ url_for('extension_page') }}">Extension</a>
+      <a class="drawer-nav-link" href="{{ github_url|default('https://github.com') }}" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a class="drawer-nav-link" href="{{ url_for('index') }}">Open App</a>
+      {% if not (current_user is defined and current_user and not demo_mode|default(false)) %}
+      <a class="drawer-nav-link" href="{{ url_for('auth_page', mode='login') }}">Sign in</a>
+      <a class="drawer-nav-link" href="{{ url_for('auth_page', mode='register') }}">Create account</a>
+      {% endif %}
+      {% endif %}
       <a class="drawer-nav-link {% if request.endpoint == 'privacy_page' %}is-active{% endif %}" href="{{ url_for('privacy_page') }}">Privacy</a>
       <a class="drawer-nav-link {% if request.endpoint == 'changelog_page' %}is-active{% endif %}" href="{{ url_for('changelog_page') }}">Changelog</a>
       <a class="drawer-nav-link {% if request.endpoint == 'demo_dashboard' %}is-active{% endif %}" href="{{ url_for('demo_dashboard') }}">Demo</a>
@@ -121,17 +133,19 @@
 
     <nav class="drawer-nav drawer-nav--account" aria-label="Account">
       <span class="sidebar-label">Account</span>
-      {% if current_user is defined and current_user and not demo_mode|default(false) %}
+      {% if _is_app_page and current_user is defined and current_user and not demo_mode|default(false) %}
       <a class="drawer-nav-link {% if request.endpoint == 'account_settings' %}is-active{% endif %}" href="{{ url_for('account_settings') }}">Settings</a>
       <a class="drawer-nav-link {% if request.endpoint == 'delete_account' %}is-active{% endif %}" href="{{ url_for('delete_account') }}">Delete account</a>
       <form action="{{ url_for('logout') }}" method="post" data-loading-form="true" style="margin:0;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <button type="submit" class="drawer-nav-link drawer-nav-link--button" data-loading-text="…">Log out</button>
       </form>
-      {% elif demo_mode|default(false) %}
+      {% elif _is_app_page and demo_mode|default(false) %}
+      <a class="drawer-nav-link drawer-nav-link--accent" href="{{ url_for('auth_page') }}">Sign in</a>
+      {% elif _is_app_page %}
       <a class="drawer-nav-link drawer-nav-link--accent" href="{{ url_for('auth_page') }}">Sign in</a>
       {% else %}
-      <a class="drawer-nav-link drawer-nav-link--accent" href="{{ url_for('auth_page') }}">Sign in</a>
+      <a class="drawer-nav-link" href="{{ url_for('index') }}">Dashboard</a>
       {% endif %}
     </nav>
 

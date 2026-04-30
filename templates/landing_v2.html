@@ -469,6 +469,7 @@
       var form = document.getElementById("hero-discover-form");
       var input = document.getElementById("hero-q");
       var discoverBase = {{ url_for('discover_page')|tojson }};
+      var addBase = {{ url_for('app_add_url')|tojson }};
       if (!form || !input) return;
       form.addEventListener("submit", function (e) {
         var btn = form.querySelector('button[type="submit"]');
@@ -480,7 +481,7 @@
         var v = (input.value || "").trim();
         if (/^https?:\/\//i.test(v)) {
           e.preventDefault();
-          window.location.href = discoverBase + "?url=" + encodeURIComponent(v);
+          window.location.href = addBase + "?url=" + encodeURIComponent(v);
         }
       });
     })();

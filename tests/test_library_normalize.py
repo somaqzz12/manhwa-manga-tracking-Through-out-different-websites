@@ -148,6 +148,83 @@ class LibraryNormalizeTests(unittest.TestCase):
             self.assertEqual(str(src["detection_source"]), "extension")
             self.assertEqual(str(src["support_level"]), "extension_assisted")
 
+    def test_add_from_preview_prefers_direct_latest_chapter_url(self):
+        uid = self._make_user("latest-direct@example.com")
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        payload = {
+            "source_url": "https://example.com/series/demo",
+            "title": "Direct latest",
+            "support_level": "manual_only",
+            "latest_chapter": "20",
+            "latest_chapter_url": "https://example.com/series/demo/chapter-20",
+            "chapters": [
+                {"number": "19", "url": "https://example.com/series/demo/chapter-19"},
+                {"number": "20", "url": "https://example.com/series/demo/chapter-20-older"},
+            ],
+        }
+        with patch.object(app, "is_public_http_url", return_value=True):
+            res = self.client.post("/api/library/add-from-preview", json=payload)
+        self.assertEqual(res.status_code, 200)
+        lib = (res.get_json() or {}).get("library") or {}
+        with app.get_conn() as conn:
+            src = conn.execute(
+                "SELECT latest_chapter_url FROM series_source WHERE id = ?",
+                (lib["series_source_id"],),
+            ).fetchone()
+        self.assertEqual(str(src["latest_chapter_url"] or ""), "https://example.com/series/demo/chapter-20")
+
+    def test_add_from_preview_unordered_chapters_match_latest_number(self):
+        uid = self._make_user("latest-unordered@example.com")
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        payload = {
+            "source_url": "https://example.com/series/demo2",
+            "title": "Unordered latest",
+            "support_level": "manual_only",
+            "latest_chapter": "7",
+            "chapters": [
+                {"number": "9", "url": "https://example.com/series/demo2/chapter-9"},
+                {"number": "7", "url": "https://example.com/series/demo2/chapter-7"},
+                {"number": "8", "url": "https://example.com/series/demo2/chapter-8"},
+            ],
+        }
+        with patch.object(app, "is_public_http_url", return_value=True):
+            res = self.client.post("/api/library/add-from-preview", json=payload)
+        self.assertEqual(res.status_code, 200)
+        lib = (res.get_json() or {}).get("library") or {}
+        with app.get_conn() as conn:
+            src = conn.execute(
+                "SELECT latest_chapter_url FROM series_source WHERE id = ?",
+                (lib["series_source_id"],),
+            ).fetchone()
+        self.assertEqual(str(src["latest_chapter_url"] or ""), "https://example.com/series/demo2/chapter-7")
+
+    def test_add_from_preview_chapter_url_falls_back_to_listing(self):
+        uid = self._make_user("latest-fallback@example.com")
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = uid
+        payload = {
+            "source_url": "https://example.com/series/no-ch-url",
+            "title": "Fallback latest",
+            "support_level": "manual_only",
+            "latest_chapter": "11",
+            "chapters": [
+                {"number": "11", "url": ""},
+                {"number": "10", "url": None},
+            ],
+        }
+        with patch.object(app, "is_public_http_url", return_value=True):
+            res = self.client.post("/api/library/add-from-preview", json=payload)
+        self.assertEqual(res.status_code, 200)
+        lib = (res.get_json() or {}).get("library") or {}
+        with app.get_conn() as conn:
+            src = conn.execute(
+                "SELECT source_url, latest_chapter_url FROM series_source WHERE id = ?",
+                (lib["series_source_id"],),
+            ).fetchone()
+        self.assertEqual(str(src["latest_chapter_url"] or ""), str(src["source_url"] or ""))
+
     def test_public_series_page_shows_original_site_for_normalized_slug(self):
         with app.get_conn() as conn:
             now = app._now_iso_z()
