@@ -7,6 +7,11 @@ from bs4 import BeautifulSoup
 CHAPTER_PATTERN = re.compile(r"(chapter|ch\.?|ep\.?|episode)\s*[:#-]?\s*(\d+(?:\.\d+)?)", re.IGNORECASE)
 URL_CHAPTER_PATTERN = re.compile(r"(?:^|[^a-z])(c|chapter|ch|episode|ep)[-_ ]?(\d+(?:\.\d+)?)$", re.IGNORECASE)
 URL_CHAPTER_STEP_PATTERN = re.compile(r"^(chapter|ch|episode|ep)$", re.IGNORECASE)
+# Path segments: /chapter-42, /c-12, /episode-3 (also mid-path)
+URL_CHAPTER_SEGMENT_PATTERN = re.compile(
+    r"(?:/|^)(?:chapter|ch|c|episode|ep)[_-](\d+(?:\.\d+)?)(?:/|$|[?#])",
+    re.IGNORECASE,
+)
 
 
 def parse_chapter_number(text: str) -> Optional[float]:
@@ -40,6 +45,12 @@ def parse_chapter_from_url(url: str) -> Optional[float]:
     tail = tokens[-1]
     match = URL_CHAPTER_PATTERN.search(tail)
     if not match:
+        seg = URL_CHAPTER_SEGMENT_PATTERN.search(path)
+        if seg:
+            try:
+                return float(seg.group(1))
+            except ValueError:
+                pass
         match = re.search(r"(?:chapter|ch|episode|ep)[^0-9]{0,3}(\d+(?:\.\d+)?)", path, re.IGNORECASE)
         if match:
             try:

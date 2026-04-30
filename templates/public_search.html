@@ -3,18 +3,68 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Discover - Manga Watchlist</title>
+  <title>Search — Manga Watchlist</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/public-pages.css') }}">
+  <style>
+    .search-results { margin-top: 1.25rem; display: flex; flex-direction: column; gap: 14px; }
+    .search-card {
+      display: flex; gap: 14px; align-items: flex-start;
+      padding: 12px; border: 1px solid var(--border, #e5e0d8); border-radius: 12px;
+      background: var(--panel, #faf8f5);
+    }
+    .search-card-cover {
+      width: 72px; height: 102px; object-fit: cover; border-radius: 8px;
+      background: var(--panel-2, #eeeae4); flex-shrink: 0;
+    }
+    .search-card-body { flex: 1; min-width: 0; }
+    .search-card-body h3 { margin: 0 0 6px; font-size: 1rem; }
+    .search-meta { font-size: 0.82rem; color: var(--muted, #6b6560); margin: 0 0 8px; line-height: 1.4; }
+    .search-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .search-actions a { font-size: 0.82rem; }
+  </style>
 </head>
 <body class="public-simple">
   <div class="box box--narrow">
-    <h1>Search any manga/manhwa</h1>
-    <form method="get" action="/search">
-      <input class="search-input" name="q" value="{{ q }}" placeholder="Solo Leveling">
+    <h1>Search manga &amp; manhwa</h1>
+    <p class="muted" style="font-size:0.9rem;">Prefer the full experience on <a href="{{ url_for('discover_page') }}">Discover</a>.</p>
+    <form method="get" action="{{ url_for('discover_page') }}">
+      <input class="search-input" name="q" value="{{ q|default('', true) }}" placeholder="Solo Leveling" aria-label="Search query">
       <button type="submit">Search</button>
-      <a href="/">Back home</a>
+      <a href="{{ url_for('home') }}">Back home</a>
     </form>
-    {% if result %}
+
+    {% if results %}
+    <section class="search-results" aria-label="Search results">
+      {% for r in results %}
+      <article class="search-card">
+        {% if r.cover_url %}
+        <img class="search-card-cover" src="{{ r.cover_url|e }}" alt="" width="72" height="102" loading="lazy" decoding="async" referrerpolicy="origin">
+        {% else %}
+        <div class="search-card-cover" aria-hidden="true"></div>
+        {% endif %}
+        <div class="search-card-body">
+          <h3>{{ (r.title or 'Untitled')|e }}</h3>
+          <p class="search-meta">
+            {% if r.source_name or r.best_source %}<strong>{{ (r.source_name or r.best_source)|e }}</strong> · {% endif %}
+            {% if r.support_label %}{{ r.support_label|e }}{% endif %}
+            {% if r.latest_chapter %} · Latest {{ r.latest_chapter|e }}{% endif %}
+          </p>
+          <div class="search-actions">
+            {% set cmp = r.comparison_slug or r.slug %}
+            {% if cmp %}
+            <a href="{{ url_for('public_series', slug=cmp) }}">View sources</a>
+            {% endif %}
+            {% if r.source_url %}
+            <a class="primary" href="{{ url_for('app_add_url', url=r.source_url) }}">Add / Open</a>
+            {% elif r.title %}
+            <a class="primary" href="{{ url_for('app_add_url', title=r.title) }}">Add</a>
+            {% endif %}
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </section>
+    {% elif result %}
     <hr>
     <h2 style="margin-bottom:4px;">{{ result.title }}</h2>
     <p>Found on {{ result.found_on }} sources<br>Recommended: {{ result.recommended }}<br>Latest known chapter: {{ result.latest_chapter }}</p>

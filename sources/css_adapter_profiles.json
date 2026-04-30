@@ -1,0 +1,57 @@
+[
+  {
+    "id": "mangakatana",
+    "display_name": "MangaKatana",
+    "domains": ["mangakatana.com"],
+    "title_selector": "h1, .info__box h1, .series-title",
+    "cover_selector": ".cover img, .series-cover img, .main-cover img, picture img, meta[property=\"og:image\"]",
+    "chapter_link_selector": ".chapter-list a, .chapter__list a, #chapter-list a, ul.chapter-list li a, .chapter-item a",
+    "parsing_strategy": "css_html",
+    "sample_series_url": "https://mangakatana.com/manga/example",
+    "support_level": "site_adapter"
+  },
+  {
+    "id": "manganato",
+    "display_name": "MangaNato",
+    "domains": ["manganato.com", "chapmanganato.com", "natomanga.com"],
+    "title_selector": "h1, .story-info-right h1, .info-top h1",
+    "cover_selector": ".info-image img, .story-info-left img, .manga-info-top img, meta[property=\"og:image\"]",
+    "chapter_link_selector": ".chapter-list a, ul.row-content-chapter li a, .panel-story-chapter-list a",
+    "parsing_strategy": "css_html",
+    "sample_series_url": "https://manganato.com/manga/example",
+    "support_level": "site_adapter"
+  },
+  {
+    "id": "manhuaplus",
+    "display_name": "ManhuaPlus",
+    "domains": ["manhuaplus.com", "www.manhuaplus.com"],
+    "title_selector": "h1, .post-title h1, .series-title h1",
+    "cover_selector": ".summary_image img, .thumb img, .wp-manga-cover img, meta[property=\"og:image\"]",
+    "chapter_link_selector": ".listing-chapters_wrap a, .wp-manga-chapter a, .version-chap a",
+    "parsing_strategy": "css_html",
+    "sample_series_url": "https://manhuaplus.com/manga/example",
+    "support_level": "site_adapter"
+  },
+  {
+    "id": "arenascan",
+    "display_name": "ArenaScan",
+    "domains": ["arenascans.net", "arenascan.net", "arena-scans.net"],
+    "title_selector": "h1, .post-title h1",
+    "cover_selector": ".summary_image img, .thumb img, meta[property=\"og:image\"]",
+    "chapter_link_selector": ".listing-chapters_wrap a, .wp-manga-chapter a, .eph-num a",
+    "parsing_strategy": "css_html",
+    "sample_series_url": "https://arenascans.net/manga/example",
+    "support_level": "site_adapter"
+  },
+  {
+    "id": "toonily",
+    "display_name": "Toonily",
+    "domains": ["toonily.com", "www.toonily.com"],
+    "title_selector": "h1, .post-title h1",
+    "cover_selector": ".summary_image img, .thumb img, meta[property=\"og:image\"]",
+    "chapter_link_selector": ".listing-chapters_wrap a, .wp-manga-chapter a",
+    "parsing_strategy": "css_html",
+    "sample_series_url": "https://toonily.com/manga/example",
+    "support_level": "site_adapter"
+  }
+]
