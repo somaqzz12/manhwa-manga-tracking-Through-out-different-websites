@@ -1,3 +1,5 @@
+# Local/prod-style stack: set SECRET_KEY in the environment before `docker compose up`
+# (e.g. `set SECRET_KEY=...` on Windows or `export SECRET_KEY=...` on Unix).
 services:
   db:
     image: postgres:16-alpine
@@ -16,8 +18,8 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://manga:manga@db:5432/manga
-      SECRET_KEY: "${SECRET_KEY:-dev-docker-secret-change-me}"
-      FLASK_DEBUG: "1"
+      SECRET_KEY: "${SECRET_KEY}"
+      FLASK_DEBUG: "0"
       ALLOW_SQLITE_IN_PRODUCTION: "0"
       DISABLE_AUTO_CHECK: "1"
       INITIAL_AUTO_CHECK: "0"

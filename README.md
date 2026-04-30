@@ -126,7 +126,7 @@ All configuration is via environment variables. The `Required?` column is what t
 
 ## Docker Compose (sketch)
 
-The repo ships [`docker-compose.yml`](docker-compose.yml) with Postgres and the Flask app on port **8000**. Export a strong `SECRET_KEY` before running `docker compose up --build` — tune environment for production (CORS, `DATABASE_URL`, scheduler flags, TLS in front).
+The repo ships [`docker-compose.yml`](docker-compose.yml) with Postgres and the Flask app on port **8000**. Set a strong **`SECRET_KEY`** in your environment before `docker compose up --build` (the compose file does not inject a dev default; `FLASK_DEBUG` is `0`). Tune further for production (CORS, `DATABASE_URL`, scheduler flags, TLS in front).
 
 ## Browser extension
 

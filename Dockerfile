@@ -12,6 +12,7 @@ COPY app.py .
 COPY services ./services
 COPY sources ./sources
 COPY templates ./templates
+COPY static ./static
 
 EXPOSE 8000
 
