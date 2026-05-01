@@ -47,6 +47,10 @@
               <label for="edit-url">Series URL</label>
               <input id="edit-url" name="url" type="text" value="{{ bookmark['url'] }}" placeholder="https://…" aria-label="Series URL" required>
             </div>
+            <div class="row">
+              <label for="edit-notes">Notes <span class="muted">(optional)</span></label>
+              <textarea id="edit-notes" name="notes" rows="3" placeholder="Optional">{{ bookmark.get('notes') or '' }}</textarea>
+            </div>
             <button id="editSubmit" class="btn primary" type="submit" style="width:100%;margin-top:4px;">Save changes</button>
           </form>
         </section>

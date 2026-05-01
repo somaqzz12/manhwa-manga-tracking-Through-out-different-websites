@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import asdict
 from typing import Any
 from urllib.parse import quote
 from urllib.parse import urlparse
 
+import config
 from services import discovery as local_discovery
 from sources.adapters.mangadex import MangaDexAdapter
 from sources import resolver as source_resolver
-
-SHOW_DEMO_CONTENT = os.getenv("SHOW_DEMO_CONTENT", "").strip().lower() in ("1", "true", "yes")
 
 MANGADEX_UUID_SLUG = re.compile(
     r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
@@ -236,7 +234,7 @@ def discover_search(query: str, *, live: bool = False) -> dict[str, Any]:
     if merged:
         return {"ok": True, "results": merged, "is_demo": False, "notes": notes}
 
-    if SHOW_DEMO_CONTENT:
+    if config.SHOW_DEMO_CONTENT:
         local = local_discovery.search_local_series(q)[:8]
         local_fmt = [_format_local_demo_row(r) for r in local]
         is_demo = bool(local_fmt)

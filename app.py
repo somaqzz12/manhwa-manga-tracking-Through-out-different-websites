@@ -89,7 +89,7 @@ log = logging.getLogger(__name__)
 
 
 def _show_demo_content() -> bool:
-    return os.getenv("SHOW_DEMO_CONTENT", "").strip().lower() in ("1", "true", "yes")
+    return config.SHOW_DEMO_CONTENT
 
 
 def _now_iso_z() -> str:
@@ -523,6 +523,46 @@ def apply_manual_read_through(user_id: int, bookmark_id: int, chapter_num: float
                 "UPDATE bookmarks SET new_update = 0 WHERE id = ? AND user_id = ?",
                 (bookmark_id, user_id),
             )
+
+
+def _group_bookmark_ids(conn, user_id: int, bookmark_id: int) -> list[int]:
+    row = conn.execute(
+        "SELECT id, story_id FROM bookmarks WHERE id = ? AND user_id = ?",
+        (bookmark_id, user_id),
+    ).fetchone()
+    if not row:
+        return []
+    sid = (row["story_id"] or "").strip()
+    if sid:
+        rows = conn.execute(
+            "SELECT id FROM bookmarks WHERE user_id = ? AND story_id = ? ORDER BY id ASC",
+            (user_id, sid),
+        ).fetchall()
+        return [int(r["id"]) for r in rows]
+    return [int(row["id"])]
+
+
+def _max_read_chapter_group(conn, user_id: int, ids: list[int]) -> tuple[Optional[float], int]:
+    best: Optional[float] = None
+    best_bid = min(ids)
+    for bid in ids:
+        r = conn.execute(
+            """
+            SELECT chapter_num FROM reading_progress
+            WHERE user_id = ? AND bookmark_id = ?
+            ORDER BY id DESC LIMIT 1
+            """,
+            (user_id, bid),
+        ).fetchone()
+        if r and r["chapter_num"] is not None:
+            try:
+                n = float(r["chapter_num"])
+            except (TypeError, ValueError):
+                continue
+            if best is None or n > best:
+                best = n
+                best_bid = bid
+    return best, best_bid
 
 
 def _adapt_query_for_postgres(query: str) -> str:
@@ -991,6 +1031,20 @@ def ensure_db_ready() -> None:
 
 def parse_chapter_number(text: str) -> Optional[float]:
     return chapter.parse_chapter_number(text)
+
+
+def parse_user_chapter_value(raw: str) -> Optional[float]:
+    """Accept 'Ch. 12' (via parse_chapter_number) or a plain number like '12' or '12.5'."""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    n = parse_chapter_number(s)
+    if n is not None:
+        return n
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return None
 
 
 def parse_chapter_from_url(url: str) -> Optional[float]:
@@ -2461,6 +2515,8 @@ def _sources_effective_status(src: dict, *, health_available: bool) -> str:
 
 
 def sources_page():
+    if not _show_demo_content():
+        return render_template("coming_later.html", feature_name="Sources catalog")
     sources = source_registry.public_sources_with_health()
     policy_by_domain: dict[str, dict] = {}
     for row in policy_registry.SOURCE_REGISTRY:
@@ -2735,6 +2791,10 @@ def public_library(slug: str):
 
 
 def source_requests_page():
+    if not _show_demo_content():
+        if request.method == "POST":
+            flash("Source requests are not available in this release.", "info")
+        return render_template("coming_later.html", feature_name="Source requests")
     if request.method == "POST":
         domain = (request.form.get("domain") or "").strip().lower()
         title_hint = (request.form.get("title_hint") or "").strip()
@@ -2896,30 +2956,39 @@ LANDING_TRENDING_DEMO = {
 
 
 def home():
-    home_data = discovery_home.build_discovery_home_data(supported_source_policy())
-    _enrich_comparison_slugs(home_data["starter_picks"])
-    _enrich_comparison_slugs(home_data["popular_manhwa"])
-    _enrich_comparison_slugs(home_data["popular_manga"])
-    comp_slug = home_data.get("source_comparison_slug") or "solo-leveling"
-    return render_template(
-        "landing_v2.html",
-        landing_trending_cards=home_data["starter_picks"],
-        landing_popular_manhwa=home_data["popular_manhwa"],
-        landing_popular_manga=home_data["popular_manga"],
-        landing_recent_updates=home_data["recently_updated_examples"],
-        landing_source_comparison=home_data["source_comparison_example"],
-        landing_source_comparison_slug=_effective_comparison_slug(comp_slug),
-        landing_source_summary=home_data["supported_source_summary"],
-        landing_is_demo=home_data["is_demo"],
-        current_user=get_current_user(),
-    )
+    if login_required():
+        return redirect(url_for("index_dashboard_alias"))
+    if _show_demo_content():
+        home_data = discovery_home.build_discovery_home_data(supported_source_policy())
+        _enrich_comparison_slugs(home_data["starter_picks"])
+        _enrich_comparison_slugs(home_data["popular_manhwa"])
+        _enrich_comparison_slugs(home_data["popular_manga"])
+        comp_slug = home_data.get("source_comparison_slug") or "solo-leveling"
+        return render_template(
+            "landing_v2.html",
+            landing_trending_cards=home_data["starter_picks"],
+            landing_popular_manhwa=home_data["popular_manhwa"],
+            landing_popular_manga=home_data["popular_manga"],
+            landing_recent_updates=home_data["recently_updated_examples"],
+            landing_source_comparison=home_data["source_comparison_example"],
+            landing_source_comparison_slug=_effective_comparison_slug(comp_slug),
+            landing_source_summary=home_data["supported_source_summary"],
+            landing_is_demo=home_data["is_demo"],
+            current_user=get_current_user(),
+        )
+    return render_template("tracker_home.html")
 
 
 def public_search():
-    return redirect(url_for("discover_page", q=(request.args.get("q") or "").strip()))
+    q = (request.args.get("q") or "").strip()
+    if _show_demo_content():
+        return redirect(url_for("discover_page", q=q))
+    return redirect(url_for("app_add_url", **({"url": q} if q and ("." in q or "://" in q) else {})))
 
 
 def discover_page():
+    if not _show_demo_content():
+        return render_template("coming_later.html", feature_name="Discover")
     q = (request.args.get("q") or "").strip()
     url_q = (request.args.get("url") or "").strip()
     # Discovery hub: if q looks like a URL, route through URL resolver path.
@@ -3618,25 +3687,51 @@ def add_bookmark():
     user_id = get_actor_user_id()
     title = request.form.get("title", "").strip()
     url = request.form.get("url", "").strip()
+    current_raw = (request.form.get("current_chapter") or "").strip()
+    latest_raw = (request.form.get("latest_chapter") or "").strip()
     if not title or not is_public_http_url(url):
         return redirect_index_preserve_search()
 
+    canonical_url = resolve_series_listing_url(url)
     bookmark_id: Optional[int] = None
     sid = story_groups.new_solo_story_id()
     now = _now_iso_z()
     with get_conn() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO bookmarks (user_id, title, url, cover_url, story_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (user_id, title, url, None, sid, now),
+            (user_id, title, canonical_url, None, sid, now),
         )
         row = conn.execute(
             "SELECT id FROM bookmarks WHERE user_id = ? AND url = ?",
-            (user_id, url),
+            (user_id, canonical_url),
         ).fetchone()
         if row:
             bookmark_id = int(row["id"])
+        if bookmark_id is not None and latest_raw:
+            lat_num = parse_user_chapter_value(latest_raw)
+            if lat_num is not None:
+                lat_lbl = f"Ch {int(lat_num)}" if lat_num.is_integer() else f"Ch {lat_num:g}"
+            else:
+                lat_lbl = latest_raw[:120]
+                lat_num = parse_user_chapter_value(lat_lbl)
+            conn.execute(
+                """
+                UPDATE bookmarks
+                SET latest_seen = ?, latest_seen_num = ?, last_checked = ?, last_error = NULL
+                WHERE id = ? AND user_id = ?
+                """,
+                (lat_lbl, lat_num, _now_iso_z(), bookmark_id, user_id),
+            )
 
-    if bookmark_id is not None:
+    if bookmark_id is not None and current_raw:
+        cur_num = parse_user_chapter_value(current_raw)
+        if cur_num is not None:
+            try:
+                apply_manual_read_through(user_id, bookmark_id, float(cur_num))
+            except ValueError:
+                log.exception("apply_manual_read_through after add_bookmark failed")
+
+    if bookmark_id is not None and not latest_raw:
         bid, uid = bookmark_id, user_id
 
         def _check_after_add():
@@ -3786,7 +3881,7 @@ def edit_bookmark(bookmark_id: int):
     }
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT id, title, url, story_id FROM bookmarks WHERE id = ? AND user_id = ?",
+            "SELECT id, title, url, story_id, notes FROM bookmarks WHERE id = ? AND user_id = ?",
             (bookmark_id, user_id),
         ).fetchone()
         merge_choices = conn.execute(
@@ -3841,6 +3936,7 @@ def edit_bookmark(bookmark_id: int):
                 return redirect(url_for("index", **_index_redirect_kwargs(return_q, return_sort, return_page)))
         title = request.form.get("title", "").strip()
         url = request.form.get("url", "").strip()
+        notes = (request.form.get("notes") or "").strip()
         if not title or not is_public_http_url(url):
             flash("Title and a valid http(s) URL are required.", "error")
             return render_template(
@@ -3876,13 +3972,13 @@ def edit_bookmark(bookmark_id: int):
                 )
             if url_changed:
                 conn.execute(
-                    "UPDATE bookmarks SET title = ?, url = ?, series_key = NULL WHERE id = ? AND user_id = ?",
-                    (title, new_url, bookmark_id, user_id),
+                    "UPDATE bookmarks SET title = ?, url = ?, notes = ?, series_key = NULL WHERE id = ? AND user_id = ?",
+                    (title, new_url, notes or None, bookmark_id, user_id),
                 )
             else:
                 conn.execute(
-                    "UPDATE bookmarks SET title = ? WHERE id = ? AND user_id = ?",
-                    (title, bookmark_id, user_id),
+                    "UPDATE bookmarks SET title = ?, notes = ? WHERE id = ? AND user_id = ?",
+                    (title, notes or None, bookmark_id, user_id),
                 )
         if url_changed:
             try:
@@ -3918,6 +4014,131 @@ def delete_bookmark(bookmark_id: int):
     return redirect_index_preserve_search()
 
 
+def library_increment_current(bookmark_id: int):
+    if not login_required():
+        return _login_redirect_preserve_destination()
+    user_id = get_actor_user_id()
+    with get_conn() as conn:
+        ids = _group_bookmark_ids(conn, user_id, bookmark_id)
+        if not ids:
+            flash("Series not found.", "error")
+            return redirect_index_preserve_search()
+        max_read, target_bid = _max_read_chapter_group(conn, user_id, ids)
+    new_ch = (max_read or 0.0) + 1.0
+    try:
+        apply_manual_read_through(user_id, target_bid, new_ch)
+    except ValueError:
+        flash("Series not found.", "error")
+    else:
+        flash("Progress updated.", "success")
+    return redirect_index_preserve_search()
+
+
+def library_mark_caught_up(bookmark_id: int):
+    if not login_required():
+        return _login_redirect_preserve_destination()
+    user_id = get_actor_user_id()
+    updated = False
+    with get_conn() as conn:
+        ids = _group_bookmark_ids(conn, user_id, bookmark_id)
+        if not ids:
+            flash("Series not found.", "error")
+            return redirect_index_preserve_search()
+        for bid in ids:
+            row = conn.execute(
+                "SELECT latest_seen_num FROM bookmarks WHERE id = ? AND user_id = ?",
+                (bid, user_id),
+            ).fetchone()
+            if row and row["latest_seen_num"] is not None:
+                try:
+                    apply_manual_read_through(user_id, bid, float(row["latest_seen_num"]))
+                except ValueError:
+                    continue
+                updated = True
+    if updated:
+        flash("Marked caught up.", "success")
+    else:
+        flash("Latest chapter is not known yet — run a check or set latest manually.", "warning")
+    return redirect_index_preserve_search()
+
+
+def library_update_chapters(bookmark_id: int):
+    if not login_required():
+        return _login_redirect_preserve_destination()
+    user_id = get_actor_user_id()
+    title = (request.form.get("title") or "").strip()
+    url = (request.form.get("url") or "").strip()
+    notes = (request.form.get("notes") or "").strip()
+    cur_raw = (request.form.get("current_chapter") or "").strip()
+    lat_raw = (request.form.get("latest_chapter") or "").strip()
+    if not title or not is_public_http_url(url):
+        flash("Title and a valid series URL are required.", "error")
+        return redirect_index_preserve_search()
+    new_url = resolve_series_listing_url(url)
+    norm_new = normalize_bookmark_url(new_url)
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, url FROM bookmarks WHERE id = ? AND user_id = ?",
+            (bookmark_id, user_id),
+        ).fetchone()
+        if not row:
+            flash("Series not found.", "error")
+            return redirect_index_preserve_search()
+        old_url = (row["url"] or "").strip()
+        url_changed = new_url.rstrip("/") != old_url.rstrip("/")
+        if url_changed:
+            others = conn.execute(
+                "SELECT url FROM bookmarks WHERE user_id = ? AND id != ?",
+                (user_id, bookmark_id),
+            ).fetchall()
+            if any(normalize_bookmark_url(o["url"]) == norm_new for o in others):
+                flash("That series URL is already in your library.", "error")
+                return redirect_index_preserve_search()
+            conn.execute(
+                """
+                UPDATE bookmarks
+                SET title = ?, url = ?, notes = ?, series_key = NULL
+                WHERE id = ? AND user_id = ?
+                """,
+                (title, new_url, notes or None, bookmark_id, user_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE bookmarks SET title = ?, notes = ? WHERE id = ? AND user_id = ?",
+                (title, notes or None, bookmark_id, user_id),
+            )
+        if lat_raw:
+            lat_num = parse_user_chapter_value(lat_raw)
+            if lat_num is not None:
+                lat_lbl = f"Ch {int(lat_num)}" if lat_num.is_integer() else f"Ch {lat_num:g}"
+            else:
+                lat_lbl = lat_raw[:120]
+                lat_num = parse_user_chapter_value(lat_lbl)
+            now = _now_iso_z()
+            conn.execute(
+                """
+                UPDATE bookmarks
+                SET latest_seen = ?, latest_seen_num = ?, last_checked = ?, last_error = NULL
+                WHERE id = ? AND user_id = ?
+                """,
+                (lat_lbl, lat_num, now, bookmark_id, user_id),
+            )
+    if cur_raw:
+        cur_num = parse_user_chapter_value(cur_raw)
+        if cur_num is not None:
+            try:
+                apply_manual_read_through(user_id, bookmark_id, float(cur_num))
+            except ValueError:
+                pass
+    if url_changed:
+        try:
+            check_single(bookmark_id, user_id, force=True)
+        except Exception:
+            log.exception("check_single after library_update_chapters failed")
+    flash("Saved.", "success")
+    return redirect_index_preserve_search()
+
+
 register_dashboard_routes(
     app,
     {
@@ -3939,6 +4160,9 @@ register_dashboard_routes(
         "read_through": read_through,
         "edit_bookmark": edit_bookmark,
         "delete_bookmark": delete_bookmark,
+        "library_increment_current": library_increment_current,
+        "library_mark_caught_up": library_mark_caught_up,
+        "library_update_chapters": library_update_chapters,
     },
 )
 
@@ -4106,6 +4330,17 @@ def save_progress():
         chapter_label = chapter_url or "Chapter"
 
     upsert_progress(user_id, bookmark_id, parsed_num, chapter_label, chapter_url)
+
+    latest_ext_raw = payload.get("latest_chapter_num")
+    if latest_ext_raw is None and payload.get("latest_chapter") is not None:
+        latest_ext_raw = parse_chapter_number(str(payload.get("latest_chapter") or "").strip())
+    latest_ext_num: Optional[float] = None
+    if latest_ext_raw is not None:
+        try:
+            latest_ext_num = float(latest_ext_raw)
+        except (TypeError, ValueError):
+            latest_ext_num = None
+
     with get_conn() as conn:
         current = conn.execute(
             "SELECT latest_seen_num FROM bookmarks WHERE id = ?",
@@ -4128,6 +4363,28 @@ def save_progress():
                     bookmark_id,
                 ),
             )
+        if latest_ext_num is not None:
+            row2 = conn.execute(
+                "SELECT latest_seen_num FROM bookmarks WHERE id = ? AND user_id = ?",
+                (bookmark_id, user_id),
+            ).fetchone()
+            prev_latest = row2["latest_seen_num"] if row2 else None
+            if prev_latest is None or latest_ext_num > float(prev_latest):
+                ext_lbl = (payload.get("latest_chapter_label") or "").strip()
+                if not ext_lbl:
+                    ext_lbl = (
+                        f"Ch {int(latest_ext_num)}"
+                        if float(latest_ext_num).is_integer()
+                        else f"Ch {latest_ext_num:g}"
+                    )
+                conn.execute(
+                    """
+                    UPDATE bookmarks
+                    SET latest_seen = ?, latest_seen_num = ?, last_checked = ?, last_error = NULL
+                    WHERE id = ? AND user_id = ?
+                    """,
+                    (ext_lbl, latest_ext_num, _now_iso_z(), bookmark_id, user_id),
+                )
         conn.execute(
             """
             UPDATE bookmarks
@@ -4421,6 +4678,8 @@ def api_image_proxy():
 
 
 def api_track_series():
+    if not _show_demo_content():
+        abort(404)
     return jsonify(
         {
             "ok": False,
@@ -4430,10 +4689,14 @@ def api_track_series():
 
 
 def api_public_search():
+    if not _show_demo_content():
+        abort(404)
     return jsonify({"ok": False, "error": "removed; use GET /api/discover/search"}), 410
 
 
 def api_track_series_legacy_disabled():
+    if not _show_demo_content():
+        abort(404)
     return jsonify(
         {
             "ok": False,
@@ -4443,10 +4706,14 @@ def api_track_series_legacy_disabled():
 
 
 def api_public_search_legacy_disabled():
+    if not _show_demo_content():
+        abort(404)
     return jsonify({"ok": False, "error": "deprecated; use GET /api/discover/search"}), 410
 
 
 def api_series_sources(series_id: int):
+    if not _show_demo_content():
+        abort(404)
     row = discovery.get_series_by_id(series_id)
     if not row:
         return jsonify({"ok": False, "error": "not found"}), 404
@@ -4454,6 +4721,8 @@ def api_series_sources(series_id: int):
 
 
 def api_source_request():
+    if not _show_demo_content():
+        abort(404)
     data = request.get_json(silent=True) or {}
     domain = (data.get("domain") or "").strip()[:255]
     if not domain:
@@ -4470,51 +4739,26 @@ def api_source_request():
 
 
 def api_trending():
-    if metadata_discovery.SHOW_DEMO_CONTENT:
-        return jsonify({"ok": True, "is_demo": True, **LANDING_TRENDING_DEMO})
-    snap = discovery.trending_snapshot()
-
-    def _pack(entries: list) -> list:
-        out = []
-        for t in (entries or [])[:3]:
-            title = str(t).strip()
-            if not title:
-                continue
-            slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:120] or "series"
-            out.append({"title": title, "slug": slug, "watchers": 0})
-        return out
-
-    ru = snap.get("recently_updated") or []
-    recent = []
-    for line in ru[:3]:
-        s = str(line).strip()
-        if not s:
-            continue
-        recent.append({"title": s, "chapter": ""})
-    return jsonify(
-        {
-            "ok": True,
-            "is_demo": False,
-            "trending_now": _pack(snap.get("trending_now")),
-            "most_watched": _pack(snap.get("most_watched")),
-            "recently_updated": recent,
-        }
-    )
+    if not _show_demo_content():
+        abort(404)
+    return jsonify({"ok": True, "is_demo": True, **LANDING_TRENDING_DEMO})
 
 
 def api_recent_updates():
-    if metadata_discovery.SHOW_DEMO_CONTENT:
-        return jsonify({"ok": True, "items": LANDING_TRENDING_DEMO["recently_updated"]})
-    snap = discovery.trending_snapshot()
-    items = [{"title": str(t).strip(), "chapter": ""} for t in (snap.get("recently_updated") or [])[:8] if str(t).strip()]
-    return jsonify({"ok": True, "items": items})
+    if not _show_demo_content():
+        abort(404)
+    return jsonify({"ok": True, "items": LANDING_TRENDING_DEMO["recently_updated"]})
 
 
 def api_discover_supported_sources():
+    if not _show_demo_content():
+        abort(404)
     return jsonify({"ok": True, "tiers": supported_source_policy()})
 
 
 def api_discover_search():
+    if not _show_demo_content():
+        abort(404)
     q = (request.args.get("q") or "").strip()[:DISCOVER_QUERY_MAX_LEN]
     if not q:
         return jsonify({"ok": True, "results": [], "items": [], "is_demo": False})
@@ -4526,6 +4770,8 @@ def api_discover_search():
 
 
 def api_discover_series(series_id: int):
+    if not _show_demo_content():
+        abort(404)
     row = discovery.get_series_by_id(series_id)
     if not row:
         return jsonify({"ok": False, "error": "not found"}), 404
@@ -4533,6 +4779,8 @@ def api_discover_series(series_id: int):
 
 
 def api_discover_series_sources(series_id: int):
+    if not _show_demo_content():
+        abort(404)
     row = discovery.get_series_by_id(series_id)
     if not row:
         return jsonify({"ok": False, "error": "not found"}), 404
@@ -4540,6 +4788,8 @@ def api_discover_series_sources(series_id: int):
 
 
 def api_discover_search_live():
+    if not _show_demo_content():
+        abort(404)
     data = request.get_json(silent=True) or {}
     q = (data.get("q") or "").strip()[:DISCOVER_QUERY_MAX_LEN]
     if not q:

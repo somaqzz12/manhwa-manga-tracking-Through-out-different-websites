@@ -28,6 +28,8 @@ class AppRegressionTests(unittest.TestCase):
             self.assertNotIn("from app import", text, f"forbidden import in {rel}")
 
     def setUp(self):
+        self._demo_flag_patcher = patch("config.SHOW_DEMO_CONTENT", True)
+        self._demo_flag_patcher.start()
         fd, self.db_path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
         os.unlink(self.db_path)
@@ -41,6 +43,7 @@ class AppRegressionTests(unittest.TestCase):
         self.client = app.app.test_client()
 
     def tearDown(self):
+        self._demo_flag_patcher.stop()
         app.DB_PATH = self.old_db_path
         app.DB_READY = self.old_db_ready
         try:
@@ -847,9 +850,7 @@ class AppRegressionTests(unittest.TestCase):
 
     def test_demo_sections_are_labeled(self):
         with (
-            patch("services.discovery_home.SHOW_DEMO_CONTENT", True),
-            patch("services.discovery.SHOW_DEMO_CONTENT", True),
-            patch("services.metadata_discovery.SHOW_DEMO_CONTENT", True),
+            patch("config.SHOW_DEMO_CONTENT", True),
         ):
             discover_res = self.client.get("/discover")
         self.assertEqual(discover_res.status_code, 200)

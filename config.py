@@ -30,3 +30,6 @@ RESOLVE_CACHE_TTL_SECONDS = int(os.getenv("RESOLVE_CACHE_TTL_SECONDS", "120"))
 DISCOVER_QUERY_MAX_LEN = int(os.getenv("DISCOVER_QUERY_MAX_LEN", "120"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
+
+# Discovery/demo UI and demo APIs are off unless explicitly enabled (simple tracker MVP).
+SHOW_DEMO_CONTENT = os.getenv("SHOW_DEMO_CONTENT", "0").strip().lower() in ("1", "true", "yes")

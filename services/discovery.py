@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import os
 import re
 from copy import deepcopy
 from typing import Any
 
-SHOW_DEMO_CONTENT = os.getenv("SHOW_DEMO_CONTENT", "").strip().lower() in ("1", "true", "yes")
+import config
 
 
 LOCAL_DISCOVERY_CATALOG = [
@@ -164,7 +163,7 @@ def merge_live_results(results: list[dict]) -> list[dict]:
 
 
 def trending_snapshot() -> dict:
-    if SHOW_DEMO_CONTENT:
+    if config.SHOW_DEMO_CONTENT:
         ranked = sorted(LOCAL_DISCOVERY_CATALOG, key=lambda x: x.get("watch_count", 0), reverse=True)
         return {
             "trending_now": [r["title"] for r in ranked[:6]],
@@ -296,7 +295,7 @@ def get_series_by_id(series_id: int) -> dict | None:
                 return _series_api_dict_from_db(conn, row)
     except Exception:
         pass
-    if SHOW_DEMO_CONTENT:
+    if config.SHOW_DEMO_CONTENT:
         for row in LOCAL_DISCOVERY_CATALOG:
             if int(row.get("id") or 0) == int(series_id):
                 return _decorate_series(row)
@@ -323,7 +322,7 @@ def get_series_by_slug(slug: str) -> dict | None:
                 return _series_api_dict_from_db(conn, row)
     except Exception:
         pass
-    if SHOW_DEMO_CONTENT:
+    if config.SHOW_DEMO_CONTENT:
         for row in LOCAL_DISCOVERY_CATALOG:
             if str(row.get("slug") or "").strip().lower() == s:
                 return _decorate_series(row)

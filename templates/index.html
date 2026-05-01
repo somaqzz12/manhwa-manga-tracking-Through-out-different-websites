@@ -86,12 +86,12 @@
       </details>
       {% endif %}
 
-      <header class="hero hero--gallery">
+      <header class="hero hero--compact">
         <div>
-          <h1 class="page-title page-title--display">Your Library</h1>
+          <h1 class="page-title page-title--display">Library</h1>
           <p class="hero-meta muted">
             {% if not demo_mode %}
-              {% if behind_count %}{{ behind_count }} series with unread chapters · {% endif %}~{{ total_unread }} unread chapter{{ 's' if total_unread != 1 else '' }} total
+              {% if behind_count %}{{ behind_count }} with updates · {% endif %}{{ total_unread }} unread
             {% else %}
               Sample library
             {% endif %}
@@ -103,11 +103,11 @@
         <button type="button" class="filter-tab is-active" data-filter="all" role="tab" aria-selected="true">All</button>
         <button type="button" class="filter-tab" data-filter="updates" role="tab" aria-selected="false">Updates</button>
         <button type="button" class="filter-tab" data-filter="reading" role="tab" aria-selected="false">Reading</button>
-        <button type="button" class="filter-tab" data-filter="stale" role="tab" aria-selected="false">Stale</button>
-        <button type="button" class="filter-tab" data-filter="errors" role="tab" aria-selected="false">Errors</button>
+        <button type="button" class="filter-tab" data-filter="caught-up" role="tab" aria-selected="false">Caught up</button>
+        <button type="button" class="filter-tab" data-filter="needs-latest" role="tab" aria-selected="false">Needs latest</button>
       </div>
 
-      {% if insights and insights.get('hints') %}
+      {% if show_demo_content and insights and insights.get('hints') %}
       <div class="insights-toast" id="insights-toast" role="status" hidden>
         <div class="insights-toast-inner">
           <span class="insights-toast-label">Insights</span>
@@ -132,11 +132,11 @@
       {% else %}
       <div class="library-empty" id="library-empty">
         <p class="library-empty-title">Your library is a blank canvas</p>
-        <p class="library-empty-sub muted">Add a series URL to start tracking chapters and covers.</p>
+        <p class="library-empty-sub muted">Add a series URL or use the browser extension to sync progress.</p>
         {% if not demo_mode %}
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
           <a class="btn primary" href="{{ url_for('app_add_url') }}">Add URL</a>
-          <a class="btn ghost" href="{{ url_for('discover_page') }}">Discover</a>
+          <a class="btn ghost" href="{{ url_for('extension_page') }}">Extension</a>
         </div>
         {% else %}
         <a class="btn primary" href="{{ url_for('auth_page') }}">Sign in for your library</a>
@@ -161,34 +161,61 @@
       {% endif %}
 
       <footer class="main-footer main-footer--minimal">
-        <a href="{{ url_for('sources_page') }}">Sources</a>
-        · <a href="{{ url_for('privacy_page') }}">Privacy</a>
+        <a href="{{ url_for('privacy_page') }}">Privacy</a>
+        · <a href="{{ url_for('terms_page') }}">Terms</a>
       </footer>
+
+      {% if not demo_mode %}
+      <dialog id="library-edit-dialog" class="library-edit-dialog">
+        <form method="post" id="library-edit-form" class="library-edit-dialog-inner" action="#">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="q" value="{{ search_q or '' }}">
+          <input type="hidden" name="sort" value="{{ sort }}">
+          <input type="hidden" name="page" value="{{ page }}">
+          <h2>Edit series</h2>
+          <div class="field">
+            <label for="led-title">Title</label>
+            <input id="led-title" name="title" required autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="led-url">Source URL</label>
+            <input id="led-url" name="url" type="url" required autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="led-current">Current chapter</label>
+            <input id="led-current" name="current_chapter" inputmode="decimal" placeholder="e.g. 45" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="led-latest">Latest chapter <span class="muted" style="font-weight:400;">(optional)</span></label>
+            <input id="led-latest" name="latest_chapter" inputmode="decimal" placeholder="e.g. 52" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="led-notes">Notes <span class="muted" style="font-weight:400;">(optional)</span></label>
+            <textarea id="led-notes" name="notes" rows="2" autocomplete="off"></textarea>
+          </div>
+          <div class="library-edit-actions">
+            <button type="button" class="btn ghost" id="library-edit-cancel">Cancel</button>
+            <button type="submit" class="btn primary">Save</button>
+          </div>
+        </form>
+      </dialog>
+      {% endif %}
       </section>
     </main>
   </div>
 
   {% include "partials/menu_drawer_script.html" %}
   <script>
-    const DEAD_SERIES_DAYS = {{ dead_series_days|int }};
-
     (function tabFilter() {
       const tabs = document.querySelectorAll(".filter-tab");
       const cards = document.querySelectorAll(".story-card");
       const genreFilterEl = document.getElementById("genreFilter");
       let activeFilter = "all";
-      function staleFrom(iso) {
-        if (!iso) return false;
-        const t = Date.parse(iso);
-        if (Number.isNaN(t)) return false;
-        const days = (Date.now() - t) / 864e5;
-        return days >= DEAD_SERIES_DAYS;
-      }
       function tabMatch(card, filter) {
         if (filter === "updates") return card.getAttribute("data-updates") === "1";
         if (filter === "reading") return card.getAttribute("data-reading") === "1";
-        if (filter === "stale") return staleFrom(card.getAttribute("data-last-checked") || "");
-        if (filter === "errors") return card.getAttribute("data-error") === "1";
+        if (filter === "caught-up") return card.getAttribute("data-caught-up") === "1";
+        if (filter === "needs-latest") return card.getAttribute("data-needs-latest") === "1";
         return true;
       }
       function refreshGrid() {
@@ -213,6 +240,32 @@
         tab.addEventListener("click", () => apply(tab.getAttribute("data-filter") || "all"));
       });
       if (genreFilterEl) genreFilterEl.addEventListener("change", refreshGrid);
+    })();
+
+    (function libraryEditDialog() {
+      const dlg = document.getElementById("library-edit-dialog");
+      const form = document.getElementById("library-edit-form");
+      const cancel = document.getElementById("library-edit-cancel");
+      if (!dlg || !form) return;
+      document.querySelectorAll(".js-open-library-edit").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const card = btn.closest(".story-card");
+          if (!card) return;
+          const id = card.getAttribute("data-bookmark-id");
+          if (!id || Number(id) <= 0) return;
+          form.action = "/library/" + encodeURIComponent(id) + "/update-chapters";
+          document.getElementById("led-title").value = card.getAttribute("data-edit-title") || "";
+          document.getElementById("led-url").value = card.getAttribute("data-edit-url") || "";
+          document.getElementById("led-current").value = card.getAttribute("data-edit-current") || "";
+          document.getElementById("led-latest").value = card.getAttribute("data-edit-latest") || "";
+          document.getElementById("led-notes").value = card.getAttribute("data-edit-notes") || "";
+          dlg.showModal();
+        });
+      });
+      cancel.addEventListener("click", () => dlg.close());
+      dlg.addEventListener("click", (ev) => {
+        if (ev.target === dlg) dlg.close();
+      });
     })();
 
     (function sidebarSearchBridge() {

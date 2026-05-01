@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import app  # noqa: E402
+import config  # noqa: E402
 
 
 class OverhaulV2Tests(unittest.TestCase):
@@ -32,24 +33,27 @@ class OverhaulV2Tests(unittest.TestCase):
         except OSError:
             pass
 
-    def test_demo_api_endpoints_are_gone_not_success(self) -> None:
+    def test_demo_api_endpoints_hidden_when_demo_flag_off(self) -> None:
         r_search = self.client.get("/api/demo/search?q=test")
-        self.assertEqual(r_search.status_code, 410)
-        self.assertFalse((r_search.get_json() or {}).get("ok"))
+        self.assertEqual(r_search.status_code, 404)
         r_track = self.client.post("/api/demo/track", json={"title": "X"})
-        self.assertEqual(r_track.status_code, 410)
-        self.assertFalse((r_track.get_json() or {}).get("ok"))
+        self.assertEqual(r_track.status_code, 404)
 
     def test_demo_dashboard_hidden_by_default(self) -> None:
-        with patch.dict(os.environ, {"SHOW_DEMO_CONTENT": ""}):
+        with patch.object(config, "SHOW_DEMO_CONTENT", False):
             r = self.client.get("/demo")
             self.assertEqual(r.status_code, 404)
-        with patch.dict(os.environ, {"SHOW_DEMO_CONTENT": "1"}):
+        with patch.object(config, "SHOW_DEMO_CONTENT", True):
             r2 = self.client.get("/demo")
             self.assertEqual(r2.status_code, 200)
 
-    def test_source_request_persists_row(self) -> None:
+    def test_source_request_hidden_when_demo_flag_off(self) -> None:
         res = self.client.post("/api/source-request", json={"domain": "newsource.example", "title_hint": "Hint"})
+        self.assertEqual(res.status_code, 404)
+
+    def test_source_request_persists_when_demo_flag_on(self) -> None:
+        with patch.object(config, "SHOW_DEMO_CONTENT", True):
+            res = self.client.post("/api/source-request", json={"domain": "newsource.example", "title_hint": "Hint"})
         self.assertEqual(res.status_code, 200)
         self.assertTrue((res.get_json() or {}).get("ok"))
         with app.get_conn() as conn:

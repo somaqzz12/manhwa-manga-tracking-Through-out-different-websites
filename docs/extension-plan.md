@@ -1,6 +1,6 @@
-# Manga Tracker Companion — Extension Plan
+# Manga Watchlist — Extension plan
 
-This document is the canonical roadmap for the `extension/` Chrome (MV3) companion. It captures bug fixes, redesigns, new features, the small backend addition required, asset and permissions hygiene, store submission readiness, testing, and known limitations. It is grounded in the current code in [`extension/manifest.json`](extension/manifest.json), [`extension/content.js`](extension/content.js), [`extension/background.js`](extension/background.js), [`extension/popup.html`](extension/popup.html), [`extension/popup.js`](extension/popup.js), and [`app.py`](app.py).
+This document is the canonical roadmap for the `extension/` Chrome (MV3) companion. It captures bug fixes, redesigns, new features, the small backend addition required, asset and permissions hygiene, store submission readiness, testing, and known limitations. It is grounded in the current code in [`../extension/manifest.json`](../extension/manifest.json), [`../extension/content.js`](../extension/content.js), [`../extension/background.js`](../extension/background.js), [`../extension/popup.html`](../extension/popup.html), [`../extension/popup.js`](../extension/popup.js), and [`../app.py`](../app.py).
 
 ## Architecture at a glance
 
@@ -25,7 +25,7 @@ Companion **v0.5.5** and `app.py` have moved ahead of older bullets archived bel
 
 - SPA polling runs at **2.5s**, skips work when **`document.hidden`**, debounced **`MutationObserver`** covers content-swap navigations (`extension/content.js`).
 - Track modal lives inside a **`ShadowRoot`** (`extension/content.js`).
-- **`notifications`** is **not** in [`extension/manifest.json`](extension/manifest.json) anymore — remove from any remaining copy-paste checklist; desktop notifications remain a future optional feature (Section 4).
+- **`notifications`** is **not** in [`../extension/manifest.json`](../extension/manifest.json) anymore — remove from any remaining copy-paste checklist; desktop notifications remain a future optional feature (Section 4).
 - **`GET /api/unread-count`** is implemented server-side (`app.py`), including **`tracked_url_norms`** for the extension badge.
 - Duplicate rows in this section that are clearly fixed should be edited out periodically so the checklist stays actionable.
 
@@ -47,7 +47,7 @@ Three visual states:
 
 Always include:
 
-- A small **connection dot** that pings `${apiBase}/healthz` on popup open and renders green / amber / red. The endpoint already exists in [`app.py`](app.py) (`@app.route("/healthz")` around line 1423).
+- A small **connection dot** that pings `${apiBase}/healthz` on popup open and renders green / amber / red. The endpoint already exists in [`../app.py`](../app.py) (`/healthz`).
 - Primary button copy that reflects state: **"Track now"** when not yet tracked, **"Already tracked"** (disabled or showing latest read chapter) when the series is known to the backend.
 
 ## 3. Settings / options page
@@ -60,13 +60,13 @@ Settings to expose:
 - **Auto-track toggle** — when on, recognized chapter pages are tracked silently with no modal (see Section 4).
 - **Prompt cooldown** — how long the modal stays snoozed after "Not now" (current code hardcodes 24 hours in `content.js`). Expose this as minutes/hours.
 - **Clear local data** — wipe `chrome.storage.local` (apiBase, debugEvents, etc.) and any `localStorage` snooze keys that are reachable from the extension origin.
-- **Debug log** — render the last 25 entries from `chrome.storage.local.debugEvents` (already maintained by `storeDebug` in [`extension/background.js`](extension/background.js)) with timestamp, message type, and any error string. Provide a copy-to-clipboard button.
+- **Debug log** — render the last 25 entries from `chrome.storage.local.debugEvents` (already maintained by `storeDebug` in [`../extension/background.js`](../extension/background.js)) with timestamp, message type, and any error string. Provide a copy-to-clipboard button.
 
 ## 4. New features
 
 - **Badge unread count.** Register a `chrome.alarms` job (~every 30 minutes plus an `onStartup` run) that calls `GET /api/unread-count` (Section 6) and writes the result via `chrome.action.setBadgeText`. Empty/zero clears the badge. Use a calm color (`setBadgeBackgroundColor`).
 - **Desktop notifications (opt-in).** When the badge poll detects new unread chapters since the last poll, optionally fire a `chrome.notifications.create` summary ("3 new chapters across 2 series"). Off by default; toggle lives in `options.html`. This is what justifies keeping the `notifications` permission from Section 1.
-- **Right-click context menu.** Add `chrome.contextMenus` entry "Track this manga chapter" on `page` and `link` contexts, scoped to the same hosts the content script runs on. It dispatches the same `TRACK_TAB_NOW` flow already implemented in [`extension/background.js`](extension/background.js).
+- **Right-click context menu.** Add `chrome.contextMenus` entry "Track this manga chapter" on `page` and `link` contexts, scoped to the same hosts the content script runs on. It dispatches the same `TRACK_TAB_NOW` flow already implemented in [`../extension/background.js`](../extension/background.js).
 - **Keyboard shortcut.** Declare a `commands` entry `track-current-chapter` with default `Alt+Shift+T` (Chrome auto-suggests `Ctrl+Shift+...` slots; `Alt+Shift+T` avoids most conflicts) that triggers `TRACK_TAB_NOW`.
 - **Silent auto-track mode.** When the auto-track toggle is on, `maybeTrack()` in `content.js` should bypass the modal entirely and call the same `ENSURE_SERIES` + `SAVE_PROGRESS` pair that the existing `okBtn` path uses. Still write to the debug log so the user can see what was auto-tracked.
 
@@ -135,7 +135,7 @@ Each permission with its single-line justification:
 - All four icon sizes from Section 7.
 - 1280×800 or 640×400 screenshots: popup on a chapter page, popup with backend offline, options page, modal prompt on a real reader.
 - 128×128 store icon, small promotional tile (440×280) optional but recommended.
-- Listing copy: short description (≤132 chars), detailed description, single-purpose statement ("Detects manga/manhwa chapter pages and syncs reading progress to the user's self-hosted Manga Tracker backend").
+- Listing copy: short description (≤132 chars), detailed description, single-purpose statement ("Detects manga/manhwa chapter pages and syncs reading progress to the user's self-hosted Manga Watchlist backend").
 - Single Purpose declaration matches the description.
 - Permissions justifications filled in for every permission and `<all_urls>`.
 - Demo account or self-hosted instance URL for the review team, plus a 30-second screencast.
@@ -153,7 +153,7 @@ Content script:
 Background service worker:
 
 - Survives MV3 idle/wake cycles; alarms continue to fire after the worker is unloaded.
-- `TRACK_TAB_NOW`, `ENSURE_SERIES`, `SAVE_PROGRESS` all forward the session cookie (`credentials: "include"`) and surface 401s with the "Not signed in" hint already present in [`extension/background.js`](extension/background.js).
+- `TRACK_TAB_NOW`, `ENSURE_SERIES`, `SAVE_PROGRESS` all forward the session cookie (`credentials: "include"`) and surface 401s with the "Not signed in" hint already present in [`../extension/background.js`](../extension/background.js).
 - Badge updates correctly on alarm fire, on `onStartup`, and after a manual track.
 
 Popup:
@@ -173,7 +173,7 @@ Smoke regression on each release:
 
 ## 12. Known limitations to document
 
-- **Self-hosted backend required.** The extension is useless without a running Manga Tracker instance reachable from the user's machine. This must be on the store listing.
+- **Self-hosted backend required.** The extension is useless without a running Manga Watchlist instance reachable from the user's machine. This must be on the store listing.
 - **Session-cookie auth.** The extension relies on the user being signed in to the dashboard in the same browser profile; we forward the cookie via `credentials: "include"`. There is no token flow yet, so cross-browser or incognito profiles will not authenticate.
 - **`<all_urls>` host access.** Required for arbitrary reader sites. Documented in Section 9.
 - **Heuristic chapter detection.** Title/URL/DOM heuristics will produce false positives and misses on unusual readers. The per-site map (Section 5) reduces but does not eliminate this.
@@ -187,4 +187,4 @@ These items belong to the Flask backend and deployment story, not the companion 
 - Implement or remove the `POST /api/import/mal` stub once MyAnimeList API access and UX are defined.
 - Add Origin / Referer allowlists for CSRF-exempt JSON routes that mutate account or API-token state (defense in depth on top of session auth).
 - Optional: move Selenium to an extra requirements file when `USE_SELENIUM_FALLBACK=0` is the long-term default.
-- Decide a single public marketing entry point (Flask `landing.html` vs the Next `landing/` site) or document both URLs clearly.
+- Marketing entry points: the Flask app serves a minimal public home and dashboard; optional **Next.js** marketing site lives in [`../landing/`](../landing/). Enable broader discover/demo UI in production only if you set `SHOW_DEMO_CONTENT=1` (see `config.py`).

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Track manga and manhwa chapters across the sites you already use.">
+  <title>Manga Watchlist</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%239b6b43'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='white' font-size='12' font-family='Inter,system-ui,sans-serif' font-weight='700'%3EMW%3C/text%3E%3C/svg%3E">
+  <style>
+    .tracker-landing { max-width: 520px; margin: 0 auto; padding: 48px 20px 64px; text-align: center; }
+    .tracker-landing h1 { font-size: 1.65rem; font-weight: 700; line-height: 1.25; margin: 0 0 16px; }
+    .tracker-landing p { color: var(--muted, #5c534c); line-height: 1.55; margin: 0 0 28px; font-size: 1.02rem; }
+    .tracker-landing-actions { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+    @media (min-width: 480px) {
+      .tracker-landing-actions { flex-direction: row; justify-content: center; flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body class="page-landing" data-theme="normal">
+  <div class="tracker-landing">
+    <p style="margin:0 0 8px;font-weight:700;letter-spacing:0.04em;font-size:0.78rem;color:var(--muted,#5c534c);">MANGA WATCHLIST</p>
+    <h1>Track manga and manhwa chapters across the sites you already use.</h1>
+    <p>Add a series URL, sync from the browser extension, and see current vs latest chapter in one place.</p>
+    <div class="tracker-landing-actions">
+      <a class="btn primary" href="{{ url_for('index_dashboard_alias') }}">Open Dashboard</a>
+      <a class="btn" href="{{ url_for('app_add_url') }}">Add URL</a>
+      <a class="btn ghost" href="{{ url_for('extension_page') }}">Install Extension</a>
+    </div>
+    <p class="muted" style="margin-top:32px;font-size:0.88rem;">
+      <a href="{{ url_for('auth_page', mode='login') }}">Sign in</a>
+      ·
+      <a href="{{ url_for('auth_page', mode='register') }}">Create account</a>
+    </p>
+  </div>
+</body>
+</html>

@@ -550,6 +550,15 @@ def _ensure_bookmarks_last_synced_at(conn) -> None:
         conn.execute("ALTER TABLE bookmarks ADD COLUMN last_synced_at TEXT")
 
 
+def _ensure_bookmarks_notes_column(conn) -> None:
+    if IS_POSTGRES:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS notes TEXT")
+        return
+    cols = {c["name"] for c in conn.execute("PRAGMA table_info(bookmarks)").fetchall()}
+    if "notes" not in cols:
+        conn.execute("ALTER TABLE bookmarks ADD COLUMN notes TEXT")
+
+
 def _ensure_user_library_item_progress_columns(conn) -> None:
     if IS_POSTGRES:
         conn.execute("ALTER TABLE user_library_item ADD COLUMN IF NOT EXISTS last_read_chapter TEXT")
@@ -685,6 +694,7 @@ def init_db() -> None:
             _ensure_source_requests_table(conn)
             _ensure_normalized_library_tables(conn)
             _ensure_bookmarks_last_synced_at(conn)
+            _ensure_bookmarks_notes_column(conn)
             _ensure_user_library_item_progress_columns(conn)
         return
 
@@ -796,6 +806,7 @@ def init_db() -> None:
         _ensure_source_requests_table(conn)
         _ensure_normalized_library_tables(conn)
         _ensure_bookmarks_last_synced_at(conn)
+        _ensure_bookmarks_notes_column(conn)
         _ensure_user_library_item_progress_columns(conn)
 
 

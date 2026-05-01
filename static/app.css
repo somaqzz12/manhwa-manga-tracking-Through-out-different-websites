@@ -2817,3 +2817,102 @@ body {
     display: none;
   }
 }
+
+/* Tracker MVP: chapter-focused cards */
+.story-body--tracker {
+  padding: 12px 14px 6px;
+  flex: 1;
+}
+.story-chapter-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 10px;
+  margin: 10px 0 0;
+}
+.story-chapter-stats > div {
+  margin: 0;
+}
+.story-chapter-stats dt {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin: 0 0 3px;
+  font-weight: 600;
+}
+.story-chapter-stats dd {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+.story-source-line {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+}
+.story-card-toolbar--tracker {
+  padding: 10px 12px 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+.library-edit-dialog {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 0;
+  max-width: 420px;
+  width: calc(100vw - 32px);
+  background: var(--panel);
+  color: var(--text);
+}
+.library-edit-dialog::backdrop {
+  background: color-mix(in srgb, var(--bg) 55%, black);
+}
+.library-edit-dialog-inner {
+  padding: 18px 18px 16px;
+}
+.library-edit-dialog h2 {
+  margin: 0 0 14px;
+  font-size: 1.1rem;
+}
+.library-edit-dialog .field {
+  margin-bottom: 12px;
+}
+.library-edit-dialog label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--muted);
+}
+.library-edit-dialog input,
+.library-edit-dialog textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  font: inherit;
+  background: var(--panel-2);
+  color: var(--text);
+}
+.library-edit-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.hero--compact {
+  padding: 12px 0 8px;
+  margin-bottom: 8px;
+}
+.hero--compact .page-title--display {
+  font-size: 1.35rem;
+  margin: 0;
+}
+.hero--compact .hero-meta {
+  margin: 6px 0 0;
+  font-size: 0.88rem;
+}

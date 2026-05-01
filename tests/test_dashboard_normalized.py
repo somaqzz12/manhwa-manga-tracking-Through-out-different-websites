@@ -113,10 +113,9 @@ class DashboardNormalizedDualReadTests(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         body = res.get_data(as_text=True)
         self.assertIn("Norm Dash Only", body)
-        self.assertIn("TestSrc", body)
         self.assertIn("testsrc.example", body)
         self.assertIn(ch_url, body)
-        self.assertIn("Supported", body)
+        self.assertIn("Ch.99", body)
 
     def test_dashboard_falls_back_to_legacy_bookmark(self):
         uid = self._make_user("legacy@example.com")

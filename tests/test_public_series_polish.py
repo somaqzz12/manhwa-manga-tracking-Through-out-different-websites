@@ -9,6 +9,7 @@ os.environ.setdefault("DISABLE_AUTO_CHECK", "1")
 os.environ.setdefault("FLASK_DEBUG", "1")
 
 import app  # noqa: E402
+import config  # noqa: E402
 
 
 class PublicSeriesPolishTests(unittest.TestCase):
@@ -34,7 +35,7 @@ class PublicSeriesPolishTests(unittest.TestCase):
             pass
 
     def test_solo_leveling_catalog_shows_recommended_and_mangadex_primary(self):
-        with patch("services.discovery.SHOW_DEMO_CONTENT", True):
+        with patch("config.SHOW_DEMO_CONTENT", True):
             res = self.client.get("/series/solo-leveling")
         self.assertEqual(res.status_code, 200)
         body = res.get_data(as_text=True)
@@ -142,7 +143,7 @@ class PublicSeriesPolishTests(unittest.TestCase):
         self.assertNotIn("bad.example", text)
 
     def test_manual_catalog_source_shows_track_manually(self):
-        with patch("services.discovery.SHOW_DEMO_CONTENT", True):
+        with patch("config.SHOW_DEMO_CONTENT", True):
             res = self.client.get("/series/solo-leveling")
         self.assertEqual(res.status_code, 200)
         body = res.get_data(as_text=True)
@@ -150,6 +151,10 @@ class PublicSeriesPolishTests(unittest.TestCase):
         self.assertIn("Track manually", body)
 
     def test_discover_view_sources_links_normalized_slug_when_title_matches(self):
+        with patch.object(config, "SHOW_DEMO_CONTENT", True):
+            self._exercise_discover_normalized_slug()
+
+    def _exercise_discover_normalized_slug(self) -> None:
         with app.get_conn() as conn:
             now = app._now_iso_z()
             conn.execute(

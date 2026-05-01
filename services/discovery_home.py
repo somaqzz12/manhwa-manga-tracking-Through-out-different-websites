@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import os
 from typing import Any
 
+import config
 from services import discovery
-
-SHOW_DEMO_CONTENT = os.getenv("SHOW_DEMO_CONTENT", "").strip().lower() in ("1", "true", "yes")
 
 _STARTER_SLUGS = [
     "solo-leveling",
@@ -202,7 +200,7 @@ def _build_from_database(source_policy: dict[str, Any] | None) -> dict[str, Any]
 
 
 def build_discovery_home_data(source_policy: dict[str, Any] | None = None) -> dict[str, Any]:
-    if SHOW_DEMO_CONTENT:
+    if config.SHOW_DEMO_CONTENT:
         ranked = sorted(discovery.LOCAL_DISCOVERY_CATALOG, key=lambda x: int(x.get("watch_count") or 0), reverse=True)
         recent = []
         for row in ranked[:6]:

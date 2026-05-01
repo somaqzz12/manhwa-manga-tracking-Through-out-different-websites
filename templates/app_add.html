@@ -17,10 +17,10 @@
       {% include "partials/dash_topbar.html" %}
       {% include "partials/library_tools_drawer.html" %}
       <section class="app-content">
-        <header class="hero hero--gallery" style="margin-bottom:18px;">
+        <header class="hero hero--compact" style="margin-bottom:14px;">
           <div>
             <h1 class="page-title page-title--display">Add URL</h1>
-            <p class="hero-meta muted">Paste a URL to detect source and preview metadata.</p>
+            <p class="hero-meta muted">Resolve a listing URL when possible, or save details manually — both are fine.</p>
           </div>
         </header>
 
@@ -39,8 +39,37 @@
         <div id="out" class="panel add-url-preview" style="margin-top:16px;min-height:48px;display:none;" aria-live="polite"></div>
         <p id="resolveState" class="muted" style="margin:10px 0 0;font-size:0.86rem;"></p>
 
+        {% if current_user %}
+        <div class="panel" style="margin-top:22px;">
+          <h2 class="section-title" style="margin-top:0;font-size:1.05rem;">Add manually</h2>
+          <p class="muted" style="margin:0 0 14px;font-size:0.88rem;line-height:1.45;">If detection fails, save the series anyway. You can edit chapters anytime from the library.</p>
+          <form action="/add" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="field" style="margin-bottom:12px;">
+              <label for="manual-url">Source URL</label>
+              <input class="input-full" id="manual-url" name="url" type="url" required placeholder="https://…" autocomplete="off">
+            </div>
+            <div class="field" style="margin-bottom:12px;">
+              <label for="manual-title">Title</label>
+              <input class="input-full" id="manual-title" name="title" required placeholder="Series title" autocomplete="off">
+            </div>
+            <div class="field" style="margin-bottom:12px;">
+              <label for="manual-current">Current chapter</label>
+              <input class="input-full" id="manual-current" name="current_chapter" inputmode="decimal" placeholder="e.g. 45" autocomplete="off">
+            </div>
+            <div class="field" style="margin-bottom:14px;">
+              <label for="manual-latest">Latest chapter <span class="muted">(optional)</span></label>
+              <input class="input-full" id="manual-latest" name="latest_chapter" inputmode="decimal" placeholder="e.g. 52" autocomplete="off">
+            </div>
+            <button type="submit" class="btn primary">Save to library</button>
+          </form>
+        </div>
+        {% else %}
+        <p class="muted" style="margin-top:18px;font-size:0.9rem;"><a href="{{ url_for('auth_page', mode='login', next=request.full_path) }}">Sign in</a> to add URLs to your library.</p>
+        {% endif %}
+
         <p class="muted" style="margin-top:20px;font-size:0.9rem;">
-          <a href="{{ url_for('index') }}">← Back to library</a>
+          <a href="{{ url_for('index_dashboard_alias') }}">← Back to library</a>
         </p>
       </section>
     </main>

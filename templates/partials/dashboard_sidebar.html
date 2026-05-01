@@ -1,10 +1,10 @@
 <aside class="dashboard-sidebar desktop-sidebar" aria-label="Library navigation">
   <div class="dashboard-sidebar-top">
-    <a class="dashboard-brand sidebar-brand" href="{{ url_for('index') }}">
+    <a class="dashboard-brand sidebar-brand" href="{{ url_for('index_dashboard_alias') }}">
       <span class="dashboard-mark">MW</span>
       <span class="sidebar-brand-text">
         <strong class="sidebar-title">Manga Watchlist</strong>
-        <small class="sidebar-subtitle">Track what you read, wherever you read it</small>
+        <small class="sidebar-subtitle">Current &amp; latest chapter tracking</small>
       </span>
     </a>
   </div>
@@ -16,21 +16,19 @@
 
   <nav class="dashboard-sidebar-nav sidebar-nav">
     <span class="dashboard-nav-label sidebar-section-label">Library</span>
-    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'index' %} is-active{% endif %}" href="{{ url_for('index') }}"><span>Library</span> <span class="dashboard-nav-ct">{{ total_count or 0 }}</span></a>
-    <a class="dashboard-nav-item sidebar-link sidebar-link--primary{% if request.endpoint == 'app_add_url' %} is-active{% endif %}" href="{{ url_for('app_add_url') }}"><span>Add URL</span></a>
-    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'discover_page' %} is-active{% endif %}" href="{{ url_for('discover_page') }}"><span>Discover</span></a>
-    <span class="dashboard-nav-label sidebar-section-label">Catalog</span>
-    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'sources_page' %} is-active{% endif %}" href="{{ url_for('sources_page') }}"><span>Sources</span></a>
-    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'source_requests_page' %} is-active{% endif %}" href="{{ url_for('source_requests_page') }}"><span>Source Requests</span></a>
+    <a class="dashboard-nav-item sidebar-link{% if request.endpoint in ('index', 'index_dashboard_alias', 'app_library') %} is-active{% endif %}" href="{{ url_for('index_dashboard_alias') }}"><span>Library</span> <span class="dashboard-nav-ct">{{ total_count or 0 }}</span></a>
+    <a class="dashboard-nav-item sidebar-link sidebar-link--primary{% if request.endpoint in ('app_add_url', 'app_add_url_alias') %} is-active{% endif %}" href="{{ url_for('app_add_url') }}"><span>Add URL</span></a>
     <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'extension_page' %} is-active{% endif %}" href="{{ url_for('extension_page') }}"><span>Extension</span></a>
-    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'roadmap_page' %} is-active{% endif %}" href="{{ url_for('roadmap_page') }}"><span>Roadmap</span></a>
+    {% if show_demo_content %}
+    <span class="dashboard-nav-label sidebar-section-label">Explore</span>
+    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'discover_page' %} is-active{% endif %}" href="{{ url_for('discover_page') }}"><span>Discover</span></a>
+    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'sources_page' %} is-active{% endif %}" href="{{ url_for('sources_page') }}"><span>Sources</span></a>
+    <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'source_requests_page' %} is-active{% endif %}" href="{{ url_for('source_requests_page') }}"><span>Source requests</span></a>
+    {% endif %}
 
     <div class="sidebar-bottom">
       <span class="dashboard-nav-label sidebar-section-label">Account</span>
       <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'account_settings' %} is-active{% endif %}" href="{{ url_for('account_settings') }}"><span>Settings</span></a>
-      {% if current_user is defined and current_user and not demo_mode|default(false) %}
-      <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'next_up' %} is-active{% endif %}" href="{{ url_for('next_up') }}"><span>Next up</span></a>
-      {% endif %}
       <a class="dashboard-nav-item sidebar-link" href="/export" title="Download JSON backup. Import from the menu (☰) → Restore backup."><span>Import / Export</span></a>
       <a class="dashboard-nav-item sidebar-link{% if request.endpoint == 'privacy_page' %} is-active{% endif %}" href="{{ url_for('privacy_page') }}"><span>Privacy</span></a>
     </div>

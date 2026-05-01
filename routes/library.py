@@ -6,6 +6,7 @@ def register_library_routes(app, handlers: dict[str, callable], csrf) -> None:
     app.add_url_rule("/app", endpoint="index", view_func=handlers["index"], methods=["GET"])
     app.add_url_rule("/dashboard", endpoint="index_dashboard_alias", view_func=handlers["index"], methods=["GET"])
     app.add_url_rule("/app/add", endpoint="app_add_url", view_func=handlers["app_add_url"], methods=["GET"])
+    app.add_url_rule("/add-url", endpoint="app_add_url_alias", view_func=handlers["app_add_url"], methods=["GET"])
     app.add_url_rule(
         "/api/library/add-from-preview",
         endpoint="api_library_add_from_preview",

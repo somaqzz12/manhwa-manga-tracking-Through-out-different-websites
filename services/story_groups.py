@@ -148,6 +148,9 @@ def aggregate_story_items(items: list[dict]) -> dict[str, Any]:
             out[k] = v
     if "has_bookmark" in primary:
         out["has_bookmark"] = bool(primary["has_bookmark"])
+    nt = (primary.get("notes") or "").strip()
+    if nt:
+        out["notes"] = nt
     return out
 
 

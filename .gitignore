@@ -3,6 +3,7 @@ landing/.next/
 landing/out/
 
 __pycache__/
+**/.pytest_cache/
 *.pyc
 tracker.db
 *.db

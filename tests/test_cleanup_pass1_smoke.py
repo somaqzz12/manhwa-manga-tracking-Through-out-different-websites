@@ -11,6 +11,7 @@ os.environ.setdefault("DISABLE_AUTO_CHECK", "1")
 os.environ.setdefault("FLASK_DEBUG", "1")
 
 import app  # noqa: E402
+import config  # noqa: E402
 
 
 class CleanupPass1SmokeTests(unittest.TestCase):
@@ -44,12 +45,12 @@ class CleanupPass1SmokeTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
 
     def test_get_demo_returns_404_when_disabled(self):
-        with patch.dict(os.environ, {"SHOW_DEMO_CONTENT": "0"}):
+        with patch.object(config, "SHOW_DEMO_CONTENT", False):
             r = self.client.get("/demo")
             self.assertEqual(r.status_code, 404)
 
     def test_get_demo_returns_200_when_enabled(self):
-        with patch.dict(os.environ, {"SHOW_DEMO_CONTENT": "1"}):
+        with patch.object(config, "SHOW_DEMO_CONTENT", True):
             r = self.client.get("/demo")
             self.assertEqual(r.status_code, 200)
 

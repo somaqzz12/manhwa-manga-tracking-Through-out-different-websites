@@ -56,3 +56,21 @@ def register_dashboard_routes(app, handlers: dict[str, callable]) -> None:
         view_func=handlers["delete_bookmark"],
         methods=["POST"],
     )
+    app.add_url_rule(
+        "/library/<int:bookmark_id>/increment-current",
+        endpoint="library_increment_current",
+        view_func=handlers["library_increment_current"],
+        methods=["POST"],
+    )
+    app.add_url_rule(
+        "/library/<int:bookmark_id>/mark-caught-up",
+        endpoint="library_mark_caught_up",
+        view_func=handlers["library_mark_caught_up"],
+        methods=["POST"],
+    )
+    app.add_url_rule(
+        "/library/<int:bookmark_id>/update-chapters",
+        endpoint="library_update_chapters",
+        view_func=handlers["library_update_chapters"],
+        methods=["POST"],
+    )
